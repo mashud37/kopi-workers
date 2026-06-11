@@ -1,0 +1,28 @@
+import re
+
+TAIL_PATTERNS = [
+    (re.compile(r",?\s+for a long time(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+for some time(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+for many years(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in (?:this|that|some|many|various|different) ways?(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+to (?:some|a (?:large|great|significant|certain)) extent(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+to an? extent(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in a (?:real|meaningful|significant|fundamental|profound) sense(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in (?:some|a certain|this|that|the) sense(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in (?:this|that|the) (?:regard|respect)(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in recent years(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in recent decades(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in recent times(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+at the present (?:time|moment|juncture)(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+so to speak(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+as it were(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+of (?:a|the) (?:certain|particular|specific) kind(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+of (?:a|the) (?:certain|particular|specific) sort(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+or (?:something|anything) (?:like|similar) (?:that|this)(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+(?:and|or) (?:so on|so forth|et cetera)(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+in (?:a|the) (?:broader|wider|larger|global|general|broader) (?:context|picture|sense)(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+if you will(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+for that matter(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+to be sure(?=[.,;]|$)", re.IGNORECASE), ""),
+    (re.compile(r",?\s+at the end of the day(?=[.,;]|$)", re.IGNORECASE), ""),
+]

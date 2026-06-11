@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+venv/
+
+# Local runtime state (calibration log, etc.)
+.kopi/
+
+# Manuscripts and generated artifacts — keep the folders, ignore contents
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# Editor / OS
+.env
+.DS_Store
