@@ -1,63 +1,85 @@
 import os
 
-DEFAULT_MODEL = os.environ.get("KOPI_MODEL", "mistral-small")
+DEFAULT_MODEL = os.environ.get("KOPI_MODEL", "qwen2.5:7b")
 
 _PARA_SYSTEM = (
-    "You are a copy editor specialising in academic prose for the humanities and social sciences. "
-    "Your task is to shorten the paragraph below by removing redundant or unnecessary words. Rules:\n"
-    "1. Tighten sentences by cutting filler — prefer this to removing whole sentences.\n"
-    "2. Only remove a sentence if it is entirely self-contained and referenced by no other sentence "
-    "in the paragraph. Never remove a sentence referred to by 'the former', 'the latter', 'this', "
-    "'these', 'the above', 'the following', or any pronoun that refers back to it.\n"
-    "3. Preserve the author's analytical voice, disciplinary register, and sentence rhythms exactly. "
-    "Do not homogenise the writing toward generic academic style.\n"
-    "4. Hedging language (may, might, suggests, arguably, appears to, tends to) carries theoretical "
-    "weight in humanities writing — preserve it unless it is demonstrably redundant.\n"
-    "5. Preserve all disciplinary and field-specific terminology as-is. Do not substitute technical "
-    "vocabulary with plainer alternatives.\n"
-    "6. Preserve all citations (Author, Year), proper nouns, and numbers exactly. "
-    "Author placeholders such as (199X), (202X), and (REF) must be kept verbatim — never "
-    "invent or complete a date.\n"
-    "7. Direct quotations in the text are marked with quotation marks. "
-    "Preserve them verbatim — do not paraphrase, shorten, or reorder any quoted material.\n"
-    "8. Return only the shortened paragraph — no explanation, no preamble."
+    "You are a line editor making one paragraph of academic prose clearer and more accessible, "
+    "following plain-language editing principles. This is COPY EDITING, NOT summarising: your "
+    "edit must still say everything the original says — every claim, example, citation, and nuance — "
+    "only more plainly.\n\n"
+    "Edit the paragraph to:\n"
+    "- cut filler, padding, and empty hedging (e.g. 'it is worth noting that', 'in order to', "
+    "'the fact that', 'it is important to note');\n"
+    "- prefer the active voice, and short plain words over long Latinate ones;\n"
+    "- replace clichéd metaphors and idioms with direct statement;\n"
+    "- break overly long sentences into shorter ones.\n\n"
+    "Hard rules:\n"
+    "1. PRESERVE ALL CONTENT. Do not delete information, drop examples, or compress two points into "
+    "one. Never summarise. If a sentence cannot be shortened without losing meaning, leave it.\n"
+    "2. Stay close to the original length — typically 10–25% shorter, and NEVER more than a third "
+    "shorter. Tightening wording is the goal, not making the paragraph small.\n"
+    "3. Preserve the author's argument, analytical voice, and disciplinary register. Keep genuine "
+    "hedging (may, might, suggests, arguably, appears to) — it carries theoretical weight.\n"
+    "4. Keep all field-specific terminology as-is; plain-word swaps apply only to ordinary long "
+    "words, not terms of art.\n"
+    "5. Preserve every citation (Author, Year), placeholder (199X, 202X, REF), proper noun, number, "
+    "and quoted phrase EXACTLY — never invent, complete, alter, or drop one.\n"
+    "6. The user turn may include editor's notes — apply them but NEVER repeat or mention them.\n"
+    "7. Return ONLY the edited paragraph: no preamble, no explanation, no notes.\n\n"
+    "Examples of good edits (note how all content survives and the length barely drops):\n\n"
+    "Original: It is worth noting that the data, which were collected over a period of several "
+    "months, were subsequently analysed by the research team in order to determine whether a "
+    "relationship existed between the two variables.\n"
+    "Edited: The data, collected over several months, were then analysed by the research team to "
+    "determine whether a relationship existed between the two variables.\n\n"
+    "Original: Miller (2011) argues that social media reflect the cultures in which they are "
+    "embedded.\n"
+    "Edited: Miller (2011) argues that social media reflect the cultures they are embedded in.\n"
+    "(Already clear — barely changed, and the citation is untouched.)"
 )
 
 
-# Normalised fat-index at/above which a paragraph gets the high-wordiness nudge.
-_HIGH_FAT = 0.66
+def _build_user_message(paragraph: str, instructions=None) -> str:
+    """The user turn: optional editor's notes, then the paragraph to edit.
 
-
-def _build_user_message(paragraph: str, budget=None, focus=None, fat_index=None) -> str:
-    lines = []
-    if budget:
-        lines.append(
-            f"Remove roughly {budget} words from this paragraph by tightening, "
-            f"without altering its meaning."
+    ``instructions`` is the per-paragraph directive list from ``kopi.diagnose``
+    (categorical guidance such as "Remove hedges and padding"). The notes are
+    clearly fenced and labelled as instructions; rule 6 of the system prompt
+    forbids echoing them, so unlike the old verbatim-snippet hints they cannot
+    leak into the edited text. With no notes, the user turn is just the paragraph.
+    """
+    if instructions:
+        notes = "\n".join(f"- {line}" for line in instructions)
+        return (
+            "Editor's notes for this paragraph (apply silently, do not repeat):\n"
+            f"{notes}\n\n"
+            "Paragraph:\n"
+            f"{paragraph}"
         )
-    if focus:
-        focus_list = "; ".join(f'"{s}"' for s in focus)
-        lines.append(f"The wordiest sentences are: {focus_list}. Concentrate your cuts there.")
-    if fat_index is not None and fat_index >= _HIGH_FAT:
-        lines.append(
-            "This paragraph is flagged as high-wordiness — aim for substantial "
-            "reduction, up to but not beyond the limit."
-        )
-    if lines:
-        lines.append("")  # blank line before the paragraph
-    lines.append(paragraph)
-    return "\n".join(lines)
+    return paragraph
 
 
-def edit_paragraph(paragraph: str, model: str = DEFAULT_MODEL, budget=None, focus=None,
-                   fat_index=None) -> str:
+def build_messages(paragraph: str, instructions=None) -> list[dict]:
+    """The full chat messages for one paragraph edit.
+
+    Built on the client (local pass and cloud client both use this), so the
+    prompt lives in one place and prompt changes need no service redeploy — the
+    Cloud Run service just relays these messages to Ollama.
+    """
+    return [
+        {"role": "system", "content": _PARA_SYSTEM},
+        {"role": "user", "content": _build_user_message(paragraph, instructions)},
+    ]
+
+
+def edit_paragraph(paragraph: str, model: str = DEFAULT_MODEL, instructions=None) -> str:
     import ollama
     response = ollama.chat(
         model=model,
-        messages=[
-            {"role": "system", "content": _PARA_SYSTEM},
-            {"role": "user", "content": _build_user_message(paragraph, budget, focus, fat_index)},
-        ],
+        messages=build_messages(paragraph, instructions),
         options={"temperature": 0.1},
+        # Keep the model resident between paragraphs so each call skips the
+        # cold-load (the dominant per-call overhead).
+        keep_alive="10m",
     )
     return response["message"]["content"].strip()

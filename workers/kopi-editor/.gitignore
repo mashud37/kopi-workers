@@ -17,6 +17,9 @@ input/*
 output/*
 !output/.gitkeep
 
+# Local config (committed template is env.yaml.example)
+env.yaml
+
 # Editor / OS
 .env
 .DS_Store

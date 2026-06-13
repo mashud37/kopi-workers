@@ -1,319 +1,166 @@
 # kopi-editor
 
-Academic copyeditor for humanities and social sciences. Targets British English by default. Runs locally with no cloud API calls.
+Plain-language copy editor for academic prose in the humanities and social sciences. In the
+tradition of Orwell's editing rules — prefer short words to long, cut every word that can be cut,
+replace clichés with direct statement — it makes scholarly writing more accessible while preserving
+the author's argument, voice, citations, and quotations.
 
-## What it does
+It takes a `.docx` and offers three routes:
 
-Takes a `.docx` file and a word-reduction target, then runs the text through a 12-step pipeline:
+- **analyze** — a diagnostic report: how many unnecessary words and redundant sentences could go, and
+  what each paragraph needs. No edits, no files written.
+- **proof** — conservative, deterministic editing with no LLM: removes fillers and padding, swaps
+  long words for short, fixes grammar. Fully local and free.
+- **edit** — a full plain-language edit via an LLM. The deterministic layer **diagnoses each
+  paragraph and hands the model targeted instructions**, so a cheaper-than-Opus model edits well.
 
-| Step | Name | What it does |
-|------|------|-------------|
-| 1 | Count | Baseline word count |
-| 2 | Filler scan | Removes academic idioms and wordiness phrases |
-| 3 | Proselint | Flags redundancy, clichés, and weasel words |
-| 4 | Syntax transforms | Removes intensifiers; reduces relative clauses |
-| 5 | Redundancy scan | Flags semantically similar sentences for author review |
-| 6 | Sentence merge | Combines short follow-on sentences |
-| 7 | Reduce | Applies all flagged edits from earlier steps |
-| 8 | Plain language | Substitutes latinate vocabulary; removes clichés |
-| 9 | Proofing | LanguageTool British English grammar check |
-| 10 | Concision | Ollama LLM — paragraph-level tightening |
-| 11 | Evaluate | Mu & Lim 2022 benchmark (optional) |
-| 12 | Final check | Flags, readability, dep-depth delta |
+Single-user and local-first: diagnosis and proofing run entirely on your machine; the LLM `edit`
+route runs on **your own** private Cloud Run GPU service, the Anthropic API, or a local Ollama.
+Targets British English by default.
 
-Quoted text (`"..."`, `'...'`, and indented block quotations) is never edited.
+## LLM backends (for the `edit` route)
 
-**Sentence removal only happens in Step 10.** All earlier steps edit words and phrases within sentences. The LLM sees the full paragraph so it can preserve cross-sentence references (the former, the latter, this, these).
+Diagnosis and proofing are always local; this choice only affects the `edit` route. There is **no
+default model** — you choose one in `settings`, so the cost is always deliberate.
 
-## Folders
+| Backend (`LLM`) | Where the model runs | Cost reported as |
+|---|---|---|
+| `cloud` | Your private Cloud Run **GPU service** (e.g. qwen2.5:7b on an L4) | estimated $ from L4 runtime |
+| `api` | **Anthropic API** (Haiku / Sonnet / Opus) — no GPU, no cold start | $ from token usage |
+| `local` | Ollama on your machine | — (self-hosted) |
+| `skip` | — (no LLM edit) | — |
+
+## Layout
 
 ```
-input/    # put source .docx files here
-output/   # generated .md files are written here
-docs/     # reference docs (e.g. the original agent prompt spec)
-data/     # bundled datasets (Mu & Lim sample)
-kopi/     # pipeline package
-tests/    # pytest suite
+manage.py             entrypoint — no args = menu; subcommands also available
+env.yaml.example      config template; copy to env.yaml (gitignored)
+deploy.ps1 / deploy.sh  build + deploy the GPU service (.ps1 is the Windows default)
+requirements.txt
+cli/                  command modules (analyze, proof, edit, cloud, api, deploy, settings, …)
+kopi/                 diagnose (shared core), proof, llm, step_* helpers, signals, output
+cloud/                serve.py — the GPU service
+input/                source .docx files (gitignored, kept with .gitkeep)
+output/               generated .md files (gitignored)
+docs/  data/  tests/  reference docs, bundled datasets, pytest suite
 ```
 
-A bare filename is resolved against `input/` automatically, so `python run.py "chapter 1.docx" 1000` finds `input/chapter 1.docx`. An explicit or absolute path still works. Both folders are kept in the repo via `.gitkeep`; their contents (manuscripts and generated artifacts) are git-ignored.
+## Setup
 
-## Output
-
-Four files are written to `output/`:
-
-- `<name>_edited.md` — clean edited text
-- `<name>_changelog.md` — paragraph-referenced change log with rule citations
-- `<name>_diff.md` — unified diff of all changes (open in VS Code diff viewer)
-- `<name>_review.md` — proofing suggestions that appeared multiple times; decide once and apply globally *(only created when applicable)*
-
-## Installation
-
-Requires Python 3.10 or later.
+Requires Python 3.10+.
 
 ```
 pip install -r requirements.txt
 python -m spacy download en_core_web_sm
+python manage.py install      # creates env.yaml, checks deps
+python manage.py settings     # choose LLM backend + model (+ language)
+python manage.py              # launch the interactive menu
 ```
 
-All Python dependencies (including proselint and language-tool-python) are in `requirements.txt`. Notes on first-run downloads:
+`install` is idempotent. For the `cloud` backend, `python manage.py deploy` builds the model into a
+container image, deploys a warm L4-GPU Cloud Run service, and writes `BASE_URL` + `JOB_TOKEN` into
+`env.yaml`. For the `api` backend, paste your Anthropic key in `settings`.
 
-- **sentence-transformers** (`all-MiniLM-L6-v2`, ~40 MB) — downloads automatically
-- **LanguageTool** (~200 MB Java engine) — downloads on first proofing run, then works offline
+First-run downloads: **sentence-transformers** (`all-MiniLM-L6-v2`, ~40 MB, for the meaning guard)
+and, for `proof`, **LanguageTool** (~200 MB Java engine, then offline).
 
-### Ollama (Step 10 — LLM concision, local model)
-
-```
-# Install from https://ollama.com, then pull your preferred model tier:
-ollama pull gemma3:4b        # lightweight — fast, CPU-viable
-ollama pull mistral-small    # standard (default)
-ollama pull qwen3.5:27b      # high-tier
-```
-
-The LLM processes paragraphs, not sentences. It is given explicit instructions to preserve cross-sentence references and is rejected if the edited paragraph drifts more than 15% in meaning (cosine similarity guard). No data leaves the machine.
-
-## Usage
+## Menu
 
 ```
-python run.py <file.docx> <words_to_remove> [options]
+1) Analyze     2) Proof          3) Full edit     4) Settings    5) Show config
+6) Deploy      7) Cloud smoke    8) Update        9) Install
 ```
 
-| Argument | Description |
-|----------|-------------|
-| `file.docx` | Input document — a bare name is resolved against `input/` |
-| `words_to_remove` | Number of words to remove (not target length) |
-| `--lang american` | Use American English (default: British) |
-| `--no-llm` | Skip LLM step — deterministic edits only |
-| `--llm local` / `--llm cloud` | Run the LLM phase non-interactively (no `[l/c/N]` prompt). Use this when stdin isn't an interactive terminal |
-| `--rules-only` | Steps 1–8 only — no proofing or LLM |
-| `--no-second-pass` | Disable the automatic second LLM pass when the first undershoots target |
-| `--evaluate` | Run Mu & Lim 2022 benchmark after editing |
-| `--cloud-job` | Full pipeline inside a Cloud Run container (reads/writes via GCS) |
+Each of Analyze / Proof / Full edit lists the `.docx` files in `input/` to pick from.
 
-### Interactive flow
-
-The pipeline runs in two phases:
-
-**Phase 1 — Deterministic** (always local, fast)
-
-1. Pipeline runs steps 1–9
-2. Repeated proofing suggestions are presented one at a time: `'personalization' -> 'personalisation' (5x at P2, P5...) — Apply everywhere? [y/N/q]`
-3. Outputs are written: `_edited.md`, `_changelog.md`, `_diff.md`
-4. Flags are printed: word count gap, hard paragraphs by label, redundant sentences for author review
-
-**Phase 2 — LLM tightening** (only flagged paragraphs)
+## Direct subcommands (scriptable)
 
 ```
-52 paragraph(s) flagged for LLM tightening.
-  [l] Local Ollama
-  [c] Cloud Run
-  [N] Skip
-Choice:
+python manage.py analyze <file.docx>
+python manage.py proof   <file.docx> [--lang {british|american}]
+python manage.py edit    <file.docx> [words_to_remove] [--llm {cloud|api|local|skip}] [--lang …]
+python manage.py settings | config | deploy | install | update
+python manage.py cloud-test [<n>] [--source <file>]   # dev smoke for the GPU service
 ```
 
-- **l**: Ollama must be running locally (`ollama serve`)
-- **c**: Only the flagged paragraphs are uploaded to GCS; a Cloud Run job processes them with Ollama and returns results — the full document never leaves your machine for this path
-- **N**: Keep phase 1 outputs as-is
-
-### Examples
+`<file.docx>` — a bare name resolves against `input/`. For `edit`, `words_to_remove` is an **optional
+soft guide**: omit it for a pure plain-language pass; give it and the model aims for that reduction
+while still editing every paragraph evenly.
 
 ```
-# Standard run:
-python run.py paper.docx 1000
-
-# Fast pass — no Java or Ollama required:
-python run.py paper.docx 1000 --rules-only
-
-# Deterministic edits + proofing, no LLM:
-python run.py paper.docx 1000 --no-llm
+python manage.py analyze "chapter 1.docx"          # report only
+python manage.py proof   "chapter 1.docx"          # deterministic edit, no LLM
+python manage.py edit    "chapter 1.docx"          # full plain-language edit (backend from settings)
+python manage.py edit    "chapter 1.docx" 1000     # ... aiming to shed ~1000 words
 ```
 
-## Benchmark evaluation
+## How it works
 
-The `--evaluate` flag runs a 50-sentence sample from the Mu & Lim (2022) Revision-for-Concision dataset and reports:
+All three routes share one deterministic **diagnosis** ([kopi/diagnose.py](kopi/diagnose.py)): it
+parses the document once and produces document-level estimates (unnecessary words, redundant
+sentences, readability) plus, per paragraph, a small set of categorical editing instructions
+(always *plain language*; plus *wordiness*, *redundancy*, *passive voice*, or *long sentences* when
+detected).
 
-- Mean TER (Translation Edit Rate) against human reference revisions
-- Mean cosine similarity to human references (via sentence-transformers)
-- Count of sentences shortened
+- **analyze** writes `output/<name>_analysis.md`: readability gauges, the editable levers, key
+  terms (TF-IDF), and a **paragraph-by-paragraph worksheet** — every paragraph with its scores and
+  the exact edit guidance, for editing by hand.
+- **proof** applies only the safe, mechanical fixes — filler/padding removal, cliché and long→short
+  word substitution, and LanguageTool grammar — and writes the edited text. It never removes
+  sentences or restructures syntax.
+- **edit** sends every eligible paragraph to the LLM backend with its instructions as *editor's
+  notes*. A meaning guard runs on the client: a cosine-similarity check (≥ 0.85) rejects any edit
+  that drifts, and every citation `(Author, Year)` and number is verified preserved. On a recoverable
+  rejection (over-compression, a changed citation, …) the paragraph is re-prompted **once** with a
+  softer/corrective note rather than silently kept.
 
-```
-# See data/revision_for_concision/ for the 50-pair sample
-# Full dataset: https://github.com/sutdcse/concision
-```
+Outputs in `output/`: `<name>_edited.md` (clean text), `<name>_changelog.md` (paragraph-referenced
+changes), `<name>.diff` (standard **unified diff** for any diff viewer), `<name>_review.md` (repeated
+proofing suggestions), and — after `edit` — `<name>_comparison.md` (before/after across the same
+measures, plus whether the original's key terms still surface).
 
-## Cloud Run setup
+> Quoted text (`"…"`, `'…'`, and indented block quotations) is **never** edited by any route.
 
-The LLM runs inside the Cloud Run container via Ollama — no external model API is used at any point.
+## The GPU service (`cloud` backend)
 
-Run the interactive setup script to provision everything in one go:
+`manage.py deploy` builds a container with the model baked in (`ollama serve` + a small Flask
+wrapper, [cloud/serve.py](cloud/serve.py)) and deploys it as a Cloud Run service:
 
-```
-python cloud/setup_cloud.py
-```
+- **GPU + warm model** → a few seconds per paragraph once the instance is up (qwen2.5:7b on an L4).
+- **Scale-to-zero** (`--min-instances 0`) → no cost when idle; the first request of a session loads
+  the model (~30–90s cold), then every paragraph is fast.
+- The client sends paragraphs **in parallel** (4 at a time) over HTTPS, guarded by the `JOB_TOKEN`;
+  the meaning guard runs locally. Only paragraphs sent for editing ever leave the machine.
 
-It walks you through project selection, model choice, and creates the Artifact Registry repo, GCS bucket, Docker image (via Cloud Build), service account, and Cloud Run job. The steps below document what it does, for reference.
+> **GPU required:** the service uses an NVIDIA **L4**. Ensure your region (default `europe-west1`)
+> has L4 availability and `nvidia_l4` quota. Switch models with `MODEL` in `settings` + re-`deploy`.
 
-### Prerequisites
+## Cost reporting
 
-1. **Google Cloud project** with billing enabled
-2. **gcloud CLI** installed and authenticated (`gcloud auth login`)
-3. **APIs enabled** in your project:
-   ```bash
-   gcloud services enable run.googleapis.com \
-     cloudbuild.googleapis.com \
-     storage.googleapis.com \
-     artifactregistry.googleapis.com
-   ```
-4. **Artifact Registry repository** to store the Docker image:
-   ```bash
-   gcloud artifacts repositories create kopi \
-     --repository-format docker \
-     --location europe-west1
-   ```
-5. **GCS bucket** for passing paragraphs between the local script and the cloud job:
-   ```bash
-   gsutil mb -l europe-west1 gs://YOUR_BUCKET_NAME
-   ```
+Both LLM backends report the cost of a run:
 
-### Build and push the image
+- **api** — actual token usage priced by model (Haiku $1/$5, Sonnet $3/$15, Opus $5/$25 per 1M
+  in/out); the shared system prompt is cached, cutting input cost on multi-paragraph runs.
+- **cloud** — an estimate from active L4 service time (GPU + 4 vCPU + 16 GiB, per-second list price).
 
-The easiest way is to run the interactive setup script, which handles everything:
-
-```bash
-python cloud/setup_cloud.py
-```
-
-Or manually via `cloudbuild.yaml` (the model is baked into the image at build time):
-
-```bash
-IMAGE=europe-west1-docker.pkg.dev/YOUR_PROJECT/kopi/kopi-editor
-
-# Build with the standard model (mistral-small):
-gcloud builds submit \
-  --config cloudbuild.yaml \
-  --substitutions _KOPI_MODEL=mistral-small,_IMAGE=$IMAGE
-```
-
-Building bakes the model into the image, so the container starts immediately without a download. Build times:
-
-| Model | Image size | Build time |
-|-------|-----------|------------|
-| gemma3:4b | ~4 GB | ~10 min |
-| mistral-small | ~14 GB | ~20 min |
-| qwen3.5:27b | ~18 GB | ~25 min |
-
-### Create the LLM paragraph job
-
-This is what the interactive `[c]` option uses. Only the flagged paragraphs (not the full document) are uploaded to GCS.
-
-```bash
-IMAGE=europe-west1-docker.pkg.dev/YOUR_PROJECT/kopi/kopi-editor
-
-# Resource requirements depend on model:
-#   gemma3:4b     -> 2 CPU, 4Gi
-#   mistral-small -> 4 CPU, 16Gi
-#   qwen3.5:27b   -> 4 CPU, 16Gi
-
-gcloud run jobs create kopi-editor-llm \
-  --image $IMAGE \
-  --command "./entrypoint_llm.sh" \
-  --region europe-west1 \
-  --cpu 4 --memory 16Gi \
-  --max-retries 0 --task-timeout 20m
-```
-
-### Service account permissions
-
-The Cloud Run job needs read/write access to your GCS bucket:
-
-```bash
-PROJECT=$(gcloud config get-value project)
-SA=kopi-runner@${PROJECT}.iam.gserviceaccount.com
-
-gcloud iam service-accounts create kopi-runner \
-  --display-name "kopi-editor Cloud Run"
-
-gcloud projects add-iam-policy-binding $PROJECT \
-  --member "serviceAccount:$SA" \
-  --role roles/storage.objectAdmin
-
-gcloud run jobs update kopi-editor-llm \
-  --service-account $SA \
-  --region europe-west1
-```
-
-### Local environment variables
-
-```bash
-export KOPI_BUCKET=YOUR_BUCKET_NAME
-export KOPI_REGION=europe-west1       # default
-export KOPI_LLM_JOB=kopi-editor-llm  # default
-```
-
-Add these to your shell profile (`~/.zshrc`, `~/.bashrc`, or `$PROFILE` on Windows) so they persist between sessions.
-
-### Run
-
-```bash
-python run.py chapter.docx 1000
-# ... deterministic phase runs locally ...
-# Select [c] at the LLM prompt, then choose model
-```
-
-Cost estimates per chapter (~6 000 words, 50 paragraphs):
-
-| Model | Speed | Est. cost |
-|-------|-------|----------|
-| gemma3:4b | fast | < $0.03 |
-| mistral-small | medium | < $0.05 |
-| qwen3.5:27b | slow | < $0.08 |
-
-### Option B — Full pipeline in Cloud Run (non-interactive)
-
-For batch or CI workflows where the full pipeline runs unattended in the cloud:
-
-```bash
-gcloud run jobs create kopi-editor \
-  --image $IMAGE \
-  --region europe-west1 \
-  --cpu 4 --memory 8Gi \
-  --max-retries 0 --task-timeout 30m \
-  --service-account $SA
-
-gcloud run jobs execute kopi-editor \
-  --region europe-west1 \
-  --args="gs://YOUR_BUCKET/chapter.docx,1000"
-```
+> Estimates only; verify current Anthropic and Cloud Run GPU pricing.
 
 ## Development
 
 ```
-python -m pytest tests/ -q     # unit + integration tests (no Ollama/model needed)
-python calibrate.py            # summarise the Step 10 calibration log for tuning routing
+python -m pytest tests/ -q     # unit + integration tests (no Ollama/model/API needed)
 ```
-
-Step 10 routing flags the wordiest paragraphs (a composite "fat-index" in `kopi/signals.py`) up to the word target, logs per-paragraph compression to `~/.kopi/calibration.jsonl` (override with `KOPI_CALIBRATION_LOG`), and runs an automatic second LLM pass if the first undershoots (disable with `--no-second-pass`). `calibrate.py` summarises that log so you can hand-tune the routing constants.
 
 ## Dependencies and academic precedents
 
 | Package | Purpose | Reference |
 |---------|---------|-----------|
-| spaCy + en_core_web_sm | Parse, NER, DependencyMatcher | — |
-| sentence-transformers | Redundancy detection; LLM similarity guard | — |
-| proselint | Redundancy, clichés, weasel words | Pacer & Suchow, SciPy 2016 |
-| language-tool-python | British English proofing | languagetool.org |
+| spaCy + en_core_web_sm | Parse, sentence features, quotation detection | — |
+| sentence-transformers | Redundancy detection; LLM meaning guard | — |
+| language-tool-python | British/American English proofing (`proof`) | languagetool.org |
 | textstat | Flesch readability (document + paragraph) | — |
-| ollama | Local LLM concision | Mu & Lim, TSAR-EMNLP 2022 |
+| anthropic / ollama | LLM plain-language editing (`edit`) | — |
 
-Syntactic transforms in Step 4 follow the DEPSYM/PSET tradition (Sikka & Mago 2021; Carroll et al. 1999; Chandrasekar & Srinivas 1997). The dependency depth proxy for voice preservation follows Lu (2010).
-
-## Design constraints
-
-- Steps 1–9 are word/phrase edits only — no sentence is removed by any deterministic rule
-- Sentence removal only happens in Step 10 (LLM), which sees the full paragraph
-- The LLM processes paragraphs, not sentences — it can reason about cross-sentence references
-- Cosine similarity guard (≥ 0.85) ensures the edited paragraph preserves the original meaning
-- All citation patterns (`(Author, Year)`) and numeric tokens are verified preserved before accepting LLM edits
-- Maximum compression per paragraph: 40%
-- Flags in the change log are advisory — the author decides whether to act on them
-- No data is sent to any external API at any point
+The plain-language editing rules follow Orwell, *Politics and the English Language* (1946); the
+redundancy test uses IDF-weighted overlap and marginal-novelty (MMR) selection from the IR
+literature.

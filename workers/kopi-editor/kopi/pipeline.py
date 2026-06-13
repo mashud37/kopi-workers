@@ -1,68 +1,55 @@
+"""Lean shared setup for the three routes.
+
+There is no longer a fixed 12-step pipeline. Each route (analyze / proof / edit)
+loads spaCy once, runs the shared :mod:`kopi.diagnose` core, and then performs
+its own small action set. ``prepare`` builds the common state every route needs.
+"""
 from kopi.quote_guard import guard, unguard
-from kopi.progress import StepSpinner, _first_summary
-from kopi import (
-    step_count, step_fillers, step_proselint,
-    step_syntax, step_redundancy, step_merge, step_reduce,
-    step_plain, step_proofing, step_evaluate, step_check,
-)
+from kopi import diagnose
 
-_STEPS = [
-    (step_count,      "Count"),
-    (step_fillers,    "Fillers & wordiness"),
-    (step_proselint,  "Proselint"),
-    (step_syntax,     "Syntax transforms"),
-    (step_redundancy, "Redundancy scan"),
-    (step_merge,      "Sentence merge"),
-    (step_reduce,     "Apply reductions"),
-    (step_plain,      "Plain language"),
-    (step_proofing,   "Proofing"),
-    (step_evaluate,   "Benchmark"),
-    (step_check,      "Final check"),
-]
+_nlp = None
 
 
-def _mean_dep_depth(text):
-    try:
-        import spacy
-        nlp = spacy.load("en_core_web_sm")
-        doc = nlp(text[:50000])
-        depths = []
-        for tok in doc:
-            d, cur = 0, tok
-            while cur.head != cur:
-                cur = cur.head
-                d += 1
-            depths.append(d)
-        return sum(depths) / len(depths) if depths else None
-    except Exception:
-        return None
+def load_nlp():
+    """Load (and cache) the spaCy pipeline, or None if unavailable."""
+    global _nlp
+    if _nlp is None:
+        try:
+            import spacy
+            _nlp = spacy.load("en_core_web_sm")
+        except Exception:
+            _nlp = False
+    return _nlp or None
 
 
-def run_pipeline(
-    text: str,
-    target: int,
-    lang: str = "british",
-    rules_only: bool = False,
-    evaluate: bool = False,
-) -> dict:
+def prepare(text: str, target: int, lang: str = "british") -> dict:
+    """Diagnose the document and build the base state shared by every route.
+
+    Loads spaCy once, runs the deterministic diagnosis (per-paragraph
+    instructions + document estimates), records the before-readability for the
+    final check, and guards quotations. Announced before any work so the user is
+    never left staring at a silent terminal.
+    """
+    print("  [prep] analysing document (local)...", flush=True)
+    nlp = load_nlp()
+
     try:
         import textstat
         readability_before = textstat.flesch_reading_ease(text)
     except Exception:
         readability_before = None
 
-    dep_depth_before = _mean_dep_depth(text)
-    guarded, qmap = guard(text)
+    diag = diagnose.diagnose(text, nlp) if nlp is not None else None
 
-    state = {
+    guarded, qmap = guard(text)
+    return {
         "text": guarded,
         "qmap": qmap,
+        "diagnosis": diag,
         "target": target,
         "lang": lang,
-        "rules_only": rules_only,
-        "evaluate": evaluate,
         "log": [],
-        "counts": {},
+        "counts": {"step1": len(text.split())},
         "fillers": [],
         "redundant_pairs": [],
         "merge_candidates": [],
@@ -70,20 +57,14 @@ def run_pipeline(
         "llm_stats": {},
         "review_items": [],
         "readability_before": readability_before,
-        "dep_depth_before": dep_depth_before,
         "original_text": text,
         "eval_metrics": {},
     }
 
-    for step, label in _STEPS:
-        log_before = len(state["log"])
-        sp = StepSpinner(label)
-        sp.start()
-        try:
-            state = step.run(state)
-        finally:
-            summary = _first_summary(state["log"][log_before:])
-            sp.done(summary)
 
+def finalize(state: dict) -> dict:
+    """Run the final check and materialise the unguarded output text."""
+    from kopi import step_check
+    step_check.run(state)
     state["final_text"] = unguard(state["text"], state["qmap"])
     return state

@@ -51,7 +51,7 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
 
     edited_path = out_dir / f"{stem}_edited.md"
     changelog_path = out_dir / f"{stem}_changelog.md"
-    diff_path = out_dir / f"{stem}_diff.md"
+    diff_path = out_dir / f"{stem}.diff"
     review_path = out_dir / f"{stem}_review.md"
 
     edited_path.write_text(state["final_text"], encoding="utf-8-sig")
@@ -155,17 +155,41 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
 
     original = state.get("original_text", "")
     final = state.get("final_text", "")
+    written_diff = None
     if original and final and original != final:
-        orig_lines = original.splitlines(keepends=True)
-        edit_lines = final.splitlines(keepends=True)
-        diff = list(difflib.unified_diff(
-            orig_lines, edit_lines,
-            fromfile="original", tofile="edited", n=2,
-        ))
-        if diff:
-            diff_path.write_text(
-                "```diff\n" + "".join(diff) + "```\n",
-                encoding="utf-8-sig",
-            )
+        diff_text = _build_diff(original, final, source_path.name)
+        if diff_text.strip():
+            # Plain UTF-8 (no BOM) so diff viewers parse the headers cleanly.
+            diff_path.write_text(diff_text, encoding="utf-8")
+            written_diff = diff_path
 
-    return edited_path, changelog_path
+    return edited_path, changelog_path, written_diff
+
+
+def _diff_lines(text: str) -> list[str]:
+    """Render text one sentence per line (blank line between paragraphs) so the
+    unified diff localises changes to the sentence, not the whole paragraph."""
+    lines = []
+    for para in text.split("\n\n"):
+        para = " ".join(para.split())
+        if not para:
+            continue
+        for sent in re.split(r"(?<=[.!?])\s+", para):
+            if sent:
+                lines.append(sent + "\n")
+        lines.append("\n")  # paragraph break
+    return lines
+
+
+def _build_diff(original: str, final: str, name: str) -> str:
+    """A standard **unified diff** (real `.diff` syntax) of original vs edited.
+
+    Sentence-per-line granularity keeps hunks small and lets a diff viewer
+    highlight exactly what changed. Plain unified-diff text — no markdown — so it
+    renders in any `.diff`/patch viewer.
+    """
+    udiff = difflib.unified_diff(
+        _diff_lines(original), _diff_lines(final),
+        fromfile=f"a/{name}", tofile=f"b/{name}", n=3,
+    )
+    return "".join(udiff)

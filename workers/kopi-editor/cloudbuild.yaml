@@ -1,5 +1,5 @@
 substitutions:
-  _KOPI_MODEL: qwen2.5:3b
+  _KOPI_MODEL: qwen2.5:7b
   _IMAGE: europe-west1-docker.pkg.dev/kopi-editor/kopi-editor-reg-322/kopi-editor
 
 steps:

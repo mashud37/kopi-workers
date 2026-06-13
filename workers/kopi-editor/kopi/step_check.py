@@ -8,7 +8,7 @@ def _mean_dep_depth(text, nlp):
         depths = []
         for tok in doc:
             d, cur = 0, tok
-            while cur.head != cur:
+            while cur.head != cur and d < 1000:  # bounded — guard against a cyclic parse
                 cur = cur.head
                 d += 1
             depths.append(d)
