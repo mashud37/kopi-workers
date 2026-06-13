@@ -64,7 +64,7 @@ python run.py input/outline.txt
 python run.py input/paper.docx --review          # review the plan, give plain-language feedback, LLM revises
 python run.py input/paper.docx --emoji           # colour emoji instead of Fluent icons
 python run.py input/paper.docx --dry-run         # print the JSON plan only
-python run.py input/paper.docx --json output/paper.json   # rebuild from JSON (no LLM)
+python run.py input/paper.docx --plan output/paper.json   # rebuild from JSON (no LLM)
 python run.py input/paper.docx --no-pdf          # .pptx only
 python run.py input/paper.docx --condense        # trim long paragraphs (cheaper, less rich)
 ```
@@ -73,7 +73,7 @@ Outputs land in `output/` (override with `-o DIR`):
 
 | File | Description |
 |------|-------------|
-| `stem.json` | Slide plan — reuse with `--json` to skip the LLM |
+| `stem.json` | Slide plan — reuse with `--plan` to skip the LLM |
 | `stem.pptx` | **Editable PowerPoint deck** |
 | `stem.pdf`  | **Primary handout/print output** |
 
