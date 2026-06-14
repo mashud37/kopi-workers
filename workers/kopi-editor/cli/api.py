@@ -58,15 +58,15 @@ def _client():
     return anthropic.Anthropic(api_key=config.anthropic_api_key())
 
 
-def _edit_one(client, model: str, text: str, instructions) -> tuple[str, object]:
+def _edit_one(client, model: str, text: str, instructions, lang: str = "british") -> tuple[str, object]:
     # The editing contract is identical for every paragraph, so mark the system
     # prompt as cacheable: the first call writes it, the rest read it at 0.10x
     # input price — a large saving when tightening a whole document.
-    from kopi.llm import _PARA_SYSTEM, _build_user_message
+    from kopi.llm import _system_for, _build_user_message
     resp = client.messages.create(
         model=model,
         max_tokens=_MAX_TOKENS,
-        system=[{"type": "text", "text": _PARA_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        system=[{"type": "text", "text": _system_for(lang), "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": _build_user_message(text, instructions)}],
     )
     out = "".join(b.text for b in resp.content if b.type == "text").strip()
@@ -88,6 +88,7 @@ def _edit_all(candidates: list) -> list:
 
     client = _client()
     model = config.anthropic_model()
+    lang = config.lang()
     total = len(candidates)
     start = time.time()
     progress = {"done": 0}
@@ -105,7 +106,7 @@ def _edit_all(candidates: list) -> list:
     hb.start()
 
     def _edit_fn(text, instructions):
-        edited, usage = _edit_one(client, model, text, instructions)
+        edited, usage = _edit_one(client, model, text, instructions, lang)
         with lock:  # count tokens for every call, including a corrective retry
             tokens["input"] += getattr(usage, "input_tokens", 0) or 0
             tokens["output"] += getattr(usage, "output_tokens", 0) or 0

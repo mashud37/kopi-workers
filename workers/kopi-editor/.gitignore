@@ -19,6 +19,8 @@ output/*
 
 # Local config (committed template is env.yaml.example)
 env.yaml
+env.vllm.yaml
+env.ollama.yaml
 
 # Editor / OS
 .env

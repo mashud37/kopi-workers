@@ -290,13 +290,15 @@ def _delta_mark(before: float, after: float, better: str, nd: int) -> str:
 
 
 def _compare_gauge(label, vb, va, lo, hi, target, better, nd, suffix="") -> list[str]:
-    """One measure as before/after sliders on the same scale (mirrors analysis)."""
+    """One measure as before/after sliders, stacked. The whole label+bar lives in
+    one code span so the monospace font keeps the bars aligned column-for-column
+    (plain-text spaces would collapse in rendered markdown and misalign them)."""
     if vb is None or va is None:
         return [f"- **{label}** — {_num(vb, nd)} → {_num(va, nd)}", ""]
     return [
         f"- **{label}** — {vb:.{nd}f}{suffix} → {va:.{nd}f}{suffix}  {_delta_mark(vb, va, better, nd)}",
-        f"  before `{scale_bar(vb, lo, hi, target=target)}`",
-        f"  after  `{scale_bar(va, lo, hi, target=target)}`",
+        f"  `before {scale_bar(vb, lo, hi, target=target)}`",
+        f"  `after  {scale_bar(va, lo, hi, target=target)}`",
         "",
     ]
 
@@ -334,25 +336,40 @@ def write_comparison(original: str, final: str, source_name: str, out_dir: Path)
                         0, 40, 8, "down", 1, "%")
     L += _compare_gauge("Length", float(wb), float(wa), 0, max(1, wb), wa, "down", 0, " words")
 
-    # --- Key terms: same bar plot as analysis, annotated with survival ---------
+    # --- Key terms: before/after prominence (shared scale) per top concept -----
     before_terms = key_terms(original.split("\n\n"), top=15)
     if before_terms:
-        final_low = final.lower()
+        import re
+        orig_low, final_low = original.lower(), final.lower()
+
+        def _count(term: str, text: str) -> int:
+            return len(re.findall(r"\b" + re.escape(term) + r"\b", text))
+
+        b_counts = [_count(t, orig_low) for t, _ in before_terms]
+        denom = max(b_counts) or 1  # shared scale -> the two bars are comparable
         kept = sum(1 for t, _ in before_terms if t.lower() in final_low)
         L += [
             "## Key terms — did they survive the edit?",
             "",
-            f"{kept} of {len(before_terms)} top concepts from the original still appear in the edit "
-            "(a missing one may have been rephrased — worth a glance).",
+            f"{kept} of {len(before_terms)} top concepts from the original still appear in the edit. "
+            "Each term's bars show how often it occurs **before** vs **after** (same scale), so you "
+            "can see whether its prominence held.",
             "",
         ]
-        top = before_terms[0][1] or 1.0
-        for term, score in before_terms:
-            fill = int(round((score / top) * 20))
-            bar = "█" * fill + "░" * (20 - fill)
-            mark = "✅" if term.lower() in final_low else "⚠️"
-            L.append(f"- `{bar}` {term} {mark}")
+        for (term, _), bc in zip(before_terms, b_counts):
+            ac = _count(term, final_low)
+            mark = "✅" if ac > 0 else "⚠️ check"
+            L += [
+                f"- **{term}** — {bc} → {ac} occurrences {mark}",
+                f"  `before {_fill_bar(bc, denom)}`",
+                f"  `after  {_fill_bar(ac, denom)}`",
+            ]
         L.append("")
 
     path.write_text("\n".join(L), encoding="utf-8-sig")
     return path
+
+
+def _fill_bar(value: float, denom: float, width: int = 20) -> str:
+    fill = min(width, int(round((value / denom) * width))) if denom else 0
+    return "█" * fill + "░" * (width - fill)

@@ -16,25 +16,34 @@ from cli import config, ui
 _WORKERS = 4
 _TIMEOUT = 300  # generous: the first request absorbs the cold start (model load)
 
-# Cloud Run GPU list prices, USD per second (cached 2026-06; verify for your
-# region). The deployed service is instance-billed (--no-cpu-throttling) at
-# --gpu 1 nvidia-l4 --cpu 4 --memory 16Gi, so while the instance is active we
-# pay for all three. See `_run_cost()`.
-_L4_GPU_PER_SEC = 0.000233          # nvidia-l4
+# Cloud Run GPU list prices, USD per GPU-second (cached 2026-06; verify for your
+# region). Instance-billed (--no-cpu-throttling): while the instance is active we
+# pay GPU + CPU + memory. The shape (GPU type, vCPU, GiB) comes from config so the
+# estimate tracks whichever service BASE_URL points at, not a baked-in L4.
+_GPU_PER_SEC = {
+    "nvidia-l4": 0.000233,
+    # RTX PRO 6000 Blackwell: Google has not published a Cloud Run per-second SKU
+    # we could verify here; this is a ~4x-L4 estimate (market ~$3/hr GPU) pending
+    # confirmation from the console/calculator. Override via KOPI_GPU_PER_SEC.
+    "nvidia-rtx-pro-6000": 0.00093,
+}
 _VCPU_PER_SEC = 0.0000180           # per vCPU
 _MEM_PER_SEC = 0.0000020            # per GiB
-_DEPLOY_VCPU = 4
-_DEPLOY_MEM_GIB = 16
-_COST_PER_SEC = (
-    _L4_GPU_PER_SEC
-    + _DEPLOY_VCPU * _VCPU_PER_SEC
-    + _DEPLOY_MEM_GIB * _MEM_PER_SEC
-)
+
+
+def _gpu_rate() -> float:
+    import os
+    override = os.environ.get("KOPI_GPU_PER_SEC")
+    if override:
+        return float(override)
+    return _GPU_PER_SEC.get(config.gpu_type(), _GPU_PER_SEC["nvidia-l4"])
 
 
 def _run_cost(seconds: float) -> float:
-    """Estimated USD for ``seconds`` of active L4 service time (GPU+CPU+memory)."""
-    return seconds * _COST_PER_SEC
+    """Estimated USD for ``seconds`` of active service time (GPU+CPU+memory),
+    using the configured instance shape."""
+    per_sec = _gpu_rate() + config.deploy_cpu() * _VCPU_PER_SEC + config.deploy_mem() * _MEM_PER_SEC
+    return seconds * per_sec
 
 
 def _require():
@@ -45,11 +54,18 @@ def _require():
 
 
 def _post_one(text: str, instructions) -> str:
-    # Build the full prompt on the client and send it as `messages`; the service
-    # just relays to Ollama, so prompt changes need no redeploy.
+    # Send BOTH shapes so the client works against either service version:
+    #  - `messages`: the new relay service uses the client-built prompt (no
+    #    redeploy needed for future prompt changes);
+    #  - `paragraph`/`instructions`: an older deployed service that builds the
+    #    prompt itself still works (with its baked prompt) until it is redeployed.
     from kopi.llm import build_messages
     url = f"{config.base_url().rstrip('/')}/tighten?token={config.job_token()}"
-    body = json.dumps({"messages": build_messages(text, instructions)}).encode("utf-8")
+    body = json.dumps({
+        "messages": build_messages(text, instructions, config.lang()),
+        "paragraph": text,
+        "instructions": instructions,
+    }).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
         return json.loads(resp.read())["edited"]
@@ -116,7 +132,7 @@ def _edit_all(candidates: list) -> list:
     elapsed = time.time() - start
     ui.ok(f"tightening complete: {total}/{total} · {int(elapsed)}s")
     ui.info(
-        f"≈ ${_run_cost(elapsed):.4f} (L4 GPU service, {int(elapsed)}s active; "
+        f"≈ ${_run_cost(elapsed):.4f} ({config.gpu_type()} service, {int(elapsed)}s active; "
         f"list price, excludes post-run idle keep-alive before scale-to-zero)"
     )
 

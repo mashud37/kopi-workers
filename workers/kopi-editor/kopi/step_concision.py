@@ -113,20 +113,26 @@ def guard_result(original: str, edited: str) -> dict:
     }
 
 
-def _corrective_instruction(reason: str) -> str | None:
-    """A softer/targeted directive for a *recoverable* guard rejection, or None.
+def _corrective_instruction(reason: str, text: str) -> str | None:
+    """A targeted directive for a *recoverable* guard rejection, or None.
 
-    Used to re-prompt a paragraph once when the first edit failed in a way the
-    model can plausibly fix (it cut too much, padded, or touched a citation/
-    number/meaning) — rather than silently keeping the original.
+    Re-prompts a paragraph once when the first edit failed in a way the model can
+    fix. Small models follow concrete numbers far better than vague guidance, so
+    the over-compression note states the exact word floor and the citations to keep.
     """
     if reason.startswith("over-compressed"):
-        return ("Edit only lightly this time: tighten wording and improve clarity, but keep the "
-                "paragraph substantially intact — remove at most a few words.")
+        orig = len(text.split())
+        floor = int(orig * (1 - _MAX_COMPRESSION)) + 1
+        return (f"Your previous edit cut too much. The paragraph has {orig} words; your edit MUST "
+                f"keep at least {floor} words. Do NOT delete whole sentences or drop any point — "
+                f"only tighten wording within each sentence.")
     if reason.startswith("expanded"):
         return "Be more concise: do not add words; the edit must not be longer than the original."
     if "citation" in reason:
-        return "Keep every citation (e.g. (Author, Year)) exactly as written — change, add, drop none."
+        cites = _get_citations(text)
+        keep = ", ".join(sorted(set(cites))) or "(Author, Year)"
+        return (f"Your previous edit altered a citation. Reproduce these EXACTLY and unchanged, and "
+                f"add or drop none: {keep}.")
     if "numeric" in reason:
         return "Keep every number exactly as written — do not change or drop any figure."
     if "meaning" in reason or "cosine" in reason:
@@ -134,22 +140,52 @@ def _corrective_instruction(reason: str) -> str | None:
     return None
 
 
+# Editorial meta-comments the model sometimes appends despite the prompt, e.g.
+# "(Note: the original sentence was split for clarity.)". Matched by the
+# tell-tale editorial phrasing inside a parenthetical, so genuine content
+# parentheticals are left alone.
+_META_PAREN = re.compile(
+    r"\s*\([^)]*\b(?:note:|original sentence|for clarity|split into|rephrased|"
+    r"shortened|edited for|combined into|merged|revised for)\b[^)]*\)\s*",
+    re.IGNORECASE,
+)
+# Qwen3 (and other reasoning models) may wrap a chain-of-thought in <think>…</think>
+# before the answer. We disable thinking in the request, but strip any block as a
+# belt-and-braces guard so reasoning never reaches the edited text.
+_THINK = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+
+
+def _clean_edit(edited: str) -> str:
+    """Normalise a raw model edit before guarding/applying.
+
+    Fixes model quirks deterministically (prompt rules reduce but don't eliminate
+    them on smaller models): a stray reasoning ``<think>`` block, the paragraph
+    returned across several lines after a sentence is removed (collapsed back to
+    one paragraph), and an appended editorial note about the model's own changes.
+    """
+    edited = _THINK.sub(" ", edited)                 # drop any reasoning trace
+    edited = re.sub(r"\s*[\r\n]+\s*", " ", edited)   # keep it ONE paragraph
+    edited = _META_PAREN.sub(" ", edited)            # drop self-referential notes
+    return re.sub(r"\s{2,}", " ", edited).strip()
+
+
 def edit_with_retry(edit_fn, text: str, instructions) -> dict:
     """Edit + guard; on a recoverable rejection, retry **once** with a corrective note.
 
     ``edit_fn(text, instructions) -> edited_text``. The aim is an accepted edit, so
     rather than silently keep the original on (say) over-compression, we re-prompt
-    the paragraph once asking for a softer/targeted edit. Returns a guard_result
-    dict; if the retry also fails, the original is kept and the reason records both
-    attempts.
+    the paragraph once asking for a softer/targeted edit. Each raw edit is cleaned
+    (`_clean_edit`) before guarding so length/meaning checks see the real text.
+    Returns a guard_result dict; if the retry also fails, the original is kept and
+    the reason records both attempts.
     """
-    res = guard_result(text, edit_fn(text, instructions))
+    res = guard_result(text, _clean_edit(edit_fn(text, instructions)))
     if res["accepted"]:
         return res
-    note = _corrective_instruction(res["reason"])
+    note = _corrective_instruction(res["reason"], text)
     if not note:
         return res
-    retry = guard_result(text, edit_fn(text, [note] + list(instructions or [])))
+    retry = guard_result(text, _clean_edit(edit_fn(text, [note] + list(instructions or []))))
     if retry["accepted"]:
         retry["reason"] = "ok (softer retry)"
         return retry
@@ -329,9 +365,10 @@ def run(state: dict) -> dict:
         shared state — results are applied later in deterministic index order."""
         idx = cand["index"]
         para = paragraphs[idx]
+        lang = state.get("lang", "british")
         try:
             res = edit_with_retry(
-                lambda t, instr: edit_paragraph(t, instructions=instr),
+                lambda t, instr: edit_paragraph(t, instructions=instr, lang=lang),
                 para, cand.get("instructions"),
             )
         except Exception as e:

@@ -33,7 +33,7 @@ _MIN_PARA_WORDS = 40
 # clear hit is enough to nudge the model, and the directives are non-destructive.
 _WORDINESS_HITS = 1          # filler/padding phrases present
 _PLAIN_HITS = 1              # clichés or long words present
-_LONG_SENTENCE_WORDS = 34    # mean sentence length above this -> "break up"
+_LONG_SENTENCE_WORDS = 40    # mean sentence length above this -> suggest splitting
 _PASSIVE_RATIO = 0.30        # fraction of sentences with a passive construction
 
 # The plain-language directive is ALWAYS applied — the plain-language rules run
@@ -52,7 +52,7 @@ _REDUNDANCY = (
     "merge a short follow-on sentence into the one before it."
 )
 _PASSIVE = "Prefer the active voice where it reads naturally."
-_LONG_SENTENCE = "Break overly long sentences into shorter ones."
+_LONG_SENTENCE = "Split only a genuinely overlong or hard-to-follow sentence; keep the prose flowing, not choppy."
 
 # Public map of tag -> the exact directive the LLM editor receives. The analysis
 # report shows these verbatim so a human editing by hand follows the same guidance.

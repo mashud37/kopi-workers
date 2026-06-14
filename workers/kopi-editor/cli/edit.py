@@ -8,6 +8,23 @@ guide; the plain-language pass runs regardless.
 from cli import config, ui, common
 
 
+def _normalize_british(state):
+    """Restore British spelling in the edited text (the model sometimes slips to
+    American despite the prompt). Runs on the GUARDED text, so quoted material —
+    where American spelling must be preserved verbatim — is left untouched."""
+    from kopi.step_plain import _apply_lookup
+    from kopi.data_spelling import AMERICAN_TO_BRITISH
+    changes = []
+    state["text"] = _apply_lookup(state["text"], AMERICAN_TO_BRITISH, changes, "Spelling — British")
+    if changes:
+        state["log"].append({
+            "step": "Spelling — British",
+            "detail": f"{len(changes)} American spelling(s) normalised to British",
+            "para": None,
+        })
+        state["log"].extend(changes)
+
+
 def _refresh_final_check(state):
     from kopi import step_check
     from kopi.quote_guard import unguard
@@ -74,6 +91,12 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
     else:
         ui.info("LLM editing skipped (llm=skip)")
         _refresh_final_check(state)
+
+    # Deterministic British-spelling safety net over the model's output.
+    if lang == "british" and llm != "skip":
+        from kopi.quote_guard import unguard
+        _normalize_british(state)
+        state["final_text"] = unguard(state["text"], state["qmap"])
 
     edited, changelog, diff = write_outputs(state, path, config.OUTPUT_DIR)
 

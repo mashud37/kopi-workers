@@ -49,12 +49,17 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
     out_dir = Path(out_dir) if out_dir is not None else source_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    original_path = out_dir / f"{stem}_original.md"
     edited_path = out_dir / f"{stem}_edited.md"
     changelog_path = out_dir / f"{stem}_changelog.md"
     diff_path = out_dir / f"{stem}.diff"
     review_path = out_dir / f"{stem}_review.md"
 
     edited_path.write_text(state["final_text"], encoding="utf-8-sig")
+    # Also write the extracted source as text, so it can be diffed side-by-side
+    # against the edit in an editor (the source .docx is binary, the edit is .md).
+    if state.get("original_text"):
+        original_path.write_text(state["original_text"], encoding="utf-8-sig")
 
     sections = {k: [] for k in _SECTION_KEYS}
 

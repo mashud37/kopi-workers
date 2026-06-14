@@ -1,0 +1,24 @@
+# Parallel vLLM image for the qwen3:14b A/B — separate from the Ollama Dockerfile.
+# vLLM ships correct CUDA kernels for the L4 (sm_89), avoiding Ollama's kernel
+# fragility. Pin a specific tag before promoting to production (`:latest` is fine
+# for a throwaway A/B test — models.md §6).
+FROM vllm/vllm-openai:latest
+
+# Proxy deps (the base image already has vllm + huggingface_hub). --ignore-installed
+# blinker: the base image ships blinker 1.4 via distutils, which Flask can't
+# uninstall to upgrade — ignore it rather than fail the build.
+RUN pip install --no-cache-dir --ignore-installed blinker flask gunicorn
+
+# Bake the model so cold start doesn't depend on Hugging Face at runtime. Qwen3 is
+# open-weight (no gating), so no HF token is needed. Override at build time:
+#   --build-arg KOPI_MODEL=Qwen/Qwen3-14B-FP8
+ARG KOPI_MODEL=Qwen/Qwen3-14B-AWQ
+ENV KOPI_MODEL=${KOPI_MODEL}
+# `huggingface-cli` is deprecated in recent images; use the `hf` CLI.
+RUN hf download "${KOPI_MODEL}"
+
+WORKDIR /app
+COPY cloud/serve_vllm.py entrypoint_vllm.sh ./
+RUN chmod +x entrypoint_vllm.sh
+
+ENTRYPOINT ["./entrypoint_vllm.sh"]

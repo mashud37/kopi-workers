@@ -110,9 +110,9 @@ def test_over_compression_triggers_softer_retry(monkeypatch):
     # passes. The goal is an *edited* paragraph, not a silent fallback to original.
     def editor(p, **k):
         instr = k.get("instructions") or []
-        if any("lightly" in i for i in instr):
-            return " ".join(p.split()[:-3])   # gentle: drop 3 words -> accepted
-        return " ".join(p.split()[:3])        # gut it -> over-compressed
+        if any("at least" in i for i in instr):   # the numeric corrective note
+            return " ".join(p.split()[:-3])        # gentle: drop 3 words -> accepted
+        return " ".join(p.split()[:3])             # gut it -> over-compressed
 
     _stub_llm(monkeypatch, editor)
     state = _make_state(_build_document())
@@ -123,7 +123,8 @@ def test_over_compression_triggers_softer_retry(monkeypatch):
 
 def test_corrective_instruction_maps_reasons():
     ci = step_concision._corrective_instruction
-    assert "lightly" in ci("over-compressed (142 -> 60 words)")
-    assert ci("citation set changed: {'(2012)'}")
-    assert ci("meaning drift (cosine similarity 0.70 < 0.85)")
-    assert ci("empty edit") is None  # not recoverable by a softer prompt
+    note = ci("over-compressed (142 -> 60 words)", "word " * 142)
+    assert "at least" in note and "86" in note  # concrete floor: int(142*0.6)+1
+    assert "(2012)" in ci("citation set changed: {'(2012)'}", "Smith (2012) said it.")
+    assert ci("meaning drift (cosine similarity 0.70 < 0.85)", "text")
+    assert ci("empty edit", "text") is None  # not recoverable by a softer prompt

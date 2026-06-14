@@ -1,7 +1,7 @@
 # kopi-editor
 
-Plain-language copy editor for academic prose in the humanities and social sciences. In the
-tradition of Orwell's editing rules — prefer short words to long, cut every word that can be cut,
+Plain-language copy editor for academic prose in the humanities and social sciences. Following
+plain-language editing principles — prefer short words to long, cut every word that can be cut,
 replace clichés with direct statement — it makes scholarly writing more accessible while preserving
 the author's argument, voice, citations, and quotations.
 
@@ -161,6 +161,5 @@ python -m pytest tests/ -q     # unit + integration tests (no Ollama/model/API n
 | textstat | Flesch readability (document + paragraph) | — |
 | anthropic / ollama | LLM plain-language editing (`edit`) | — |
 
-The plain-language editing rules follow Orwell, *Politics and the English Language* (1946); the
-redundancy test uses IDF-weighted overlap and marginal-novelty (MMR) selection from the IR
+The redundancy test uses IDF-weighted overlap and marginal-novelty (MMR) selection from the IR
 literature.

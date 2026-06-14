@@ -40,8 +40,9 @@ def test_write_comparison_shows_before_after(tmp_path):
     body = path.read_text(encoding="utf-8-sig")
     assert "## Readability & length" in body
     assert "Reading ease" in body
-    # Same slider visuals as the analysis report, shown before AND after.
-    assert "before `[" in body and "after  `[" in body
+    # Same slider visuals as the analysis report, stacked before/after inside a
+    # code span (monospace) so the bars stay aligned.
+    assert "`before [" in body and "`after  [" in body
     assert "●" in body
     # Word count dropped, so the header should show the reduction.
     assert "→" in body and "words" in body

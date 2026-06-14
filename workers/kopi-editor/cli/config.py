@@ -27,6 +27,10 @@ _ENV_OVERRIDE = {
     "MODEL": "KOPI_MODEL",
     "LANG": "KOPI_LANG",
     "LLM": "KOPI_LLM",
+    # Deployed instance shape — used only to estimate run cost accurately.
+    "GPU_TYPE": "KOPI_GPU_TYPE",
+    "CPU": "KOPI_CPU",
+    "MEMORY": "KOPI_MEMORY",
     # Standard Anthropic env var name (also read by the SDK); per security.md §2.
     "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY",
     "ANTHROPIC_MODEL": "KOPI_ANTHROPIC_MODEL",
@@ -41,6 +45,10 @@ _DEFAULTS = {
     "SERVICE": "kopi-editor",
     "LANG": "british",
     "LLM": "cloud",
+    # The original L4 service shape; the deploy scripts overwrite these per service.
+    "GPU_TYPE": "nvidia-l4",
+    "CPU": 4,
+    "MEMORY": 16,
 }
 
 LANGS = ("british", "american")
@@ -71,6 +79,9 @@ def job_token():        return get("JOB_TOKEN")
 def model():            return get("MODEL")
 def lang():             return get("LANG")
 def llm_backend():      return get("LLM")
+def gpu_type():         return get("GPU_TYPE")
+def deploy_cpu():       return int(get("CPU"))
+def deploy_mem():       return int(get("MEMORY"))
 def anthropic_api_key(): return get("ANTHROPIC_API_KEY")
 def anthropic_model():   return get("ANTHROPIC_MODEL")
 

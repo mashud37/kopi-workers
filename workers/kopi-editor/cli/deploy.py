@@ -24,9 +24,18 @@ def run():
     ui.info("L4 GPU is required; ensure the region has GPU availability and nvidia_l4 quota.")
 
     cmd = _deploy_command()
-    env = dict(os.environ, PROJECT=project)
+    # Pass the CONFIGURED model/region/service through to the deploy script — it
+    # reads these from the environment (KOPI_MODEL defaults to qwen2.5:7b), so
+    # without this the build would ignore env.yaml and always bake the default.
+    env = dict(
+        os.environ,
+        PROJECT=project,
+        KOPI_MODEL=config.model() or "qwen2.5:7b",
+        KOPI_REGION=config.region(),
+        KOPI_SERVICE=config.service(),
+    )
     ui.info(f"Running {'deploy.ps1' if os.name == 'nt' else 'deploy.sh'} "
-            "(builds the image, deploys the service, writes BASE_URL/JOB_TOKEN).")
+            f"(builds the image with {config.model()}, deploys the service, writes BASE_URL/JOB_TOKEN).")
     return subprocess.call(cmd, cwd=str(config.ROOT), env=env)
 
 
