@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-slider-chat CLI — manuscript/outline -> PowerPoint (.pptx) + PDF.
+kopi-presenter CLI — manuscript/outline -> PowerPoint (.pptx) + PDF.
 
 Pipeline: parse -> LLM slide JSON -> lint -> house rules -> build .pptx -> export PDF.
 

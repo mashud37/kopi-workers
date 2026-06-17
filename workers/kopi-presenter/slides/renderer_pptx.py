@@ -61,7 +61,7 @@ def _via_soffice(pptx_path: Path, pdf_path: Path) -> bool:
     exe = _soffice_exe()
     if not exe:
         return False
-    profile = Path(tempfile.mkdtemp(prefix="sliderchat_lo_"))
+    profile = Path(tempfile.mkdtemp(prefix="kopipresenter_lo_"))
     try:
         cmd = [
             exe, "--headless", "--norestore",

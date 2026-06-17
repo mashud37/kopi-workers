@@ -1,4 +1,4 @@
-# slider-chat — automated slide decks (PPTX + PDF)
+# kopi-presenter — automated slide decks (PPTX + PDF)
 
 Turn a manuscript or outline into a finished, presentation-ready **PowerPoint
 deck** (`.pptx`) and a **PDF**, in one command:
