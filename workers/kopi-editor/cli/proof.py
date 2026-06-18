@@ -5,15 +5,28 @@ from cli import config, ui, common
 
 
 def run(file, lang=None):
-    lang = lang or config.lang()
-    path, text, words = common.load_text(file)
+    from kopi.progress import StepSpinner
 
+    lang = lang or config.lang()
+
+    path = common.resolve_docx(file)
     ui.step(f"Proofing {path.name}")
+
+    sp = StepSpinner("loading document")
+    sp.start()
+    try:
+        path, text, words = common.load_text(file)
+    finally:
+        sp.done()
     ui.info(f"{words} words | conservative deterministic edit (no LLM)")
 
     from kopi.pipeline import prepare, finalize
     from kopi.proof import proof
     from kopi.output import write_outputs
+
+    ui.info("  · 1/3  Diagnose document")
+    ui.info("  · 2/3  Apply deterministic edits")
+    ui.info("  · 3/3  Write outputs")
 
     # No word target for proofing — pass the current length so the final check
     # reports "at target" rather than a spurious shortfall.

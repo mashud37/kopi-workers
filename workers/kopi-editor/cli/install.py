@@ -44,7 +44,9 @@ def run():
     if req.exists():
         ui.info("installing dependencies from requirements.txt...")
         subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "-r", str(req)])
-    for mod, pkg in _DEPS:
+    total_deps = len(_DEPS)
+    for i, (mod, pkg) in enumerate(_DEPS, 1):
+        ui.info(f"[{i}/{total_deps}] checking {mod}")
         try:
             __import__(mod)
             ui.ok(f"{mod}: ok")

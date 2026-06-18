@@ -5,19 +5,36 @@ from cli import config, ui, common
 
 
 def run(file):
-    path, text, words = common.load_text(file)
-    ui.step(f"Analysing {path.name}")
-    ui.info(f"{words} words")
-
     from kopi.pipeline import load_nlp
     from kopi import diagnose, report
+    from kopi.progress import StepSpinner
 
-    nlp = load_nlp()
+    path = common.resolve_docx(file)
+    ui.step(f"Analysing {path.name}")
+
+    sp = StepSpinner("loading document")
+    sp.start()
+    try:
+        path, text, words = common.load_text(file)
+    finally:
+        sp.done()
+    ui.info(f"{words} words")
+
+    sp = StepSpinner("loading spaCy model")
+    sp.start()
+    try:
+        nlp = load_nlp()
+    finally:
+        sp.done()
     if nlp is None:
         raise SystemExit("spaCy model missing — run `python manage.py update` (downloads en_core_web_sm).")
 
-    print("  [prep] analysing document (local)...", flush=True)
-    diag = diagnose.diagnose(text, nlp)
+    sp = StepSpinner("analysing document")
+    sp.start()
+    try:
+        diag = diagnose.diagnose(text, nlp)
+    finally:
+        sp.done()
 
     un = diag["unnecessary"]
     red = diag["redundancy"]

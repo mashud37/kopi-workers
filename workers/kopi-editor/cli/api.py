@@ -81,10 +81,15 @@ def _edit_all(candidates: list) -> list:
     # Pre-load the embedding model ONCE before the workers start, so the parallel
     # guard checks don't race to initialise sentence-transformers (concurrent
     # torch init throws "Cannot copy out of meta tensor").
+    from kopi.progress import StepSpinner
+    sp = StepSpinner("loading embedding model")
+    sp.start()
     try:
         _get_model()
     except Exception:
         pass
+    finally:
+        sp.done()
 
     client = _client()
     model = config.anthropic_model()

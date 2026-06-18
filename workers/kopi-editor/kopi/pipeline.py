@@ -30,8 +30,14 @@ def prepare(text: str, target: int, lang: str = "british") -> dict:
     final check, and guards quotations. Announced before any work so the user is
     never left staring at a silent terminal.
     """
-    print("  [prep] analysing document (local)...", flush=True)
-    nlp = load_nlp()
+    from kopi.progress import StepSpinner
+
+    sp = StepSpinner("loading spaCy model")
+    sp.start()
+    try:
+        nlp = load_nlp()
+    finally:
+        sp.done()
 
     try:
         import textstat
@@ -39,7 +45,12 @@ def prepare(text: str, target: int, lang: str = "british") -> dict:
     except Exception:
         readability_before = None
 
-    diag = diagnose.diagnose(text, nlp) if nlp is not None else None
+    sp = StepSpinner("analysing document")
+    sp.start()
+    try:
+        diag = diagnose.diagnose(text, nlp) if nlp is not None else None
+    finally:
+        sp.done()
 
     guarded, qmap = guard(text)
     return {

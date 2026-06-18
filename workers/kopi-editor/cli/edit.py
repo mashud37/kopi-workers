@@ -61,20 +61,32 @@ def _summary(state, original):
 def run(file, reduction=None, lang=None, llm=None, verbose=False):
     from kopi.pipeline import prepare
     from kopi.output import write_outputs
+    from kopi.progress import StepSpinner
 
     lang = lang or config.lang()
     llm = llm or config.llm_backend()
     _require_model(llm)
 
-    path, text, original = common.load_text(file)
+    path = common.resolve_docx(file)
+    ui.step(f"Editing {path.name}")
+
+    sp = StepSpinner("loading document")
+    sp.start()
+    try:
+        path, text, original = common.load_text(file)
+    finally:
+        sp.done()
 
     # Reduction is an optional soft guide; the plain-language pass runs regardless.
     target = original - reduction if reduction else original
-    ui.step(f"Editing {path.name}")
     if reduction:
         ui.info(f"original {original} words | guide -{reduction} -> ~{target}")
     else:
         ui.info(f"original {original} words | plain-language pass (no reduction target)")
+
+    ui.info("  · 1/3  Diagnose document")
+    ui.info("  · 2/3  LLM plain-language edit")
+    ui.info("  · 3/3  Write outputs")
 
     state = prepare(text, target, lang)
 

@@ -87,10 +87,15 @@ def _edit_all(candidates: list) -> list:
     # cosine check loads sentence-transformers lazily; letting 4 threads race to
     # initialise it throws torch's "Cannot copy out of meta tensor" (concurrent
     # init is not thread-safe). One load up front removes the race.
+    from kopi.progress import StepSpinner
+    sp = StepSpinner("loading embedding model")
+    sp.start()
     try:
         _get_model()
     except Exception:
         pass
+    finally:
+        sp.done()
 
     total = len(candidates)
     start = time.time()

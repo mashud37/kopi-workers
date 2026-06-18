@@ -355,10 +355,15 @@ def run(state: dict) -> dict:
 
     # Pre-load the shared embedding model so concurrent acceptance checks don't
     # race to initialise it.
+    from kopi.progress import StepSpinner
+    sp = StepSpinner("loading embedding model")
+    sp.start()
     try:
         _get_model()
     except Exception:
         pass
+    finally:
+        sp.done()
 
     def _edit_one(cand: dict) -> dict:
         """Edit + guard a single paragraph (with one corrective retry). Pure w.r.t.
