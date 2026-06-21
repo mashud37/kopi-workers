@@ -29,6 +29,9 @@ except ValueError:
 # We only reject a paragraph the model clearly *padded out* beyond this factor.
 _MAX_EXPANSION = 1.10
 _MIN_COSINE_SIM = 0.85
+# When a reduction was requested, do one top-up pass if the realised cut falls
+# below this fraction of the ask (e.g. asked -600, got < 480).
+_TOPUP_TOLERANCE = 0.80
 
 _embedding_model = None
 
@@ -65,20 +68,21 @@ def _para_num(text: str, para: str) -> str:
     return "P?"
 
 
-def _accept_edit(original: str, edited: str) -> tuple[bool, str]:
+def _accept_edit(original: str, edited: str, max_compression: float = _MAX_COMPRESSION) -> tuple[bool, str]:
     orig_words = len(original.split())
     edit_words = len(edited.split())
 
     if not edited.strip():
         return False, "empty edit"
 
-    # Plain-language editing is about clarity, not only length: an edit that keeps
-    # (or barely changes) the word count is fine. Reject only the two failure
-    # modes — the model padded the paragraph out, or gutted it.
+    # ``max_compression`` is set per run from the requested reduction (kopi.intensity):
+    # tight in a clarity pass so an over-eager model can't gut a paragraph nobody
+    # asked to shorten, wide when a major cut was requested. Reject only the two
+    # failure modes — the model padded the paragraph out, or cut past the ceiling.
     if edit_words > orig_words * _MAX_EXPANSION:
         return False, f"expanded ({orig_words} -> {edit_words} words)"
 
-    if edit_words < orig_words * (1 - _MAX_COMPRESSION):
+    if edit_words < orig_words * (1 - max_compression):
         return False, f"over-compressed ({orig_words} -> {edit_words} words)"
 
     orig_cites = set(_get_citations(original))
@@ -98,13 +102,14 @@ def _accept_edit(original: str, edited: str) -> tuple[bool, str]:
     return True, "ok"
 
 
-def guard_result(original: str, edited: str) -> dict:
+def guard_result(original: str, edited: str, max_compression: float = _MAX_COMPRESSION) -> dict:
     """Run the acceptance guard on one LLM edit and package the outcome.
 
     Shared by the local pass and the cloud client so the accept/reject rules
     live in one place. On rejection the original is kept unchanged.
+    ``max_compression`` is the run's per-paragraph compression ceiling.
     """
-    ok, reason = _accept_edit(original, edited)
+    ok, reason = _accept_edit(original, edited, max_compression)
     return {
         "edited": edited if ok else original,
         "accepted": ok,
@@ -113,16 +118,17 @@ def guard_result(original: str, edited: str) -> dict:
     }
 
 
-def _corrective_instruction(reason: str, text: str) -> str | None:
+def _corrective_instruction(reason: str, text: str, max_compression: float = _MAX_COMPRESSION) -> str | None:
     """A targeted directive for a *recoverable* guard rejection, or None.
 
     Re-prompts a paragraph once when the first edit failed in a way the model can
     fix. Small models follow concrete numbers far better than vague guidance, so
     the over-compression note states the exact word floor and the citations to keep.
+    The floor tracks the run's compression ceiling (tight in a clarity pass).
     """
     if reason.startswith("over-compressed"):
         orig = len(text.split())
-        floor = int(orig * (1 - _MAX_COMPRESSION)) + 1
+        floor = int(orig * (1 - max_compression)) + 1
         return (f"Your previous edit cut too much. The paragraph has {orig} words; your edit MUST "
                 f"keep at least {floor} words. Do NOT delete whole sentences or drop any point — "
                 f"only tighten wording within each sentence.")
@@ -169,23 +175,24 @@ def _clean_edit(edited: str) -> str:
     return re.sub(r"\s{2,}", " ", edited).strip()
 
 
-def edit_with_retry(edit_fn, text: str, instructions) -> dict:
+def edit_with_retry(edit_fn, text: str, instructions, max_compression: float = _MAX_COMPRESSION) -> dict:
     """Edit + guard; on a recoverable rejection, retry **once** with a corrective note.
 
     ``edit_fn(text, instructions) -> edited_text``. The aim is an accepted edit, so
     rather than silently keep the original on (say) over-compression, we re-prompt
     the paragraph once asking for a softer/targeted edit. Each raw edit is cleaned
     (`_clean_edit`) before guarding so length/meaning checks see the real text.
-    Returns a guard_result dict; if the retry also fails, the original is kept and
-    the reason records both attempts.
+    ``max_compression`` is the run's per-paragraph ceiling (from the requested
+    reduction). Returns a guard_result dict; if the retry also fails, the original
+    is kept and the reason records both attempts.
     """
-    res = guard_result(text, _clean_edit(edit_fn(text, instructions)))
+    res = guard_result(text, _clean_edit(edit_fn(text, instructions)), max_compression)
     if res["accepted"]:
         return res
-    note = _corrective_instruction(res["reason"], text)
+    note = _corrective_instruction(res["reason"], text, max_compression)
     if not note:
         return res
-    retry = guard_result(text, _clean_edit(edit_fn(text, [note] + list(instructions or []))))
+    retry = guard_result(text, _clean_edit(edit_fn(text, [note] + list(instructions or []))), max_compression)
     if retry["accepted"]:
         retry["reason"] = "ok (softer retry)"
         return retry
@@ -203,27 +210,43 @@ def _worker_count(n: int) -> int:
         workers = 2
     return max(1, min(workers, n))
 
+def _plan_for(state: dict) -> dict:
+    """The run's editing intensity, from the requested reduction and document size."""
+    from kopi import intensity
+    original = (
+        state.get("original_words")
+        or (state.get("counts") or {}).get("step1")
+        or len(unguard(state["text"], state["qmap"]).split())
+    )
+    return intensity.plan(state.get("reduction") or 0, original)
+
+
 def get_candidates(state: dict) -> list[dict]:
     """Return **every** paragraph eligible for a plain-language edit, each carrying
-    its deterministic ``instructions`` from :mod:`kopi.diagnose`.
+    its deterministic ``instructions`` from :mod:`kopi.diagnose` and the run's
+    editing intensity.
 
     Eligible = at least ``_MIN_PARA_WORDS`` words, not a (block) quotation, and not
-    already edited in a prior pass. The whole document is edited — no fat-index
-    routing, no per-paragraph word budget, no candidate cap — so the output reads
-    consistently. Each candidate's ``instructions`` (e.g. "remove hedges and
-    padding", the always-on plain-language directive) steer the model so a
-    cheaper-than-Opus model edits well; the word target is a soft guide only.
+    already edited in a prior pass. The whole document is edited so the output reads
+    consistently, but each candidate now carries the intensity derived from the
+    requested reduction (:mod:`kopi.intensity`): ``mode`` (selects the prompt
+    stance), ``max_compression`` (the guard ceiling), and a soft per-paragraph
+    ``floor``. With no reduction requested this is a clarity pass — the model is
+    told to barely change length and the guard rejects deep cuts.
     """
+    from kopi.intensity import paragraph_floor
     restored = unguard(state["text"], state["qmap"])
     paragraphs = restored.split("\n\n")
     already = set(state.get("llm_edited_indices", set()))
+    plan = _plan_for(state)
 
     diag = state.get("diagnosis") or {}
     by_index = {p["index"]: p for p in diag.get("paragraphs", [])}
 
     candidates = []
     for i, para in enumerate(paragraphs):
-        if i in already or len(para.split()) < _MIN_PARA_WORDS:
+        words = len(para.split())
+        if i in already or words < _MIN_PARA_WORDS:
             continue
         info = by_index.get(i)
         if info is not None:
@@ -240,8 +263,73 @@ def get_candidates(state: dict) -> list[dict]:
             "index": i,
             "text": para,
             "instructions": instructions,
+            "mode": plan["mode"],
+            "max_compression": plan["max_compression"],
+            "floor": paragraph_floor(words, plan["frac"]),
             "routing_reason": "plain-language edit",
         })
+    return candidates
+
+
+def topup_candidates(state: dict) -> list[dict]:
+    """Paragraphs to re-edit once when pass 1 under-delivered on the reduction.
+
+    Returns ``[]`` when no reduction was requested or the realised cut already
+    covers most of the ask (``_TOPUP_TOLERANCE``). Otherwise it re-plans the
+    *remaining* reduction over the wordiest still-reducible paragraphs and pushes
+    each toward the band's ceiling — we are now explicitly chasing a target the
+    first pass missed. Bounded by design: only as many paragraphs as the remaining
+    reduction needs, so it approaches the target without overshooting.
+    """
+    from kopi import intensity
+    reduction = state.get("reduction") or 0
+    if not reduction:
+        return []
+    restored = unguard(state["text"], state["qmap"])
+    paragraphs = restored.split("\n\n")
+    original = state.get("original_words") or len(restored.split())
+    realised = original - len(restored.split())
+    if realised >= reduction * _TOPUP_TOLERANCE:
+        return []
+    remaining = reduction - realised
+
+    diag = state.get("diagnosis") or {}
+    by_index = {p["index"]: p for p in diag.get("paragraphs", [])}
+    pool = []
+    for i, para in enumerate(paragraphs):
+        words = len(para.split())
+        if words < _MIN_PARA_WORDS:
+            continue
+        info = by_index.get(i)
+        if info is not None:
+            if info.get("is_quote") or info.get("is_heading"):
+                continue
+            instructions = info.get("instructions", [])
+        else:
+            from kopi import signals
+            if signals._is_quote_para(para):
+                continue
+            instructions = []
+        pool.append((i, para, words, instructions))
+
+    plan = intensity.plan(remaining, sum(w for _, _, w, _ in pool) or 1)
+    pool.sort(key=lambda t: -t[2])  # wordiest first — concentrate the remaining cut
+    candidates = []
+    budget = remaining
+    for i, para, words, instructions in pool:
+        if budget <= 0:
+            break
+        floor = intensity.paragraph_floor(words, plan["max_compression"])
+        candidates.append({
+            "index": i,
+            "text": para,
+            "instructions": instructions,
+            "mode": plan["mode"],
+            "max_compression": plan["max_compression"],
+            "floor": floor,
+            "routing_reason": "top-up (target shortfall)",
+        })
+        budget -= (words - floor)
     return candidates
 
 
@@ -290,7 +378,7 @@ def apply_results(state: dict, results: list[dict]) -> dict:
     state["llm_edited_indices"] = edited_indices
     final_count = word_count(state["text"], state["qmap"])
     state["counts"]["step10"] = final_count
-    state["llm_stats"] = {"para": len(results), "accepted": accepted, "rejected": rejected}
+    _bump_stats(state, len(results), accepted, rejected)
     state["log"].append({
         "step": "Step 10 — Concision",
         "detail": f"{len(results)} paragraph(s) processed: {accepted} accepted, {rejected} rejected -> {final_count} words",
@@ -300,13 +388,27 @@ def apply_results(state: dict, results: list[dict]) -> dict:
     return state
 
 
-def run(state: dict) -> dict:
-    """Local Ollama path: plain-language-edit every eligible paragraph in parallel.
+def _bump_stats(state: dict, para: int, accepted: int, rejected: int) -> None:
+    """Accumulate LLM stats across passes (pass 1 + any top-up) instead of
+    overwriting, so the summary reflects the whole edit, not just the last pass."""
+    prev = state.get("llm_stats") or {}
+    state["llm_stats"] = {
+        "para": prev.get("para", 0) + para,
+        "accepted": prev.get("accepted", 0) + accepted,
+        "rejected": prev.get("rejected", 0) + rejected,
+    }
 
-    Each paragraph is sent with its deterministic ``instructions`` from
-    :mod:`kopi.diagnose`. The acceptance guard (`_accept_edit`) protects meaning;
-    rejected edits keep the original. No target gating — the whole document is
-    edited for plain language regardless of word count.
+
+def run(state: dict, candidates: list[dict] | None = None) -> dict:
+    """Local Ollama path: edit every eligible paragraph in parallel at the run's
+    intensity.
+
+    Each candidate carries its ``instructions`` (from :mod:`kopi.diagnose`) and the
+    intensity derived from the requested reduction — ``mode`` (prompt stance),
+    ``max_compression`` (guard ceiling), and a soft ``floor``. The guard
+    (`_accept_edit`) protects meaning and enforces the ceiling; rejected edits keep
+    the original. Pass explicit ``candidates`` for a targeted top-up pass; otherwise
+    every eligible paragraph is selected.
     """
     try:
         from kopi.llm import edit_paragraph, DEFAULT_MODEL
@@ -333,13 +435,13 @@ def run(state: dict) -> dict:
     rejected = 0
 
     paragraphs = restored.split("\n\n")
-    candidates = get_candidates(state)
+    candidates = candidates if candidates is not None else get_candidates(state)
     edited_indices = set(state.get("llm_edited_indices", set()))
     para_count = len(candidates)
 
     if not candidates:
         state["counts"]["step10"] = word_count(state["text"], state["qmap"])
-        state["llm_stats"] = {"para": 0, "accepted": 0, "rejected": 0}
+        _bump_stats(state, 0, 0, 0)
         state["log"].append({
             "step": "Step 10 — Concision",
             "detail": "no paragraphs qualified for editing",
@@ -371,10 +473,12 @@ def run(state: dict) -> dict:
         idx = cand["index"]
         para = paragraphs[idx]
         lang = state.get("lang", "british")
+        mode = cand.get("mode", "firm")
+        floor = cand.get("floor")
         try:
             res = edit_with_retry(
-                lambda t, instr: edit_paragraph(t, instructions=instr, lang=lang),
-                para, cand.get("instructions"),
+                lambda t, instr: edit_paragraph(t, instructions=instr, lang=lang, mode=mode, floor=floor),
+                para, cand.get("instructions"), cand.get("max_compression", _MAX_COMPRESSION),
             )
         except Exception as e:
             return {"cand": cand, "para": para, "error": str(e)}
@@ -451,7 +555,7 @@ def run(state: dict) -> dict:
     state["llm_edited_indices"] = edited_indices
     final_count = word_count(state["text"], state["qmap"])
     state["counts"]["step10"] = final_count
-    state["llm_stats"] = {"para": para_count, "accepted": accepted, "rejected": rejected}
+    _bump_stats(state, para_count, accepted, rejected)
     state["log"].append({
         "step": "Step 10 — Concision",
         "detail": f"{para_count} paragraphs processed: {accepted} accepted, {rejected} rejected -> {final_count} words",

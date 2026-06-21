@@ -22,13 +22,14 @@ def load_nlp():
     return _nlp or None
 
 
-def prepare(text: str, target: int, lang: str = "british") -> dict:
+def prepare(text: str, target: int, lang: str = "british", reduction: int = 0) -> dict:
     """Diagnose the document and build the base state shared by every route.
 
     Loads spaCy once, runs the deterministic diagnosis (per-paragraph
     instructions + document estimates), records the before-readability for the
     final check, and guards quotations. Announced before any work so the user is
-    never left staring at a silent terminal.
+    never left staring at a silent terminal. ``reduction`` (words the user asked to
+    remove, 0 = clarity pass) drives the editing intensity in :mod:`kopi.intensity`.
     """
     from kopi.progress import StepSpinner
 
@@ -58,6 +59,8 @@ def prepare(text: str, target: int, lang: str = "british") -> dict:
         "qmap": qmap,
         "diagnosis": diag,
         "target": target,
+        "reduction": reduction,
+        "original_words": len(text.split()),
         "lang": lang,
         "log": [],
         "counts": {"step1": len(text.split())},

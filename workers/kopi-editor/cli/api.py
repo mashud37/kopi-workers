@@ -58,16 +58,17 @@ def _client():
     return anthropic.Anthropic(api_key=config.anthropic_api_key())
 
 
-def _edit_one(client, model: str, text: str, instructions, lang: str = "british") -> tuple[str, object]:
-    # The editing contract is identical for every paragraph, so mark the system
-    # prompt as cacheable: the first call writes it, the rest read it at 0.10x
-    # input price — a large saving when tightening a whole document.
+def _edit_one(client, model: str, text: str, instructions, lang: str = "british",
+              mode: str = "firm", floor: int | None = None) -> tuple[str, object]:
+    # The system prompt is identical for every paragraph at the same intensity, so
+    # mark it cacheable: the first call per (lang, mode) writes it, the rest read it
+    # at 0.10x input price — a large saving when tightening a whole document.
     from kopi.llm import _system_for, _build_user_message
     resp = client.messages.create(
         model=model,
         max_tokens=_MAX_TOKENS,
-        system=[{"type": "text", "text": _system_for(lang), "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": _build_user_message(text, instructions)}],
+        system=[{"type": "text", "text": _system_for(lang, mode), "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": _build_user_message(text, instructions, floor)}],
     )
     out = "".join(b.text for b in resp.content if b.type == "text").strip()
     return out, resp.usage
@@ -76,7 +77,7 @@ def _edit_one(client, model: str, text: str, instructions, lang: str = "british"
 def _edit_all(candidates: list) -> list:
     """Send candidates to Anthropic in parallel, guard locally, shape results for
     step_concision.apply_results. A heartbeat keeps the wait visible."""
-    from kopi.step_concision import edit_with_retry, _get_model
+    from kopi.step_concision import edit_with_retry, _get_model, _MAX_COMPRESSION as _DEFAULT_MAX_COMPRESSION
 
     # Pre-load the embedding model ONCE before the workers start, so the parallel
     # guard checks don't race to initialise sentence-transformers (concurrent
@@ -110,20 +111,26 @@ def _edit_all(candidates: list) -> list:
     hb = threading.Thread(target=heartbeat, daemon=True)
     hb.start()
 
-    def _edit_fn(text, instructions):
-        edited, usage = _edit_one(client, model, text, instructions, lang)
-        with lock:  # count tokens for every call, including a corrective retry
-            tokens["input"] += getattr(usage, "input_tokens", 0) or 0
-            tokens["output"] += getattr(usage, "output_tokens", 0) or 0
-            tokens["cache_write"] += getattr(usage, "cache_creation_input_tokens", 0) or 0
-            tokens["cache_read"] += getattr(usage, "cache_read_input_tokens", 0) or 0
-        return edited
+    def _make_edit_fn(mode, floor):
+        def _edit_fn(text, instructions):
+            edited, usage = _edit_one(client, model, text, instructions, lang, mode, floor)
+            with lock:  # count tokens for every call, including a corrective retry
+                tokens["input"] += getattr(usage, "input_tokens", 0) or 0
+                tokens["output"] += getattr(usage, "output_tokens", 0) or 0
+                tokens["cache_write"] += getattr(usage, "cache_creation_input_tokens", 0) or 0
+                tokens["cache_read"] += getattr(usage, "cache_read_input_tokens", 0) or 0
+            return edited
+        return _edit_fn
 
     def work(cand):
         # edit_with_retry calls the API, guards locally, and on a recoverable
-        # rejection re-prompts once with a softer/corrective instruction.
+        # rejection re-prompts once with a softer/corrective instruction. The
+        # paragraph's intensity (mode/floor/ceiling) comes from the candidate.
+        edit_fn = _make_edit_fn(cand.get("mode", "firm"), cand.get("floor"))
         try:
-            r = {"cand": cand, **edit_with_retry(_edit_fn, cand["text"], cand.get("instructions"))}
+            r = {"cand": cand, **edit_with_retry(
+                edit_fn, cand["text"], cand.get("instructions"),
+                cand.get("max_compression", _DEFAULT_MAX_COMPRESSION))}
         except Exception as e:
             r = {"cand": cand, "error": f"api error: {e}"}
         with lock:
@@ -163,12 +170,17 @@ def _edit_all(candidates: list) -> list:
     return results
 
 
-def tighten(state: dict) -> dict:
-    """Route the fattest paragraphs to the Anthropic API and apply the edits."""
+def tighten(state: dict, candidates: list | None = None) -> dict:
+    """Send paragraphs to the Anthropic API and apply the edits.
+
+    Pass explicit ``candidates`` for a targeted top-up pass; otherwise every
+    eligible paragraph is selected at the run's intensity.
+    """
     from kopi.step_concision import get_candidates, apply_results
     _require()
-    ui.info("selecting paragraphs to tighten...")
-    candidates = get_candidates(state)
+    if candidates is None:
+        ui.info("selecting paragraphs to tighten...")
+        candidates = get_candidates(state)
     if not candidates:
         ui.info("no paragraphs qualify for tightening")
         return state

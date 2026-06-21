@@ -33,11 +33,23 @@ def _refresh_final_check(state):
     state["final_text"] = unguard(state["text"], state["qmap"])
 
 
-def _local_tighten(state):
-    from kopi import step_concision
-    ui.info("running local Ollama editing...")
-    step_concision.run(state)
-    _refresh_final_check(state)
+def _tighten(llm, state, candidates=None):
+    """Run one editing pass on the configured backend.
+
+    ``candidates is None`` selects every eligible paragraph (pass 1); pass an
+    explicit list for a targeted top-up pass.
+    """
+    if llm == "cloud":
+        from cli import cloud
+        return cloud.tighten(state, candidates)
+    if llm == "api":
+        from cli import api
+        return api.tighten(state, candidates)
+    if llm == "local":
+        from kopi import step_concision
+        ui.info("running local Ollama editing...")
+        return step_concision.run(state, candidates)
+    return state
 
 
 def _require_model(llm):
@@ -58,7 +70,16 @@ def _summary(state, original):
           f"{original} -> {final_int} words ({delta:+d})")
 
 
+def _model_used(llm):
+    if llm == "api":
+        return config.anthropic_model()
+    if llm in ("cloud", "local"):
+        return config.model()
+    return None
+
+
 def run(file, reduction=None, lang=None, llm=None, verbose=False):
+    from datetime import datetime
     from kopi.pipeline import prepare
     from kopi.output import write_outputs
     from kopi.progress import StepSpinner
@@ -88,21 +109,28 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
     ui.info("  · 2/3  LLM plain-language edit")
     ui.info("  · 3/3  Write outputs")
 
-    state = prepare(text, target, lang)
+    state = prepare(text, target, lang, reduction=reduction or 0)
+    state["run_info"] = {"backend": llm, "model": _model_used(llm)}
 
-    if llm == "cloud":
-        from cli import cloud
-        state = cloud.tighten(state)
-        _refresh_final_check(state)
-    elif llm == "api":
-        from cli import api
-        state = api.tighten(state)
-        _refresh_final_check(state)
-    elif llm == "local":
-        _local_tighten(state)
-    else:
+    from kopi import intensity
+    plan = intensity.plan(reduction or 0, original)
+    ui.info(f"editing intensity: {intensity.describe(plan, reduction or 0)}")
+
+    if llm == "skip":
         ui.info("LLM editing skipped (llm=skip)")
-        _refresh_final_check(state)
+    else:
+        state = _tighten(llm, state)
+        # When a reduction was requested and pass 1 fell short of it, re-edit the
+        # wordiest remaining paragraphs once more to approach the target (the model
+        # cannot count, so we measure the realised cut and top up rather than trust
+        # a single pass). One extra pass only — bounded cost.
+        if reduction:
+            from kopi import step_concision
+            extra = step_concision.topup_candidates(state)
+            if extra:
+                ui.info(f"target shortfall after first pass — re-editing {len(extra)} paragraph(s) once more")
+                state = _tighten(llm, state, extra)
+    _refresh_final_check(state)
 
     # Deterministic British-spelling safety net over the model's output.
     if lang == "british" and llm != "skip":
@@ -110,17 +138,20 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
         _normalize_british(state)
         state["final_text"] = unguard(state["text"], state["qmap"])
 
-    edited, changelog, diff = write_outputs(state, path, config.OUTPUT_DIR)
+    # Each run's outputs go in their own output/<document> <timestamp>/ folder, so
+    # repeated runs (and multiple documents) never overwrite or interleave.
+    run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
 
-    # Before/after comparison: the same measures on each version + key-term survival.
+    # Before/after comparison (same measures on each version + key-term survival),
+    # merged into the single edit report rather than a separate file.
     from kopi import report
-    comparison = report.write_comparison(
-        state.get("original_text", text), state.get("final_text", text), path.name, config.OUTPUT_DIR,
+    comparison = report.comparison_lines(
+        state.get("original_text", text), state.get("final_text", text),
     )
+    edited, report_path, diff = write_outputs(state, path, run_dir, comparison=comparison)
 
     _summary(state, original)
     ui.ok(f"edited text: {edited}")
-    ui.ok(f"change log:  {changelog}")
+    ui.ok(f"report:      {report_path}")
     if diff:
         ui.ok(f"diff:        {diff}")
-    ui.ok(f"comparison:  {comparison}")

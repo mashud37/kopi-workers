@@ -105,7 +105,7 @@ def legacy_cloud_config():
 
 
 def newest_output():
-    files = sorted(OUTPUT_DIR.glob("*_edited.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    files = sorted(OUTPUT_DIR.rglob("*_edited.md"), key=lambda p: p.stat().st_mtime, reverse=True)
     return str(files[0]) if files else None
 
 

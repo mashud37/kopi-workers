@@ -22,6 +22,11 @@ env.yaml
 env.vllm.yaml
 env.ollama.yaml
 
+# Staged QLoRA adapter baked into the vLLM image at deploy time — keep the folder,
+# ignore the (large, generated) adapter files copied in from kopi-learner.
+adapter/*
+!adapter/.gitkeep
+
 # Editor / OS
 .env
 .DS_Store

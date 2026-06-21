@@ -40,8 +40,7 @@ _PASSIVE_RATIO = 0.30        # fraction of sentences with a passive construction
 # regardless of their impact on word count.
 _PLAIN_LANGUAGE = (
     "Plain language: replace long or Latinate words with short plain ones; "
-    "remove clichéd metaphors, similes, and idioms in favour of direct statement; "
-    "cut every word that can be cut without loss of meaning."
+    "remove clichéd metaphors, similes, and idioms in favour of direct statement."
 )
 _WORDINESS = (
     "Remove hedges, fillers, and padding phrases "

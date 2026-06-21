@@ -23,6 +23,22 @@ $SA      = "kopi-runner@$PROJECT.iam.gserviceaccount.com"
 $TOKEN = (python -c "import yaml,pathlib; p=pathlib.Path('env.vllm.yaml'); d=(yaml.safe_load(p.read_text()) if p.exists() else {}) or {}; print(d.get('JOB_TOKEN') or '')").Trim()
 if (-not $TOKEN) { $TOKEN = (python -c "import secrets; print(secrets.token_hex(24))").Trim() }
 
+# Stage the QLoRA adapter into the build context so Dockerfile.vllm bakes it and the
+# server exposes it as the `kopi` module. Source is kopi-learner's pulled adapter
+# (override with KOPI_ADAPTER_DIR). No adapter present -> base-only image, unchanged
+# behaviour. Always clear first so a stale adapter can't linger in the context.
+$AdapterSrc = if ($env:KOPI_ADAPTER_DIR) { $env:KOPI_ADAPTER_DIR } else { "..\kopi-learner\data\adapters\sft" }
+Get-ChildItem -Path "adapter" -Exclude ".gitkeep" -Force | Remove-Item -Recurse -Force
+if (Test-Path (Join-Path $AdapterSrc "adapter_config.json")) {
+  Get-ChildItem -Path $AdapterSrc -Exclude "checkpoint-*" | Copy-Item -Destination "adapter" -Recurse -Force
+  Write-Host "Staged adapter from $AdapterSrc -> .\adapter (served as 'kopi')"
+} else {
+  Write-Host "No adapter at $AdapterSrc — deploying base-only (no 'kopi' module)."
+}
+
+# Fail fast if the adapter is staged but an ignore file would strip it from the upload (the silent base-only trap). list-files-for-upload is what gcloud actually sends.
+if ((Test-Path "adapter\adapter_config.json") -and -not ((gcloud meta list-files-for-upload . 2>$null) -match 'adapter[\\/]adapter_config\.json')) { Write-Error "Adapter staged but excluded from the build upload (.gcloudignore/.gitignore) — would deploy base-only. Fix the ignore file before deploying."; exit 1 }
+
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com --project=$PROJECT
 gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION --project=$PROJECT
 gcloud iam service-accounts create "kopi-runner" --display-name="kopi-editor LLM service" --project=$PROJECT

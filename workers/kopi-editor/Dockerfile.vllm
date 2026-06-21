@@ -17,6 +17,12 @@ ENV KOPI_MODEL=${KOPI_MODEL}
 # `huggingface-cli` is deprecated in recent images; use the `hf` CLI.
 RUN hf download "${KOPI_MODEL}"
 
+# A QLoRA adapter staged into ./adapter (by deploy_vllm.ps1, from kopi-learner's
+# pulled adapter) is baked here so cold start doesn't depend on GCS. The dir is
+# always present (committed .gitkeep); entrypoint_vllm.sh enables LoRA only when it
+# actually holds an adapter_config.json, so an empty dir keeps the service base-only.
+COPY adapter /adapter
+
 WORKDIR /app
 COPY cloud/serve_vllm.py entrypoint_vllm.sh ./
 RUN chmod +x entrypoint_vllm.sh

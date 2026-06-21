@@ -30,6 +30,10 @@ _READY_WAIT = 280
 app = Flask(__name__)
 _TOKEN = os.environ.get("JOB_TOKEN", "")
 _MODEL = os.environ.get("KOPI_MODEL", "Qwen/Qwen3-14B-AWQ")
+# Served LoRA module names (set by entrypoint_vllm.sh when an adapter is baked).
+# A request may target one of these instead of the base; anything else is rejected
+# so /tighten can't be used to probe arbitrary model names.
+_LORA = {m for m in os.environ.get("KOPI_LORA", "").split(",") if m}
 _VLLM = "http://127.0.0.1:8001"
 
 
@@ -54,6 +58,11 @@ def tighten():
     messages = data.get("messages")
     if not messages:
         abort(400, "missing messages")
+    # Default to the base model; a caller may select a baked LoRA module (the tune)
+    # for A/B evaluation. Reject any other name rather than relay it to vLLM.
+    model = data.get("model") or _MODEL
+    if model != _MODEL and model not in _LORA:
+        abort(400, f"unknown model {model!r}")
     # Wait through a cold-start model load rather than 503-ing (scale-to-zero).
     deadline = time.time() + _READY_WAIT
     while not _vllm_ready():
@@ -62,7 +71,7 @@ def tighten():
         time.sleep(2)
 
     body = json.dumps({
-        "model": _MODEL,
+        "model": model,
         "messages": messages,
         "temperature": 0.1,
         "max_tokens": 1024,

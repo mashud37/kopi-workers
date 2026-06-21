@@ -45,13 +45,16 @@ def _word_dropper(paragraph, **kwargs) -> str:
     return " ".join(out)
 
 
-def _make_state(text: str) -> dict:
+def _make_state(text: str, reduction: int = 0) -> dict:
     guarded, qmap = guard(text)
+    words = word_count(guarded, qmap)
     return {
         "text": guarded,
         "qmap": qmap,
-        "target": word_count(guarded, qmap),  # soft guide only
-        "counts": {"step1": word_count(guarded, qmap)},
+        "target": words - reduction,
+        "reduction": reduction,          # drives the editing intensity (kopi.intensity)
+        "original_words": words,
+        "counts": {"step1": words},
         "log": [],
     }
 
@@ -68,7 +71,9 @@ def test_edits_every_paragraph_and_preserves_guards(monkeypatch):
     _stub_llm(monkeypatch, _word_dropper)
 
     text = _build_document()
-    state = _make_state(text)
+    # A large reduction request -> aggressive band, whose ceiling admits the
+    # ~28% cuts the stub makes; the guards (citation/numeric/expansion) still run.
+    state = _make_state(text, reduction=word_count(*guard(text)))
     original = state["counts"]["step1"]
 
     state = step_concision.run(state)
@@ -119,6 +124,20 @@ def test_over_compression_triggers_softer_retry(monkeypatch):
     state = step_concision.run(state)
     assert state["llm_stats"]["accepted"] == 20
     assert state["llm_stats"]["rejected"] == 0
+
+
+def test_no_reduction_is_clarity_and_rejects_deep_cuts(monkeypatch):
+    # The safeguard for editing WITHOUT a reduction target: a model that cuts a big
+    # share of every paragraph is rejected (original kept), so a manuscript nobody
+    # asked to shorten is not quietly gutted. The retry can't rescue a deterministic
+    # over-cutter, so every paragraph falls back to its original.
+    _stub_llm(monkeypatch, _word_dropper)
+    state = _make_state(_build_document())  # reduction defaults to 0 -> clarity
+    original = state["counts"]["step1"]
+    state = step_concision.run(state)
+    assert state["llm_stats"]["accepted"] == 0
+    assert state["llm_stats"]["rejected"] == 20
+    assert state["counts"]["step10"] == original  # document unchanged
 
 
 def test_corrective_instruction_maps_reasons():

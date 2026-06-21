@@ -53,7 +53,7 @@ def _require():
         raise SystemExit("no JOB_TOKEN in env.yaml — re-run `python manage.py deploy`.")
 
 
-def _post_one(text: str, instructions) -> str:
+def _post_one(text: str, instructions, mode: str = "firm", floor: int | None = None) -> str:
     # Send BOTH shapes so the client works against either service version:
     #  - `messages`: the new relay service uses the client-built prompt (no
     #    redeploy needed for future prompt changes);
@@ -62,7 +62,7 @@ def _post_one(text: str, instructions) -> str:
     from kopi.llm import build_messages
     url = f"{config.base_url().rstrip('/')}/tighten?token={config.job_token()}"
     body = json.dumps({
-        "messages": build_messages(text, instructions, config.lang()),
+        "messages": build_messages(text, instructions, config.lang(), mode, floor),
         "paragraph": text,
         "instructions": instructions,
     }).encode("utf-8")
@@ -81,7 +81,7 @@ def _edit_all(candidates: list) -> list:
     """
     import threading
     import time
-    from kopi.step_concision import edit_with_retry, _get_model
+    from kopi.step_concision import edit_with_retry, _get_model, _MAX_COMPRESSION as _DEFAULT_MAX_COMPRESSION
 
     # Pre-load the embedding model ONCE before the workers start. The guard's
     # cosine check loads sentence-transformers lazily; letting 4 threads race to
@@ -116,9 +116,14 @@ def _edit_all(candidates: list) -> list:
 
     def work(cand):
         # edit_with_retry POSTs the paragraph, guards it, and on a recoverable
-        # rejection re-POSTs once with a softer/corrective instruction.
+        # rejection re-POSTs once with a softer/corrective instruction. The
+        # paragraph's intensity (mode/floor/ceiling) comes from the candidate.
+        mode, floor = cand.get("mode", "firm"), cand.get("floor")
         try:
-            r = {"cand": cand, **edit_with_retry(_post_one, cand["text"], cand.get("instructions"))}
+            r = {"cand": cand, **edit_with_retry(
+                lambda t, instr: _post_one(t, instr, mode, floor),
+                cand["text"], cand.get("instructions"),
+                cand.get("max_compression", _DEFAULT_MAX_COMPRESSION))}
         except Exception as e:
             r = {"cand": cand, "error": f"service error: {e}"}
         with lock:
@@ -155,12 +160,17 @@ def _edit_all(candidates: list) -> list:
     return results
 
 
-def tighten(state: dict) -> dict:
-    """Route the fattest paragraphs to the service and apply the edits."""
+def tighten(state: dict, candidates: list | None = None) -> dict:
+    """Send paragraphs to the service and apply the edits.
+
+    Pass explicit ``candidates`` for a targeted top-up pass; otherwise every
+    eligible paragraph is selected at the run's intensity.
+    """
     from kopi.step_concision import get_candidates, apply_results
     _require()
-    ui.info("selecting paragraphs to tighten...")
-    candidates = get_candidates(state)
+    if candidates is None:
+        ui.info("selecting paragraphs to tighten...")
+        candidates = get_candidates(state)
     if not candidates:
         ui.info("no paragraphs qualify for tightening")
         return state

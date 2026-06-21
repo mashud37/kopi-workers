@@ -31,10 +31,13 @@ def run(file, lang=None):
     # No word target for proofing — pass the current length so the final check
     # reports "at target" rather than a spurious shortfall.
     state = prepare(text, words, lang)
+    state["run_info"] = {"backend": "skip", "model": None}
     proof(state)
     finalize(state)
 
-    edited, changelog, diff = write_outputs(state, path, config.OUTPUT_DIR)
+    from datetime import datetime
+    run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
+    edited, changelog, diff = write_outputs(state, path, run_dir)
     final = state["counts"].get("final", words)
     ui.ok(f"removed {words - final} words; final {final}")
     ui.ok(f"edited text: {edited}")

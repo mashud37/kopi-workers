@@ -303,22 +303,17 @@ def _compare_gauge(label, vb, va, lo, hi, target, better, nd, suffix="") -> list
     ]
 
 
-def write_comparison(original: str, final: str, source_name: str, out_dir: Path) -> Path:
-    """After a full edit, write a before/after report in the SAME visual language as
-    the analysis report — slider gauges per measure (showing the value move) and the
-    key-terms bar plot — so the impact reads at a glance. Returns the path."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"{Path(source_name).stem}_comparison.md"
+def comparison_lines(original: str, final: str) -> list[str]:
+    """The before/after comparison as markdown lines (no title/date header), so it
+    can stand alone or be embedded in the merged edit report.
 
+    Same visual language as the analysis report — slider gauges per measure (showing
+    the value move) and the key-terms bar plot — so the impact reads at a glance.
+    """
     mb, ma = _metrics(original), _metrics(final)
     wb, wa = len(original.split()), len(final.split())
 
     L = [
-        f"# kopi-editor — Before / After: {source_name}",
-        "",
-        f"**Date:** {date.today().isoformat()}  ",
-        "",
         f"{wb} → {wa} words ({_delta_mark(wb, wa, 'down', 0)})",
         "",
         "## Readability & length",
@@ -366,6 +361,21 @@ def write_comparison(original: str, final: str, source_name: str, out_dir: Path)
             ]
         L.append("")
 
+    return L
+
+
+def write_comparison(original: str, final: str, source_name: str, out_dir: Path) -> Path:
+    """Standalone before/after report (title + date header + the comparison body)."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"{Path(source_name).stem}_comparison.md"
+    L = [
+        f"# kopi-editor — Before / After: {source_name}",
+        "",
+        f"**Date:** {date.today().isoformat()}  ",
+        "",
+        *comparison_lines(original, final),
+    ]
     path.write_text("\n".join(L), encoding="utf-8-sig")
     return path
 

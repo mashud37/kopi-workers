@@ -5,7 +5,7 @@ need neither spaCy nor a model. The full `diagnose()` entry point is covered by
 the route smoke tests that run with spaCy available.
 """
 from kopi import diagnose
-from kopi.llm import _build_user_message, _PARA_SYSTEM
+from kopi.llm import _build_user_message, _system_for
 
 
 def test_unnecessary_words_detects_fillers_and_padding():
@@ -49,4 +49,4 @@ def test_build_user_message_with_notes_fences_instructions():
     assert "Remove hedges and padding." in msg
     assert "do not repeat" in msg.lower()
     # The system prompt forbids echoing the notes (leak guard).
-    assert "never repeat" in _PARA_SYSTEM.lower()
+    assert "never repeat" in _system_for().lower()

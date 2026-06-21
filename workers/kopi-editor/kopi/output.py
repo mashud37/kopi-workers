@@ -44,14 +44,32 @@ _SECTION_KEYS = [
 ]
 
 
-def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple[Path, Path]:
+def _run_info_line(state: dict) -> str | None:
+    """One '**Models:** ...' header line describing what actually ran, or None."""
+    info = state.get("run_info") or {}
+    backend = info.get("backend")
+    model = info.get("model")
+    if not backend:
+        return None
+    if backend == "skip" or not model:
+        return "**Models:** deterministic only (no LLM)  "
+    label = {"api": "Anthropic API", "cloud": "self-hosted (Cloud Run)", "local": "local Ollama"}
+    return f"**Models:** {model} via {label.get(backend, backend)}  "
+
+
+def write_outputs(
+    state: dict, source_path: Path, out_dir: Path = None, comparison: list[str] | None = None
+) -> tuple[Path, Path]:
     stem = source_path.stem
     out_dir = Path(out_dir) if out_dir is not None else source_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
     original_path = out_dir / f"{stem}_original.md"
     edited_path = out_dir / f"{stem}_edited.md"
-    changelog_path = out_dir / f"{stem}_changelog.md"
+    # When a before/after comparison is supplied (the edit route), the change log
+    # and the comparison are merged into one '_report.md'; otherwise (proof) the
+    # plain '_changelog.md' is written.
+    log_path = out_dir / (f"{stem}_report.md" if comparison else f"{stem}_changelog.md")
     diff_path = out_dir / f"{stem}.diff"
     review_path = out_dir / f"{stem}_review.md"
 
@@ -78,13 +96,23 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
                     sections[key].append(entry)
                     break
 
+    title = "# kopi-editor — Edit Report" if comparison else "# kopi-editor — Change Log"
     lines = [
-        "# kopi-editor — Change Log",
+        title,
         "",
         f"**Source:** {source_path.name}  ",
         f"**Target:** {state['target']} words  ",
+    ]
+    run_info = _run_info_line(state)
+    if run_info:
+        lines.append(run_info)
+    lines += [
         f"**Date:** {date.today().isoformat()}  ",
         "",
+    ]
+    if comparison:
+        lines += ["## Before / After", "", *comparison, "---", ""]
+    lines += [
         "## Word Count",
         "",
         _count_table(state["counts"]),
@@ -127,7 +155,7 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
             lines.append(f"- Mean cosine similarity to reference: {m['mean_cosine_sim']:.3f}")
         lines.append("")
 
-    changelog_path.write_text("\n".join(lines), encoding="utf-8-sig")
+    log_path.write_text("\n".join(lines), encoding="utf-8-sig")
 
     review_items = state.get("review_items", [])
     if review_items:
@@ -168,7 +196,7 @@ def write_outputs(state: dict, source_path: Path, out_dir: Path = None) -> tuple
             diff_path.write_text(diff_text, encoding="utf-8")
             written_diff = diff_path
 
-    return edited_path, changelog_path, written_diff
+    return edited_path, log_path, written_diff
 
 
 def _diff_lines(text: str) -> list[str]:

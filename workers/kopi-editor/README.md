@@ -1,9 +1,10 @@
 # kopi-editor
 
 Plain-language copy editor for academic prose in the humanities and social sciences. Following
-plain-language editing principles — prefer short words to long, cut every word that can be cut,
-replace clichés with direct statement — it makes scholarly writing more accessible while preserving
-the author's argument, voice, citations, and quotations.
+plain-language editing principles — prefer short words to long, cut wordiness, replace clichés with
+direct statement — it makes scholarly writing more accessible while preserving the author's argument,
+voice, citations, and quotations. How hard it cuts scales with the reduction you ask for: ask for
+nothing and it edits only for clarity; ask for a major cut and it concedes whole redundant sentences.
 
 It takes a `.docx` and offers three routes:
 
@@ -83,15 +84,27 @@ python manage.py settings | config | deploy | install | update
 python manage.py cloud-test [<n>] [--source <file>]   # dev smoke for the GPU service
 ```
 
-`<file.docx>` — a bare name resolves against `input/`. For `edit`, `words_to_remove` is an **optional
-soft guide**: omit it for a pure plain-language pass; give it and the model aims for that reduction
-while still editing every paragraph evenly.
+`<file.docx>` — a bare name resolves against `input/`. For `edit`, `words_to_remove` **sets the
+editing intensity**, not just a figure in the report. The ratio of words asked to document length
+picks a band:
+
+| `words_to_remove` | band | what the editor does | max cut / paragraph |
+|---|---|---|---|
+| omitted / `0` | **clarity** | plain words, active voice; keeps every sentence; length barely moves | ~6% |
+| small (≲ 5% of the text) | **light** | cuts fillers, tightens wording; keeps every sentence | ~18% |
+| moderate (≈ 5–12%) | **firm** | tightens wordy passages markedly (15–30%); may merge a weak follow-on | ~35% |
+| large (≳ 12%) | **aggressive** | compresses hard and **may drop redundant or marginal sentences** | ~55% |
+
+Because it is a ratio, the same number means more on a short paper than a long thesis. If one pass
+falls short of the request, the wordiest remaining paragraphs are re-edited **once more** to approach
+the target. The guard never lets a paragraph cut past its band's ceiling, so a clarity pass can't
+quietly gut a manuscript, and claims, citations, and numbers are always preserved.
 
 ```
 python manage.py analyze "chapter 1.docx"          # report only
 python manage.py proof   "chapter 1.docx"          # deterministic edit, no LLM
 python manage.py edit    "chapter 1.docx"          # full plain-language edit (backend from settings)
-python manage.py edit    "chapter 1.docx" 1000     # ... aiming to shed ~1000 words
+python manage.py edit    "chapter 1.docx" 1000     # ... aggressively, aiming to shed ~1000 words
 ```
 
 ## How it works
@@ -109,15 +122,22 @@ detected).
   word substitution, and LanguageTool grammar — and writes the edited text. It never removes
   sentences or restructures syntax.
 - **edit** sends every eligible paragraph to the LLM backend with its instructions as *editor's
-  notes*. A meaning guard runs on the client: a cosine-similarity check (≥ 0.85) rejects any edit
-  that drifts, and every citation `(Author, Year)` and number is verified preserved. On a recoverable
-  rejection (over-compression, a changed citation, …) the paragraph is re-prompted **once** with a
-  softer/corrective note rather than silently kept.
+  notes*, at the **intensity set by the reduction request** ([kopi/intensity.py](kopi/intensity.py)):
+  the requested band picks the prompt stance (how hard to cut, whether sentences may go) and a
+  per-paragraph length target, and a meaning guard runs on the client — a cosine-similarity check
+  (≥ 0.85) rejects drift, the band's **compression ceiling** rejects an over-deep cut, and every
+  citation `(Author, Year)` and number is verified preserved. On a recoverable rejection
+  (over-compression, a changed citation, …) the paragraph is re-prompted **once** with a
+  softer/corrective note rather than silently kept; if the whole document still falls short of the
+  requested reduction, one **top-up pass** re-edits the wordiest remaining paragraphs.
 
-Outputs in `output/`: `<name>_edited.md` (clean text), `<name>_changelog.md` (paragraph-referenced
-changes), `<name>.diff` (standard **unified diff** for any diff viewer), `<name>_review.md` (repeated
-proofing suggestions), and — after `edit` — `<name>_comparison.md` (before/after across the same
-measures, plus whether the original's key terms still surface).
+Each `edit`/`proof` run writes its bundle into its own `output/<name> <YYYY-MM-DD HHMMSS>/` folder,
+so repeated runs and multiple documents never overwrite or interleave. The bundle: `<name>_edited.md`
+(clean text), `<name>.diff` (standard **unified diff** for any diff viewer), `<name>_review.md`
+(repeated proofing suggestions), and a single report — `<name>_report.md` after `edit` (before/after
+gauges across the same measures, whether the original's key terms still surface, the models used, and
+the paragraph-referenced change log all in one file) or `<name>_changelog.md` after `proof` (the
+change log alone).
 
 > Quoted text (`"…"`, `'…'`, and indented block quotations) is **never** edited by any route.
 
