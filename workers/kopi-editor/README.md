@@ -36,11 +36,11 @@ default model** — you choose one in `settings`, so the cost is always delibera
 ```
 manage.py             entrypoint — no args = menu; subcommands also available
 env.yaml.example      config template; copy to env.yaml (gitignored)
-deploy.ps1 / deploy.sh  build + deploy the GPU service (.ps1 is the Windows default)
+deploy.ps1 / deploy.sh  legacy L4/Ollama service (synchronous; `deploy --ollama`)
 requirements.txt
 cli/                  command modules (analyze, proof, edit, cloud, api, deploy, settings, …)
 kopi/                 diagnose (shared core), proof, llm, step_* helpers, signals, output
-cloud/                serve.py — the GPU service
+cloud/                serve_vllm.py — the vLLM/Qwen3 GPU service (serve.py — legacy Ollama)
 input/                source .docx files (gitignored, kept with .gitkeep)
 output/               generated .md files (gitignored)
 docs/  data/  tests/  reference docs, bundled datasets, pytest suite
@@ -58,9 +58,10 @@ python manage.py settings     # choose LLM backend + model (+ language)
 python manage.py              # launch the interactive menu
 ```
 
-`install` is idempotent. For the `cloud` backend, `python manage.py deploy` builds the model into a
-container image, deploys a warm L4-GPU Cloud Run service, and writes `BASE_URL` + `JOB_TOKEN` into
-`env.yaml`. For the `api` backend, paste your Anthropic key in `settings`.
+`install` is idempotent. For the `cloud` backend, `python manage.py deploy` stages the adapter and
+fires the image build **asynchronously** (the terminal frees once the upload finishes); run
+`python manage.py deploy-status --wait` to finish — it deploys the Cloud Run service and writes
+`BASE_URL` + `JOB_TOKEN` into `env.yaml`. For the `api` backend, paste your Anthropic key in `settings`.
 
 First-run downloads: **sentence-transformers** (`all-MiniLM-L6-v2`, ~40 MB, for the meaning guard)
 and, for `proof`, **LanguageTool** (~200 MB Java engine, then offline).
@@ -68,8 +69,8 @@ and, for `proof`, **LanguageTool** (~200 MB Java engine, then offline).
 ## Menu
 
 ```
-1) Analyze     2) Proof          3) Full edit     4) Settings    5) Show config
-6) Deploy      7) Cloud smoke    8) Update        9) Install
+1) Analyze     2) Proof          3) Full edit       4) Settings    5) Show config
+6) Deploy      7) Deploy status  8) Cloud smoke     9) Update      10) Install
 ```
 
 Each of Analyze / Proof / Full edit lists the `.docx` files in `input/` to pick from.
@@ -80,7 +81,9 @@ Each of Analyze / Proof / Full edit lists the `.docx` files in `input/` to pick 
 python manage.py analyze <file.docx>
 python manage.py proof   <file.docx> [--lang {british|american}]
 python manage.py edit    <file.docx> [words_to_remove] [--llm {cloud|api|local|skip}] [--lang …]
-python manage.py settings | config | deploy | install | update
+python manage.py deploy [--ollama]                    # fire the image build async (--ollama = legacy L4)
+python manage.py deploy-status [--wait]               # finish + deploy the pending build
+python manage.py settings | config | install | update
 python manage.py cloud-test [<n>] [--source <file>]   # dev smoke for the GPU service
 ```
 
@@ -143,17 +146,24 @@ change log alone).
 
 ## The GPU service (`cloud` backend)
 
-`manage.py deploy` builds a container with the model baked in (`ollama serve` + a small Flask
-wrapper, [cloud/serve.py](cloud/serve.py)) and deploys it as a Cloud Run service:
+`manage.py deploy` builds a container serving **Qwen3-32B-FP8 + the `kopi` LoRA adapter** under vLLM
+behind a small Flask proxy ([cloud/serve_vllm.py](cloud/serve_vllm.py)) and deploys it as a Cloud Run
+service that writes its `BASE_URL` + `JOB_TOKEN` into `env.yaml`. The build is **fire-and-retire**:
+`deploy` submits the long image build to Cloud Build asynchronously and returns; `deploy-status --wait`
+polls it and runs the short service deploy once the image is ready (the `JOB_TOKEN` never leaves your
+machine — it is set at deploy time, not baked into the build). Pending-build state lives in `.kopi/`.
 
-- **GPU + warm model** → a few seconds per paragraph once the instance is up (qwen2.5:7b on an L4).
+- **GPU + warm model** → a few seconds per paragraph once the instance is up (Qwen3-32B on a Blackwell
+  RTX PRO 6000).
 - **Scale-to-zero** (`--min-instances 0`) → no cost when idle; the first request of a session loads
-  the model (~30–90s cold), then every paragraph is fast.
+  the model (cold start), then every paragraph is fast.
 - The client sends paragraphs **in parallel** (4 at a time) over HTTPS, guarded by the `JOB_TOKEN`;
   the meaning guard runs locally. Only paragraphs sent for editing ever leave the machine.
 
-> **GPU required:** the service uses an NVIDIA **L4**. Ensure your region (default `europe-west1`)
-> has L4 availability and `nvidia_l4` quota. Switch models with `MODEL` in `settings` + re-`deploy`.
+> **GPU required:** the service uses an NVIDIA **RTX PRO 6000 (Blackwell)**. Ensure your region
+> (default `europe-west4`) has availability and quota.
+>
+> A legacy **L4 / Ollama** service (`qwen2.5:7b`) is still available via `manage.py deploy --ollama`.
 
 ## Cost reporting
 
@@ -161,7 +171,8 @@ Both LLM backends report the cost of a run:
 
 - **api** — actual token usage priced by model (Haiku $1/$5, Sonnet $3/$15, Opus $5/$25 per 1M
   in/out); the shared system prompt is cached, cutting input cost on multi-paragraph runs.
-- **cloud** — an estimate from active L4 service time (GPU + 4 vCPU + 16 GiB, per-second list price).
+- **cloud** — an estimate from active GPU service time (GPU + vCPU + memory, per-second list price);
+  the deployed instance shape is read from `env.yaml` (default Blackwell RTX PRO 6000 / 20 vCPU / 80 GiB).
 
 > Estimates only; verify current Anthropic and Cloud Run GPU pricing.
 

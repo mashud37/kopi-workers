@@ -1,7 +1,7 @@
-# Parallel vLLM image for the qwen3:14b A/B — separate from the Ollama Dockerfile.
-# vLLM ships correct CUDA kernels for the L4 (sm_89), avoiding Ollama's kernel
-# fragility. Pin a specific tag before promoting to production (`:latest` is fine
-# for a throwaway A/B test — models.md §6).
+# vLLM image for the production Qwen3-32B editor + `kopi` LoRA on a Blackwell GPU —
+# separate from the legacy Ollama Dockerfile. vLLM ships correct CUDA kernels and is
+# the supported LoRA-over-FP8 path. Consider pinning a specific `vllm/vllm-openai` tag
+# now that this is the production service (`:latest` can shift CUDA/python — models.md §6).
 FROM vllm/vllm-openai:latest
 
 # Proxy deps (the base image already has vllm + huggingface_hub). --ignore-installed
@@ -11,13 +11,15 @@ RUN pip install --no-cache-dir --ignore-installed blinker flask gunicorn
 
 # Bake the model so cold start doesn't depend on Hugging Face at runtime. Qwen3 is
 # open-weight (no gating), so no HF token is needed. Override at build time:
-#   --build-arg KOPI_MODEL=Qwen/Qwen3-14B-FP8
-ARG KOPI_MODEL=Qwen/Qwen3-14B-AWQ
+#   --build-arg KOPI_MODEL=Qwen/Qwen3-32B-AWQ
+# FP8 (not AWQ) is the default: the `kopi` LoRA was trained on bf16 Qwen3-32B, and a
+# bf16-trained adapter over an AWQ base corrupts token boundaries — FP8 stays bf16-close.
+ARG KOPI_MODEL=Qwen/Qwen3-32B-FP8
 ENV KOPI_MODEL=${KOPI_MODEL}
 # `huggingface-cli` is deprecated in recent images; use the `hf` CLI.
 RUN hf download "${KOPI_MODEL}"
 
-# A QLoRA adapter staged into ./adapter (by deploy_vllm.ps1, from kopi-learner's
+# A QLoRA adapter staged into ./adapter (by `manage.py deploy`, from kopi-learner's
 # pulled adapter) is baked here so cold start doesn't depend on GCS. The dir is
 # always present (committed .gitkeep); entrypoint_vllm.sh enables LoRA only when it
 # actually holds an adapter_config.json, so an empty dir keeps the service base-only.
@@ -25,6 +27,13 @@ COPY adapter /adapter
 
 WORKDIR /app
 COPY cloud/serve_vllm.py entrypoint_vllm.sh ./
+# serve_vllm.py imports kopi.citations.restore_casing to repair lowercased author
+# names in citations. Ship just that module (pure stdlib) as a minimal kopi package
+# — NOT the whole package, which pulls spaCy/torch the proxy image doesn't have.
+COPY kopi/__init__.py kopi/citations.py kopi/
 RUN chmod +x entrypoint_vllm.sh
+# Fail the BUILD if the proxy can't import (e.g. a needed module didn't get COPYed),
+# rather than discovering it as a runtime 500 after a billed deploy + generation.
+RUN python3 -c "import serve_vllm"
 
 ENTRYPOINT ["./entrypoint_vllm.sh"]

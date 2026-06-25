@@ -38,7 +38,11 @@ def main():
     ct.add_argument("n", nargs="?", default="3", help="Paragraphs to send (integer or 'all')")
     ct.add_argument("--source", default=None, help="Text file (default: newest output/*_edited.md)")
 
-    sub.add_parser("deploy", help="Build + deploy the GPU LLM service to Cloud Run")
+    d = sub.add_parser("deploy", help="Fire the vLLM/Qwen3 image build async (frees the terminal)")
+    d.add_argument("--ollama", action="store_true", help="Deploy the legacy L4 Ollama service (synchronous)")
+
+    ds = sub.add_parser("deploy-status", help="Check the pending build; finish + deploy when it's ready")
+    ds.add_argument("--wait", action="store_true", help="Block until the build finishes, then deploy")
     sub.add_parser("settings", help="Edit LLM backend / model / language in env.yaml")
     sub.add_parser("config", help="Print the effective configuration")
     sub.add_parser("install", help="Create env.yaml + folders and check dependencies (idempotent)")
@@ -59,7 +63,9 @@ def main():
             raise SystemExit("no source file; pass --source or run `edit` first.")
         return cloud.smoke(source, args.n)
     if args.command == "deploy":
-        return deploy.run()
+        return deploy.run(args.ollama)
+    if args.command == "deploy-status":
+        return deploy.status(args.wait)
     if args.command == "settings":
         return settings.run()
     if args.command == "config":

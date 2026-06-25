@@ -46,6 +46,14 @@ def _edit_flow():
         ui.warn(str(e))
 
 
+def _deploy_status_flow():
+    wait = ui.confirm("Wait for the build to finish, then deploy?", default_yes=True)
+    try:
+        deploy.status(wait)
+    except SystemExit as e:
+        ui.warn(str(e))
+
+
 def _cloud_test_flow():
     src = ui.ask("Source text", config.newest_output())
     if not src:
@@ -69,7 +77,8 @@ def main():
                 ("Full edit", "plain-language edit via the LLM backend -> output/"),
                 ("Settings", "LLM backend / model / language"),
                 ("Show config", "the effective configuration"),
-                ("Deploy service", "build + deploy the GPU LLM service to Cloud Run"),
+                ("Deploy service", "fire the vLLM/Qwen3 image build async (frees the terminal)"),
+                ("Deploy status", "check the pending build; finish + deploy when it's ready"),
                 ("Cloud smoke test", "send paragraphs straight to the GPU service"),
                 ("Update", "upgrade dependencies + spaCy model"),
                 ("Install / setup", "env.yaml, folders, dependency check"),
@@ -90,8 +99,10 @@ def main():
         elif choice == 5:
             deploy.run()
         elif choice == 6:
-            _cloud_test_flow()
+            _deploy_status_flow()
         elif choice == 7:
-            update.run()
+            _cloud_test_flow()
         elif choice == 8:
+            update.run()
+        elif choice == 9:
             install.run()

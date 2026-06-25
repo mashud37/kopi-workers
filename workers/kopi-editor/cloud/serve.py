@@ -37,7 +37,12 @@ def tighten():
             model=_MODEL, messages=messages,
             options={"temperature": 0.1}, keep_alive="10m",
         )
-        return jsonify({"edited": resp["message"]["content"].strip()})
+        edited = resp["message"]["content"].strip()
+        paragraph = (data.get("paragraph") or "").strip()
+        if paragraph:
+            from kopi.citations import restore_casing
+            edited = restore_casing(paragraph, edited)
+        return jsonify({"edited": edited})
 
     # Back-compat: build the prompt server-side from a paragraph + instructions.
     paragraph = (data.get("paragraph") or "").strip()

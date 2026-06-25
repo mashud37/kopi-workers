@@ -4,6 +4,8 @@
 # Usage: PROJECT=my-project bash deploy.sh   (or run `python manage.py deploy`)
 set -e
 
+# Default to env.yaml's PROJECT (the source of truth), not gcloud's active config.
+PROJECT="${PROJECT:-$(python -c "import yaml,pathlib; p=pathlib.Path('env.yaml'); d=(yaml.safe_load(p.read_text()) if p.exists() else {}) or {}; print(d.get('PROJECT') or '')" 2>/dev/null || true)}"
 PROJECT="${PROJECT:-$(gcloud config get-value project 2>/dev/null)}"
 if [ -z "$PROJECT" ]; then echo "No GCP project set (export PROJECT=...)."; exit 1; fi
 if [ ! -f env.yaml ]; then echo "env.yaml missing - run: python manage.py install"; exit 1; fi

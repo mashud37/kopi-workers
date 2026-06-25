@@ -2,17 +2,10 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
+from kopi.citations import CITATION_RE as _CITATION_RE, restore_casing
 from kopi.quote_guard import guard, unguard, word_count
 from kopi.progress import LLMProgress
 
-_CITATION_RE = re.compile(
-    r"\("
-    r"(?:[A-Z][\w-]+(?:\s+(?:and|&|et\s+al\.?))?\s*[A-Z]?[\w-]*,?\s*)?"
-    r"(?:\d{4}[a-z]?|199X|202X|REF)"
-    r"(?:,\s*pp?\.?\s*\d+(?:[-–]\d+)?)?"
-    r"\)",
-    re.IGNORECASE,
-)
 _MIN_PARA_WORDS = 40
 # Max fraction a paragraph may shrink before we reject the edit as too aggressive.
 # qwen2.5:7b tends to cut ~50%, so a 0.40 cap rejected everything; the cosine
@@ -186,13 +179,13 @@ def edit_with_retry(edit_fn, text: str, instructions, max_compression: float = _
     reduction). Returns a guard_result dict; if the retry also fails, the original
     is kept and the reason records both attempts.
     """
-    res = guard_result(text, _clean_edit(edit_fn(text, instructions)), max_compression)
+    res = guard_result(text, restore_casing(text, _clean_edit(edit_fn(text, instructions))), max_compression)
     if res["accepted"]:
         return res
     note = _corrective_instruction(res["reason"], text, max_compression)
     if not note:
         return res
-    retry = guard_result(text, _clean_edit(edit_fn(text, [note] + list(instructions or []))), max_compression)
+    retry = guard_result(text, restore_casing(text, _clean_edit(edit_fn(text, [note] + list(instructions or [])))), max_compression)
     if retry["accepted"]:
         retry["reason"] = "ok (softer retry)"
         return retry

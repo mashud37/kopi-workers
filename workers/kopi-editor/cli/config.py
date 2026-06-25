@@ -41,14 +41,15 @@ _ENV_OVERRIDE = {
 # This keeps the choice (and its cost) deliberate rather than silently defaulting
 # to an expensive model.
 _DEFAULTS = {
-    "REGION": "europe-west1",
-    "SERVICE": "kopi-editor",
+    # Defaults track the primary vLLM/Qwen3 service on Blackwell; a deploy overwrites
+    # them with the real values. The legacy L4 Ollama deploy sets its own (europe-west1).
+    "REGION": "europe-west4",
+    "SERVICE": "kopi-editor-vllm",
     "LANG": "british",
     "LLM": "cloud",
-    # The original L4 service shape; the deploy scripts overwrite these per service.
-    "GPU_TYPE": "nvidia-l4",
-    "CPU": 4,
-    "MEMORY": 16,
+    "GPU_TYPE": "nvidia-rtx-pro-6000",
+    "CPU": 20,
+    "MEMORY": 80,
 }
 
 LANGS = ("british", "american")

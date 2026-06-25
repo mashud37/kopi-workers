@@ -9,7 +9,9 @@ $ErrorActionPreference = "Continue"
 
 $PROJECT = $env:PROJECT
 if (-not $PROJECT) {
-  $current = (gcloud config get-value project 2>$null)
+  # Default to env.yaml's PROJECT (the source of truth), not gcloud's active config.
+  $current = (python -c "import yaml,pathlib; p=pathlib.Path('env.yaml'); d=(yaml.safe_load(p.read_text()) if p.exists() else {}) or {}; print(d.get('PROJECT') or '')").Trim()
+  if (-not $current) { $current = (gcloud config get-value project 2>$null) }
   $PROJECT = Read-Host "GCP project to deploy to [$current]"
   if (-not $PROJECT) { $PROJECT = $current }
 }
