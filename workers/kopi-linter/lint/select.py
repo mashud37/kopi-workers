@@ -15,6 +15,13 @@ and optimal, not greedy.
 A word budget makes it a knapsack instead, which has no exact polynomial
 solution. The budget is therefore applied as a second pass over the optimal
 unconstrained set, dropping the weakest edits until the floor is respected.
+
+That second pass used to be a safety valve that rarely fired. For ranked
+families it is now the mechanism: they enter selection without a confidence
+threshold and the budget decides how many survive, best-first
+(``docs/constraints.md`` C9). Because a ranked family's confidence is bounded
+below the confidence a licensed rule asserts, the budget gives up a ranked guess
+before it gives up a licensed edit, which is the intended ordering.
 """
 from bisect import bisect_right
 

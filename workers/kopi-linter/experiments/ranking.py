@@ -34,18 +34,14 @@ lift it has not earned.
 import random as _random
 from collections import Counter
 from dataclasses import dataclass, field
-from functools import lru_cache
 
-from evidence.adjuncts import keys_for, phrases
+from evidence.adjuncts import phrases
 from evidence.align import align
+from rules.rule_adjunct import commonness as _commonness
+from rules.rule_adjunct import droppability as _droppability
+from rules.rule_adjunct import rate as _rate
 
 _CONTENT = frozenset(["NOUN", "PROPN", "ADJ", "VERB", "NUM", "ADV"])
-
-
-@lru_cache(maxsize=1)
-def _zipf():
-    from wordfreq import zipf_frequency
-    return zipf_frequency
 
 
 @dataclass
@@ -53,25 +49,6 @@ class Candidate:
     """One prepositional phrase, its features, and what the gold editor did."""
     dropped: bool
     features: dict = field(default_factory=dict)
-
-
-def _rate(prep, governor) -> float:
-    from evidence.adjuncts import LEVELS
-    from rules.rule_adjunct import _table
-
-    keys = keys_for(prep, governor)
-    for level in LEVELS:
-        entry = _table(level).get(keys[level])
-        if entry and entry[1] >= 5:
-            return entry[0]
-    return 0.0
-
-
-def _commonness(content: set) -> float:
-    """Mean Zipf frequency of the phrase's content words, high meaning ordinary."""
-    zipf = _zipf()
-    scores = [zipf(lemma, "en") for lemma in sorted(content)]
-    return sum(scores) / len(scores) if scores else 0.0
 
 
 def _features(prep, governor, content, elsewhere: Counter, noise) -> dict:
@@ -87,6 +64,9 @@ def _features(prep, governor, content, elsewhere: Counter, noise) -> dict:
         # Not a throwaway: reading order turned out to carry signal on its own.
         "earliness": -float(prep.idx),
         "noise": noise.random(),
+        # The exact function the engine uses, imported rather than reimplemented,
+        # so this comparison cannot drift away from what actually ships.
+        "shipped": _droppability(prep, governor, content),
     }
 
 
@@ -132,11 +112,8 @@ SCORERS = {
     "depdist": lambda f: f["depdist"],
     "words": lambda f: f["words"],
     "earliness": lambda f: f["earliness"],
-    # Zipf runs 0 to about 7, the other two are 0 to 1, so commonness is scaled
-    # before being added. A fitted weighting is the obvious next step if the
-    # blend ever beats its own components, which so far it does not.
-    "rate+common": lambda f: f["rate"] + f["commonness"] / 7.0,
     "rate+early": lambda f: f["rate"] + f["earliness"] / 10000.0,
+    "shipped": lambda f: f["shipped"],
     "random": lambda f: f["noise"],
 }
 

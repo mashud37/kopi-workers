@@ -67,6 +67,15 @@ class Band:
         return _THRESHOLDS[self.name].get(family, _DEFAULT_THRESHOLD[self.name])
 
     def admits(self, edit) -> bool:
+        """Whether the band lets this edit into selection at all.
+
+        A ranked proposal is always admitted here and constrained later by the
+        word budget: its confidence is an ordering rather than a probability, so
+        comparing it to a threshold is meaningless. See
+        :class:`lint.edit.Edit` and ``docs/constraints.md`` C9 to C11.
+        """
+        if edit.ranked:
+            return True
         return edit.confidence >= self.threshold(edit.family)
 
     def floor(self, words: int) -> int:

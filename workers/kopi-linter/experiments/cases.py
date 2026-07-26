@@ -24,12 +24,24 @@ class Case:
         why: what breaks when the expectation fails, in one line.
         observed: True when this case was taken from an actual failure rather
             than constructed, which makes it the higher-value kind.
+        span: the exact text the case is about. For ``fire``, the text that must
+            go; for ``refuse``, the text that must survive. Without it a case
+            asks only whether the method did *anything*, which for a family that
+            offers several candidates per paragraph is barely a test, and which
+            fails a refuse case for editing some other phrase correctly.
+
+    A case has to be the size of the thing it tests. The first version of the
+    adjunct cases was one sentence each, and every ``fire`` case failed: at the
+    firm band a 13-word sentence may lose about 4 words, so an 8-word phrase
+    could never fit the budget whatever the rule decided. That measured the
+    band's ceiling, not the licence.
     """
     text: str
     family: str
     expect: str
     why: str
     observed: bool = False
+    span: str = ""
 
 
 RELATIVE = (
@@ -134,39 +146,63 @@ REALISATION = (
 
 ADJUNCT = (
     Case(
-        "The sample consisted of three interviews with early-career researchers.",
+        "The sample consisted of three interviews with early-career researchers. Each "
+        "conversation lasted about an hour and was recorded with the participant's consent. "
+        "Transcripts were coded descriptively before any thematic work began, and the "
+        "resulting code groups were reviewed twice.",
         "adjunct", "refuse",
         "'of three interviews' is the argument of 'consisted', not an adjunct",
+        span="of three interviews",
     ),
     Case(
-        "The study focuses on youth political communication and activism.",
+        "The study focuses on youth political communication and activism. Earlier work in "
+        "this area has tended to treat platforms as neutral channels rather than as active "
+        "participants. That assumption is what this chapter sets out to question.",
         "adjunct", "refuse",
         "'on youth political communication' is the argument of 'focuses'",
+        span="on youth political communication and activism",
     ),
     Case(
-        "Whether people keep scrolling depends on the recommendation system.",
+        "Whether people keep scrolling depends on the recommendation system. Participants "
+        "described the feed as something that pulled them along rather than something they "
+        "chose. The design of that system is therefore central to any account of their "
+        "experience.",
         "adjunct", "refuse",
         "'on the recommendation system' is the argument of 'depends'",
+        span="on the recommendation system",
     ),
     Case(
-        "This chapter draws on the perspective of other work in the field.",
+        "This chapter draws on the perspective of other work in the field. It treats the "
+        "platform as an object of everyday practice rather than as a technical artefact. "
+        "The distinction matters for how the analysis proceeds.",
         "adjunct", "refuse",
         "'on the perspective' is the argument of 'draws'",
+        span="on the perspective",
     ),
     Case(
-        "Participants were given an alias in the form of a randomly chosen name.",
+        "Participants were given an alias in the form of a randomly chosen name. "
+        "Interviewees who referred to other people by name had those names transcribed "
+        "generically, as brother, mother, or roommate. Locations were described in broad "
+        "geographic terms.",
         "adjunct", "fire",
         "'in the form of a randomly chosen name' is a droppable adjunct",
+        span="in the form of a randomly chosen name",
     ),
     Case(
-        "In this spreadsheet, each topic received its own row.",
+        "Notes were compiled into a spreadsheet after each session. In this spreadsheet, "
+        "each topic received its own row, while the notes were placed in separate columns "
+        "for each participant. This summary sheet gave a first overview of the data.",
         "adjunct", "fire",
         "sentence-initial locative adjunct, droppable with its comma",
+        span="In this spreadsheet",
     ),
     Case(
-        "Notes were taken by the researcher during the interview sessions.",
+        "Notes were taken by the researcher during the interview sessions. They recorded "
+        "what was said about each of the main topics covered, and were written up the same "
+        "evening while the conversation was still fresh.",
         "adjunct", "fire",
         "temporal adjunct, droppable",
+        span="during the interview sessions",
     ),
 )
 

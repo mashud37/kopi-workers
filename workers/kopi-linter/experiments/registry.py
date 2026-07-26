@@ -71,6 +71,10 @@ METHODS = (
         "ablation: allows an object relativiser to reduce, stranding the verb",
     ),
     Method(
+        "adjunct/ranked", "adjunct", _adjunct(model="ranked"),
+        "band as budget: propose freely, order by droppability, cut to the ceiling",
+    ),
+    Method(
         "adjunct/syntactic", "adjunct", _adjunct(model="syntactic"),
         "baseline with no lexical knowledge: attachment and phrase size only",
         baseline=True,

@@ -28,6 +28,18 @@ class Edit:
         confidence: the rule's own estimate, in [0, 1]. Provisional until
             measured against the corpus.
         note: one human-readable line for the changelog.
+        ranked: what ``confidence`` means. False, the default, is a probability
+            that the edit is right, and the band compares it to a threshold.
+            True is an *ordering* only, comparable between edits from the same
+            rule and meaningless against a threshold, so the band admits the edit
+            and lets the word budget decide how many survive.
+
+    ``ranked`` belongs on the proposal rather than on the family, because the
+    same family can be attacked both ways and the whole point of the experiment
+    layer is to compare them. Keying it on the family instead silently converted
+    every threshold model for that family into a budget model, and the comparison
+    that was supposed to decide between the two architectures ran both of them as
+    the same architecture.
     """
     start: int
     end: int
@@ -36,6 +48,7 @@ class Edit:
     family: str
     confidence: float
     note: str
+    ranked: bool = False
 
     def source(self, text: str) -> str:
         return text[self.start:self.end]

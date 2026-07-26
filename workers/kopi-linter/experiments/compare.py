@@ -50,17 +50,47 @@ class MethodReport:
         return self.attested / self.fired if self.fired else 0.0
 
 
+_CASE_BAND = "firm"
+
+
+def _touched(case, spans: list) -> bool:
+    """Whether the method acted on the span the case names, if it names one."""
+    if not case.span:
+        return bool(spans)
+    wanted = " ".join(case.span.split()).lower()
+    return any(wanted in " ".join(s.split()).lower() for s in spans)
+
+
+def _fired(method, case, nlp) -> tuple[bool, str]:
+    """Whether the method acts on this case, and what it did.
+
+    Threshold families are judged on what they *propose*, because for them a
+    proposal that clears the band is an assertion that the edit is licensed.
+    Ranked families are judged on what *survives the pipeline*: proposing freely
+    is the design, and the band's word budget, not the rule, decides how deep the
+    cut goes. Judging a ranked family on its proposals asks it to be a threshold
+    family and fails it for not being one.
+    """
+    proposals = list(method.propose(nlp(case.text)))
+    if not any(e.ranked for e in proposals):
+        acted = [e.source(case.text) for e in proposals]
+        return _touched(case, acted), (proposals[0].note if proposals else "proposed nothing")
+    result = lint_paragraph(case.text, nlp, bands.band(_CASE_BAND),
+                            rules=((method.name, method.propose),))
+    acted = [e.source(case.text) for e in result.applied]
+    what = f"applied {result.applied[0].note}" if result.applied else (
+        result.reason or "applied nothing")
+    return _touched(case, acted), what
+
+
 def run_cases(method, nlp) -> tuple[int, list]:
     """Check one method against every case registered for its family."""
     failures = []
     relevant = case_bank.for_family(method.family)
     for case in relevant:
-        proposals = list(method.propose(nlp(case.text)))
-        fired = bool(proposals)
-        if case.expect == "refuse" and fired:
-            failures.append((case, f"proposed {proposals[0].note}"))
-        elif case.expect == "fire" and not fired:
-            failures.append((case, "proposed nothing"))
+        fired, what = _fired(method, case, nlp)
+        if (case.expect == "refuse") == fired:
+            failures.append((case, what))
     return len(relevant), failures
 
 

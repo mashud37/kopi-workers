@@ -87,6 +87,30 @@ def _attested(edit, original: str, gold: str, nlp) -> bool:
     return not (removed & _content_lemmas(gold, nlp))
 
 
+def triage(edit, original: str, gold: str, foil: str | None, nlp) -> str:
+    """Which editors made a change compatible with this edit.
+
+    A second reference cannot score an edit, because the only one the corpus
+    supplies alongside Opus is the weaker model, and "Qwen did it too" is not
+    evidence of correctness. It can still sort, and the class worth sorting out
+    is the one where **both** editors declined: two independent editors passing
+    over the same words is the cheapest available signal that an edit is wrong.
+
+    Returns:
+        ``"both"``, ``"gold"``, ``"foil"``, ``"neither"``, or ``"gold-only-ref"``
+        when no second reference exists for this paragraph.
+    """
+    by_gold = _attested(edit, original, gold, nlp)
+    if foil is None:
+        return "gold" if by_gold else "gold-only-ref"
+    by_foil = _attested(edit, original, foil, nlp)
+    if by_gold and by_foil:
+        return "both"
+    if by_gold:
+        return "gold"
+    return "foil" if by_foil else "neither"
+
+
 def _score_one(sample, nlp, scores: Scores) -> None:
     band = bands.band(sample.band) if sample.band in bands.BANDS else bands.band("firm")
     result = lint_paragraph(sample.original, nlp, band)

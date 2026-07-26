@@ -208,18 +208,37 @@ clause while leaving an equally weak one alone. An edit Opus did not make may be
 amount of care with a single reference resolves this, so precision is not measurable as
 currently set up, only bounded.
 
-**Strategy.** Two independent moves.
+**Correction, 2026-07-26.** An earlier version of this section claimed the corpus holds Sonnet,
+Haiku and Qwen edits of the same paragraphs, so that a graded four-way agreement was available
+free. It does not. Counted:
 
-1. *Multiple references.* The corpus holds Sonnet, Haiku and Qwen edits of the same paragraphs
-   at the same bands. An edit attested by three of four editors is a different object from one
-   attested by none. This converts a binary into a graded target at no annotation cost, and the
-   data already exists.
-2. *A hand-checked damage set.* Perhaps 100 paragraphs, judged against G1 to G3 in `good.md`.
-   Nothing substitutes for it, and it is the only way to measure precision rather than bound it.
+| Editors present for a paragraph and band | Slots |
+|---|---:|
+| opus + qwen | 1,333 |
+| qwen only | 114 |
+| opus only | 89 |
+| opus + sonnet | 68 |
+| haiku + qwen + sonnet (no opus) | 56 |
 
-**Experiment.** Correlate the multi-reference agreement score against the hand-checked damage
-judgements on the same 100 paragraphs. If they track, the free signal can stand in for the
-expensive one on the rest of the corpus.
+There is **no three-way agreement involving Opus anywhere in the corpus**. The only usable second
+reference is Qwen, and Qwen is the weaker editor by the project's own measurement, so "Qwen also
+made this edit" is not evidence that an edit is right. The free half of this strategy is much
+thinner than claimed, and the claim should not have been written without counting first.
+
+**Strategy, revised.** Use the second reference for **triage, not for scoring**. Three outcomes
+per edit on the 1,333 slots where both editors are present:
+
+* attested by both: very likely right, no attention needed
+* attested by Opus only: unremarkable, Qwen edits differently
+* **attested by neither**: two independent editors both declined to make this change
+
+The third class is small and enriched for damage, which makes it the cheap way to *choose* what a
+human looks at rather than a way to avoid looking. That turns the hand-checked damage set from a
+100-paragraph random sample into a targeted one, and it is the only part of this constraint that
+the corpus can actually pay for.
+
+**A hand-checked damage set is therefore not optional.** Judged against G1 to G3 in `good.md`.
+Nothing substitutes for it, and it is the only way to measure precision rather than bound it.
 
 ---
 
@@ -379,15 +398,88 @@ paragraphs with many drops contribute more picks, so a blind order gets more cha
 where hits are easy. Comparing against the corpus rate credits every scorer with about 0.6x of
 lift it has not earned, and the first version of this table did exactly that.
 
-**Next.** Wire `select` to spend a word budget in rank order for families marked as ranked,
-and compare `adjunct/ranked` against the four C9 models on cases and corpus. The ranker to wire
-is `rate + commonness`, with the caveat that its blend weights are unfitted: `commonness` is
-divided by 7 to bring Zipf onto the same scale as a probability, which is a scaling choice and
-not a fitted one.
+## C11. Budget and licence are orthogonal, and ranking only solves one
 
-**Still open, if ranking is not enough.** Condition the rate on the band as well as the frame.
-The gradient is known to exist (`typology.md` section 1.3 puts `adjunct` at 7.1% of clarity
-activity and 9.6% of aggressive) and it is cheap to add to the survey.
+Built: `lint/bands.RANKED_FAMILIES` marks families where the band sets a word budget instead of a
+confidence threshold; those families enter selection unthresholded and the existing budget pass
+in `lint/select.py` trims them best-first to the compression ceiling. The ranked adjunct rule
+scores each phrase with `droppability`, the `rate + commonness` blend from C10, bounded into
+[0, 1] and deliberately below the confidence a licensed rule asserts so the budget gives up a
+guess before it gives up a licensed edit.
+
+**It works as designed and it is not enough.** 300 gold paragraphs:
+
+| Method | Cases | SARI | Fired | Ceiling | Words |
+|---|---|---:|---:|---:|---:|
+| adjunct/ranked | 4/7 | 0.4132 | 582 | 3% | 3,990 |
+| adjunct/syntactic | 2/7 | 0.4142 | 457 | 2% | 3,715 |
+| adjunct/frame | 3/7 | **0.5259** | 3 | 67% | 12 |
+| adjunct/backoff | 3/7 | **0.5259** | 3 | 67% | 12 |
+| adjunct/backoff-strict | 2/7 | 0.2400 | 0 | 0% | 0 |
+
+Ranking buys the coverage it promised, 582 firings against 3, and the coverage is worthless: a 3%
+attestation ceiling and a SARI *below* the models that do almost nothing. The best case score
+improves from 2/7 to 4/7, so the ordering is real, and it is nowhere near a licence.
+
+`adjunct/ranked` still drops `of three interviews` from "the sample consisted of three
+interviews" and `on the perspective` from "this chapter draws on the perspective of other work",
+because ranking answers *which phrase goes first* and never answers *which phrases are eligible
+at all*. With the threshold removed, every structurally eligible phrase is a candidate, and an
+argument that happens to score well is dropped as soon as the budget has room.
+
+**A second cause, separable and cheap to fix.** The budget is calibrated to the band's
+compression *ceiling*, which is a maximum and not a target. At firm the ceiling is 35% while the
+gold editor's measured median reduction at firm is 14.3% (`typology.md` section 5), so the budget
+invites a cut 2.4 times deeper than Opus makes. Even a perfect ranker would be asked to fill an
+oversized quota, and would reach far down its own ordering to do it. The word target for ranked
+families should be the measured median for the band, with the ceiling kept as the hard stop it
+was designed to be.
+
+Both causes have to be addressed before ranking can be judged fairly. The ordering result from
+C10 stands; this run does not disconfirm it, it shows the ordering being spent badly.
+
+So the two questions are independent, and C9's fix addresses only one:
+
+* **licence**: may this phrase go? Still unsolved. Structural tests give a 2% agreement ceiling
+  (C9); induced rates cannot threshold (C9); ranking does not attempt it.
+* **budget**: how many go, and in what order? Solved, at 1.88x random (C10).
+
+A ranked family without a licence is a better-ordered version of the wrecking ball. The next
+attempt has to be an argument-versus-adjunct test that is neither a hand-written verb lexicon nor
+a per-category rate, and the obvious candidate is subcategorisation evidence induced from the
+corpus itself: how often does *this governor lemma* appear with *this preposition* at all,
+against how often it appears without any preposition. A preposition that is nearly obligatory
+after a verb is an argument, and that is a distributional question the corpus can answer.
+
+**Three harness defects this cycle exposed, all of which had been silently passing.**
+
+*The architecture flag was on the wrong object, and it invalidated a whole comparison.* The
+ranked marker was first a set of family names in `lint/bands.py`. Since `adjunct` was in it, the
+threshold models for that family were silently converted to budget models too: `adjunct/frame`
+jumped from 3 firings to 459, and the comparison meant to decide between two architectures ran
+both of them as one. Whether a confidence is a probability or an ordering is a property of the
+*proposal*, so `ranked` now lives on :class:`lint.edit.Edit`, which is also what lets both
+variants of a family be compared at all. The first version of the table in this section was
+produced by the broken build and has been replaced.
+
+*A case must be the size of the thing it tests.* The first adjunct cases were single sentences,
+and every `fire` case failed: at the firm band a 13-word sentence may lose about 4 words, so an
+8-word phrase could never fit the budget whatever the rule decided. They measured the band's
+ceiling, not the licence. Now written as realistic paragraphs.
+
+*A case must name the span it is about.* Without one, `refuse` meant "do not edit this paragraph
+at all", so a method was failed for correctly dropping some *other* phrase, and `fire` passed
+whenever a method removed anything at all. Both readings are wrong. `Case.span` now names the
+text that must go, or must survive, and the runner checks that span rather than the paragraph.
+
+*And the case runner has to match the architecture.* Threshold families are judged on what they
+propose, since a proposal clearing the band asserts the edit is licensed. Ranked families are
+judged on what survives the pipeline, since proposing freely is the design. Judging a ranked
+family on its proposals asks it to be a threshold family and fails it for not being one.
+
+**Still open.** Condition the rate on the band as well as the frame. The gradient is known to
+exist (`typology.md` section 1.3 puts `adjunct` at 7.1% of clarity activity and 9.6% of
+aggressive) and it is cheap to add to the survey.
 
 ## C8. The irreducible core, restated with the build's evidence
 
@@ -413,18 +505,27 @@ Derived from the constraints rather than from the family sizes, which is the cha
 3. ~~**C3**, the licence-model comparison on `adjunct`.~~ Answered, as **C9**: neither structural
    nor induced per-category licensing works, and the reason is architectural.
 
+4. ~~**C9**, band as budget rather than threshold.~~ Built and measured, as **C11**: the budget
+   half works, the licence half is untouched, and a ranked family without a licence is a
+   better-ordered wrecking ball. No adjunct method is registered.
+5. ~~**C5**, multi-reference agreement.~~ Corrected and much reduced. There is no three-way
+   agreement involving Opus anywhere in the corpus; the only second reference is the weaker
+   model. Usable for triage, not for scoring.
+
 **Next.**
 
-4. **C9**, band as budget rather than threshold, for deletion families. This is now the decision
-   point that C3 was: it is a selection-stage change, it is the only remaining route to the 46%
-   deletion ceiling in C1, and it retro-explains the `support-verb` withdrawal. Compare
-   `adjunct/ranked` against the four existing models.
-5. **C5**, multi-reference agreement, which is free (the corpus already holds Sonnet, Haiku and
-   Qwen edits of the same paragraphs), plus the 100-paragraph hand-checked damage set, which is
-   not. Needed before C9's ranked model can be priced, since ranking trades precision for
-   coverage and nothing currently measures damage.
-6. **C1**, the generation spine, tested in isolation before any family depends on it.
-7. **C7**, restraint, once there is enough coverage for it to matter.
+6. **C11a**, calibrate the ranked budget to the band's *measured median* reduction rather than its
+   compression ceiling. Cheap, and the current run cannot be read as a fair test of ranking until
+   it is done.
+7. **C11b**, an argument-versus-adjunct licence induced distributionally: how often does this
+   governor lemma occur with this preposition against how often it occurs without any, so that a
+   near-obligatory preposition reads as an argument. Neither a hand-written verb lexicon nor a
+   per-category drop rate, and the corpus can answer it. Without this, `adjunct` stays unregistered
+   and the 46% deletion ceiling in C1 stays out of reach.
+7. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
+   bounding it. Triage the candidates with the "attested by neither editor" class first.
+8. **C1**, the generation spine, tested in isolation before any family depends on it.
+9. **C7**, restraint, once there is enough coverage for it to matter.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
 edits arbitrated.
