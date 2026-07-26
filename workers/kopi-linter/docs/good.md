@@ -9,6 +9,50 @@ violate is not a criterion, and it does not belong in this file.
 
 ---
 
+## 0. The master number
+
+One number tracks progress, in per cent, and it is the one to quote:
+
+> **Closure.** How much of the word-level distance from the original text to Opus's edit has been
+> closed?
+
+With `d` the word-level Levenshtein distance over whitespace tokens (unit cost for insert, delete
+and substitute, which is speech recognition's word error rate put to another use):
+
+    closure = 1 - d(output, gold) / d(original, gold)
+
+Pooled across the corpus, never averaged per paragraph, for the reason SARI is pooled: paragraphs
+Opus left alone have a zero denominator and whichever convention is chosen for them decides the
+verdict. Implemented in `eval/closure.py`, reported first by `manage.py evaluate`.
+
+**Why this rather than SARI as the headline.**
+
+- **Doing nothing scores exactly 0**, not 0.2439. SARI pays for correct *keeping*, so a linter that
+  touches 7% of paragraphs collects most of its score for the 93% it never looked at, and reads as
+  halfway to Opus while having moved 1% of the words.
+- **Damage scores below 0.** An edit Opus did not make moves the text away from the gold. The
+  band-as-budget wrecking ball of C11 scored a respectable-looking 0.41 on SARI; on closure a
+  system that cuts wrongly is visibly worse than one that sleeps. This is the property that makes
+  the metric able to fail, per §7.
+- **100% is reproducing the gold**, so the scale has a real ceiling rather than an asymptote.
+
+**It decomposes, and the decomposition sets the strategy.** With `work = d(original, output)` and
+`gain = d(original, gold) - d(output, gold)`:
+
+    reach    = work / d(original, gold)      how much of Opus's work was attempted
+    accuracy = (1 + gain / work) / 2         how much of what was attempted landed
+    closure  = reach x (2 x accuracy - 1)
+
+Both factors are bounded in [0, 1] by the triangle inequality, with no clamping. **At 50% accuracy
+closure is zero however much is attempted.** Always report all three: the composite alone hides
+which of the two is broken, and they break for opposite reasons.
+
+**The one caveat, stated every time.** Closure measures agreement with Opus, not quality. A system
+that improves a sentence in its own wording is scored as damage. That is acceptable here because
+reconstructing Opus *is* this project's objective, but it means closure cannot referee a
+generative model, and it cannot see an edit that is wrong in a way Opus also got wrong. §5.5 does
+not become optional because §0 exists.
+
 ## 1. The object being judged
 
 One paragraph, one intensity band, one output. The reference is Opus's edit of the same
@@ -102,8 +146,10 @@ These are necessary and nowhere near sufficient. All four passed on the broken c
 
 ## 5. The scoring panel
 
-No single number. A method is reported on all of these, and a gain on one that costs another is
-a finding to state, not a win to report.
+§0 tracks *progress*: one number, quoted everywhere, comparable across months. This panel decides
+whether a *method joins the registry*, which is a different question that one number cannot answer.
+Closure can be raised by a rule that is right about Opus and wrong about English, and the panel is
+what catches that. A gain on one cell that costs another is a finding to state, not a win to report.
 
 **5.1 Corpus SARI** against the gold, pooled across the test set rather than averaged per
 paragraph. The per-paragraph average is sensitive to the empty-denominator convention, and

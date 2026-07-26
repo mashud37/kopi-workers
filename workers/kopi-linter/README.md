@@ -22,11 +22,14 @@ engine and the experiment harness all run. One transformation family is live
 (relative-clause reduction); a second (`adjunct`) has three competing licence models under
 comparison and none of them is registered yet.
 
-The work follows a fixed loop, analyse then plan then build then evaluate then analyse
-again, set out in [docs/method.md](docs/method.md). Five documents carry the state:
+Progress is tracked as a single per cent, **closure**, defined in
+[docs/good.md](docs/good.md) section 0 and standing at 0.2%. The work follows a fixed loop,
+analyse then plan then build then evaluate then analyse again, set out in
+[docs/method.md](docs/method.md). Six documents carry the state:
 
 | Document | Question it answers |
 |---|---|
+| [docs/plan.md](docs/plan.md) | where this is going, what each phase is worth, and how it fails |
 | [docs/typology.md](docs/typology.md) | what a plain-language linter has to do, measured from 1,523 gold edits |
 | [docs/approaches.md](docs/approaches.md) | which techniques might do it |
 | [docs/constraints.md](docs/constraints.md) | what building it revealed, and what each limit blocks |
@@ -178,29 +181,41 @@ output-side grammaticality checking turned out not to be reachable.
 
 ## Results
 
-Corpus SARI over all 1,523 gold paragraphs, against Opus's edit of the same paragraph at
-the same band.
+One number tracks progress: **closure**, the per cent of the word-level distance from the
+original text to Opus's edit that has been closed. Doing nothing scores 0, reproducing
+Opus scores 100%, and an edit Opus did not make scores below 0. Over all 1,523 gold
+paragraphs, against Opus's edit of the same paragraph at the same band:
+
+| System | closure | reach | accuracy |
+|---|---:|---:|---:|
+| do nothing | 0.0% | 0.0% | n/a |
+| **kopi-linter** | **0.2%** | 0.4% | 78.1% |
+| served Qwen3-32B | -9.5% | 135.9% | 46.5% |
+
+`reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
+`closure = reach x (2 x accuracy - 1)` exactly. At 50% accuracy closure is zero however much
+is attempted. The linter's licence mechanism works and is applied to almost nothing;
+reach is the whole problem. See [docs/plan.md](docs/plan.md) for what each family is worth.
+
+> Closure measures agreement with Opus, not quality. Qwen at -9.5% has not written worse
+> English, it has written different English, and it is quoted here as a reference point
+> rather than a verdict. Reconstructing Opus is this project's objective, not Qwen's.
+
+Corpus SARI is kept as a diagnostic, because its three components separate in a way the
+composite does not:
 
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2439 | 0.0000 | 0.7316 | 0.0000 |
-| **kopi-linter** | **0.5250** | 0.0012 | 0.7322 | 0.8415 |
+| kopi-linter | 0.5250 | 0.0012 | 0.7322 | 0.8415 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
-**Do not read that table on its own.** It says the linter beats a 32B model, and the claim
-is worthless without the next one:
-
-| | Opus | Qwen | kopi-linter |
-|---|---:|---:|---:|
-| paragraphs changed | ~all | ~all | **108 of 1,523 (7.1%)** |
-| words removed | 23,047 | | **229** |
-
-The linter passes Qwen on the composite while doing about one percent of the work. Its
-score is delete precision (0.8415) earned on a very small number of very safe edits, and
-precision over few deletions is easy. The `add` column, 0.0012 against Qwen's 0.2040, is
-the honest measure of the gap: it barely writes new words, because every rule it has
-deletes. On 18 real body paragraphs Opus cuts 14.5% of the words, Qwen 21.8%, and the
-linter 0.7%.
+That table says the linter beats a 32B model, which is why it is not the headline. The
+score is delete precision earned on 108 changed paragraphs out of 1,523 and 229 words moved
+against Opus's 23,047, and precision over few deletions is easy. The `add` column, 0.0012
+against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
+every rule it has deletes. On 18 real body paragraphs Opus cuts 14.5% of the words, Qwen
+21.8%, and the linter 0.7%.
 
 **What is nonetheless real.** Scoping the repair layer to edit joins (constraints C6) moved
 SARI from 0.4580 to 0.5250 and delete precision from 0.6408 to 0.8415, purely by making the

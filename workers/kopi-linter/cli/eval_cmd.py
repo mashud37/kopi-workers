@@ -30,6 +30,28 @@ def _parser():
         sp.done()
 
 
+def _report_closure(scores) -> None:
+    """The master number: per cent of the distance to Opus that has been closed."""
+    from eval import closure as closure_mod
+
+    linted = closure_mod.measure(scores.triples_linted)
+    ui.rule()
+    print("  distance to Opus closed   closure    reach  accuracy")
+    for label, triples in (("do-nothing", scores.triples_baseline),
+                           ("kopi-linter", scores.triples_linted),
+                           ("served Qwen", scores.triples_foil)):
+        if not triples:
+            continue
+        result = closure_mod.measure(triples)
+        print(f"  {label:24s}{result.closure:8.1%} {result.reach:8.1%} "
+              f"{result.accuracy:9.1%}")
+    ui.info(f"{linted.gain} of {linted.gap} word-edits to Opus closed, "
+            f"{linted.work} attempted")
+    for name, score, expected in closure_mod.anchors(scores.triples_linted):
+        ok = score < 0 if expected is None else abs(score - expected) < 1e-9
+        (ui.ok if ok else ui.error)(f"scale anchor, {name}: {score:.1%}")
+
+
 def _report_headline(scores, harness) -> None:
     linted = harness.score_of(scores.triples_linted)
     baseline = harness.score_of(scores.triples_baseline)
@@ -88,6 +110,7 @@ def run(limit: int | None = None, show: bool = False) -> None:
     scores = harness.evaluate(samples, nlp, foils, on_progress=lambda i, n, s: bar.advance())
     bar.finish()
 
+    _report_closure(scores)
     _report_headline(scores, harness)
     _report_activity(scores)
     _report_rules(scores)
