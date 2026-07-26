@@ -91,16 +91,33 @@ def _paragraph(sample, nlp) -> list:
     return out
 
 
-def observations(samples, nlp, on_progress=None) -> list[list]:
-    """Candidates grouped by paragraph, keeping only paragraphs with a choice to make."""
+def observations(samples, nlp, on_progress=None, require_choice: bool = True) -> list[list]:
+    """Candidates grouped by paragraph.
+
+    Args:
+        samples: gold :class:`evidence.load.Sample` records.
+        nlp: a loaded spaCy pipeline.
+        on_progress: called with (index, total, sample).
+        require_choice: keep only paragraphs that both dropped and kept a phrase,
+            which is what a *ranking* question needs. Allocation needs every
+            paragraph, including the many that dropped nothing, because whether
+            to cut at all is precisely the question being asked.
+
+    Returns:
+        A list of per-paragraph candidate lists.
+    """
     groups = []
     total = len(samples)
     for i, sample in enumerate(samples, 1):
         if on_progress:
             on_progress(i, total, sample)
         group = _paragraph(sample, nlp)
-        kept = sum(1 for c in group if not c.dropped)
-        if group and kept and any(c.dropped for c in group):
+        if not group:
+            continue
+        if not require_choice:
+            groups.append(group)
+            continue
+        if any(c.dropped for c in group) and any(not c.dropped for c in group):
             groups.append(group)
     return groups
 

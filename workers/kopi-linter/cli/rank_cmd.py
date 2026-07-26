@@ -32,7 +32,8 @@ def _table(rows: list, reference: float) -> list:
     return lines
 
 
-def _write(rows: list, first: dict, reference: float, limit: int | None) -> Path:
+def _write(rows: list, first: dict, reference: float, limit: int | None,
+           extra: list) -> Path:
     OUTPUT.mkdir(exist_ok=True)
     stem = "ranking_adjunct" + (f"_first{limit}" if limit else "")
     path = OUTPUT / f"{stem}.md"
@@ -53,8 +54,53 @@ def _write(rows: list, first: dict, reference: float, limit: int | None) -> Path
         "",
     ]
     lines += _table(rows, reference)
+    lines += extra
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def _score_orderings(groups: list) -> list:
+    from experiments import ranking
+
+    rows = []
+    names = list(ranking.SCORERS)
+    for i, name in enumerate(names, 1):
+        ui.info(f"[{i}/{len(names)}] {name}")
+        rows.append((name, ranking.score(groups, name)))
+    return rows
+
+
+def _report_orderings(rows: list, first: dict, reference: float) -> None:
+    ui.ok(f"{first['groups']} paragraphs, {first['candidates']} candidates, "
+          f"random baseline {reference:.3f} (corpus drop rate {first['base']:.3f})")
+    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
+        lift = result["p_at_k"] / reference if reference else 0.0
+        ui.info(f"{name:12} p@k {result['p_at_k']:.3f}  ({lift:.2f}x random)  "
+                f"MAP {result['map']:.3f}")
+
+
+def _allocation(groups: list) -> list:
+    from experiments import allocation
+
+    outcomes = allocation.evaluate(groups)
+    for o in outcomes[:4]:
+        ui.info(f"{o.name:26} P {o.precision:.3f}  R {o.recall:.3f}  F1 {o.f1:.3f}")
+    lines = [
+        "",
+        "## Which paragraphs to cut at all",
+        "",
+        f"{len(groups)} paragraphs, of which "
+        f"{sum(1 for g in groups if allocation.label(g))} had a phrase dropped by the gold "
+        "editor. Thresholds are swept, not chosen, so the ceiling of each feature is visible "
+        "even when it is disappointing.",
+        "",
+        "| Decision rule | precision | recall | F1 | fires on |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for o in outcomes:
+        lines.append(f"| {o.name} | {o.precision:.3f} | {o.recall:.3f} | {o.f1:.3f} | "
+                     f"{o.fired}/{o.total} |")
+    return lines
 
 
 def run(limit: int | None = None) -> None:
@@ -62,7 +108,8 @@ def run(limit: int | None = None) -> None:
     from experiments import ranking
 
     ui.step("Rank")
-    ui.info("plan: load corpus, load parser, collect candidates, score each function, write table")
+    ui.info("plan: load corpus, load parser, collect candidates, score ordering, "
+            "score allocation, write tables")
 
     sp = StepSpinner("loading gold corpus")
     sp.start()
@@ -77,23 +124,22 @@ def run(limit: int | None = None) -> None:
 
     nlp = _load_parser()
     bar = BatchProgress(len(samples), "collecting drop candidates")
-    groups = ranking.observations(samples, nlp, on_progress=lambda i, n, s: bar.advance())
+    every = ranking.observations(samples, nlp, on_progress=lambda i, n, s: bar.advance(),
+                                 require_choice=False)
     bar.finish()
+    # Ordering needs paragraphs where there was a choice; allocation needs all of
+    # them, including the ones that dropped nothing. One parse pass, two questions.
+    groups = [g for g in every
+              if any(c.dropped for c in g) and any(not c.dropped for c in g)]
     if not groups:
         raise SystemExit("no paragraph both dropped and kept a phrase, nothing to rank")
+    ui.ok(f"{len(every)} paragraphs with candidates, {len(groups)} with a ranking choice")
 
-    rows = []
-    names = list(ranking.SCORERS)
-    for i, name in enumerate(names, 1):
-        ui.info(f"[{i}/{len(names)}] {name}")
-        rows.append((name, ranking.score(groups, name)))
-
+    rows = _score_orderings(groups)
     first = rows[0][1]
     reference = dict(rows)["random"]["p_at_k"]
-    ui.ok(f"{first['groups']} paragraphs, {first['candidates']} candidates, "
-          f"random baseline {reference:.3f} (corpus drop rate {first['base']:.3f})")
-    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
-        lift = result["p_at_k"] / reference if reference else 0.0
-        ui.info(f"{name:12} p@k {result['p_at_k']:.3f}  ({lift:.2f}x random)  "
-                f"MAP {result['map']:.3f}")
-    print(_write(rows, first, reference, limit))
+    _report_orderings(rows, first, reference)
+
+    ui.step("Allocation")
+    extra = _allocation(every)
+    print(_write(rows, first, reference, limit, extra))

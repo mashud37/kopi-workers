@@ -522,11 +522,41 @@ guarantees the linter edits paragraphs the editor would have left untouched, and
 in ranking can fix that, because the ranking is only ever asked which phrase goes first, never
 whether any should go at all.
 
-**Next.** Give the budget a per-paragraph *decision* before the per-phrase ordering: predict
-whether this paragraph is one the editor would cut, and only then spend. The features are to
-hand and cost nothing extra, since the ranker already computes them: the paragraph's best
-droppability score, how many candidates clear it, and the paragraph's length. Compare against
-the current always-spend behaviour on the same cases and corpus.
+**Measured, and mostly negative.** `manage.py rank` now answers both questions from one corpus
+pass. 399 paragraphs, of which 243 (60.9%) had a phrase dropped by the gold editor. Thresholds
+are swept over 40 values rather than chosen, so each feature's ceiling is visible.
+
+| Decision rule | precision | recall | F1 | fires on |
+|---|---:|---:|---:|---:|
+| candidates >= 9.25 (best sweep) | 0.675 | 0.938 | 0.785 | 338/399 |
+| best >= 0.422 | 0.632 | 0.988 | 0.770 | 380/399 |
+| *always cut* | *0.609* | *1.000* | *0.757* | *399/399* |
+| **any candidate scores 0.5+** | **0.755** | 0.584 | 0.659 | 188/399 |
+
+**By F1 there is no signal.** The best swept threshold beats cutting everything by 0.028, and
+the feature that achieves it, candidate count, is paragraph length wearing a disguise: longer
+paragraphs are likelier to contain at least one drop, which is close to tautological. Whether the
+editor cut a paragraph is **not predictable from that paragraph's own drop candidates**.
+
+**But F1 is the wrong summary for this decision, and reading it alone would have hidden the one
+usable result.** The two errors are not symmetric: cutting a paragraph the editor left alone is
+damage, while missing one is only a lost opportunity, and this project's whole position is that
+precision matters more than coverage. On precision there is a real effect. Firing only where some
+candidate scores 0.5 or better hits 75.5% against a 60.9% base rate, a **1.24x lift**, on 47% of
+paragraphs. That is a usable rule for deciding *where* to spend, and it is invisible in the F1
+column where it ranks last.
+
+**What the negative half means.** A paragraph-local view cannot answer the allocation question,
+which is `typology.md` D6 confirmed rather than assumed: it needs what the paragraph cannot see,
+namely redundancy against its neighbours, the document's requested reduction, and where this
+paragraph sits in the argument. Allocation is a document-level problem and has to be built as
+one, not approximated per paragraph.
+
+**Next.** Two separable pieces. Wire the high-precision gate (fire only where a strong candidate
+exists) as a restraint rule and re-measure the attestation ceiling, which is cheap and uses a
+result already in hand. Then treat allocation properly: given a document and a requested
+reduction, choose which paragraphs absorb it, which is the first thing in this project that
+cannot be decided one paragraph at a time.
 
 ## C8. The irreducible core, restated with the build's evidence
 
@@ -568,14 +598,21 @@ Derived from the constraints rather than from the family sizes, which is the cha
    rather than about one teacher. Together the two took the case score from 2/7 to 5/7 and the
    attestation ceiling from 3% to 6%, and `adjunct` still stays unregistered.
 
+8. ~~**C12**, a per-paragraph spend decision.~~ Measured. By F1 the paragraph's own candidates
+   carry no signal about whether the editor cut it, and the best swept feature is length in
+   disguise. On precision, which is the metric that matters here, firing only where a strong
+   candidate exists gives a 1.24x lift on 47% of paragraphs.
+
 **Next.**
 
-8. **C12**, a per-paragraph spend decision before the per-phrase ordering. A uniform quota makes
-   the linter edit paragraphs the editor left alone, and no ranking improvement can fix that.
-   This is restraint arriving early because coverage arrived, exactly as C7 predicted.
-9. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
-   bounding it. Triage the candidates with the "attested by neither editor" class first.
-10. **C1**, the generation spine, tested in isolation before any family depends on it.
+9. **C12a**, wire that high-precision gate as a restraint rule and re-measure the attestation
+   ceiling. Cheap, and the result is already in hand.
+10. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
+    choose which paragraphs absorb it. The first thing in this project that cannot be decided one
+    paragraph at a time, and `typology.md` D6 now confirmed rather than assumed.
+11. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
+    bounding it. Triage the candidates with the "attested by neither editor" class first.
+12. **C1**, the generation spine, tested in isolation before any family depends on it.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
 edits arbitrated.
