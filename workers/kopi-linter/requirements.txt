@@ -1,0 +1,5 @@
+spacy
+wordfreq
+nltk
+textstat
+lemminflect
