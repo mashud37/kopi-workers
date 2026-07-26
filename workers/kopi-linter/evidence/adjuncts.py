@@ -101,6 +101,48 @@ def survey(samples, nlp, on_progress=None) -> dict:
     return {"seen": seen, "dropped": dropped}
 
 
+def attachment(samples, nlp, on_progress=None) -> dict:
+    """How tied each governor is to each preposition, from the originals alone.
+
+    The argument-versus-adjunct question, asked distributionally. "Depends"
+    almost always takes "on", so "on" is its argument; "written" takes "in",
+    "with", "for", "after" and a dozen others, so any one of them is an adjunct.
+    That is a property of the language, visible in unedited text, and it needs no
+    reference to what the gold editor did. So unlike :func:`survey` this licence
+    is not fitted to one teacher and should transfer to prose the corpus has
+    never seen.
+
+    Returns:
+        ``{"pairs": Counter, "governors": Counter}`` keyed by
+        ``"<POS>:<lemma>:<prep>"`` and ``"<POS>:<lemma>"``.
+    """
+    pairs, governors = Counter(), Counter()
+    total = len(samples)
+    for i, sample in enumerate(samples, 1):
+        if on_progress:
+            on_progress(i, total, sample)
+        doc = nlp(sample.original)
+        for token in doc:
+            if token.pos_ in ("VERB", "NOUN", "PROPN", "AUX", "ADJ"):
+                governors[f"{token.pos_}:{token.lemma_.lower()}"] += 1
+        for prep, governor, _, _, _ in phrases(doc):
+            key = f"{governor.pos_}:{governor.lemma_.lower()}"
+            pairs[f"{key}:{prep.lemma_.lower()}"] += 1
+    return {"pairs": pairs, "governors": governors}
+
+
+def attachment_rates(result: dict, minimum: int) -> dict:
+    """``{key: (P(prep | governor), governor count)}`` for well-observed governors."""
+    pairs, governors = result["pairs"], result["governors"]
+    out = {}
+    for key, count in pairs.items():
+        governor = key.rsplit(":", 1)[0]
+        seen = governors.get(governor, 0)
+        if seen >= minimum:
+            out[key] = (count / seen, seen)
+    return out
+
+
 def rates(result: dict, level: str, minimum: int) -> dict:
     """``{key: (drop rate, times seen)}`` for keys seen at least ``minimum`` times."""
     seen, dropped = result["seen"][level], result["dropped"][level]
@@ -134,15 +176,23 @@ words survives anywhere in the paragraph, including when the editor moved it.
 '''
 
 
-def write_table(result: dict, path, minimum: int = 5) -> dict:
-    """Write the induced drop-rate tables as an importable module."""
+def _emit(lines: list, name: str, table: dict) -> None:
+    lines.append(f"{name} = {{\n")
+    for key, (value, count) in sorted(table.items()):
+        lines.append(f'    "{key}": ({value:.3f}, {count}),\n')
+    lines.append("}\n\n")
+
+
+def write_table(result: dict, path, minimum: int = 5, attach: dict | None = None) -> dict:
+    """Write the induced drop-rate and attachment tables as an importable module."""
     lines, written = [_HEADER], {}
     for level in LEVELS:
         table = rates(result, level, minimum)
         written[level] = len(table)
-        lines.append(f"{level.upper()}_RATE = {{\n")
-        for key, (rate, count) in sorted(table.items()):
-            lines.append(f'    "{key}": ({rate:.3f}, {count}),\n')
-        lines.append("}\n\n")
+        _emit(lines, f"{level.upper()}_RATE", table)
+    if attach is not None:
+        table = attachment_rates(attach, minimum)
+        written["attachment"] = len(table)
+        _emit(lines, "ATTACHMENT_RATE", table)
     path.write_text("".join(lines), encoding="utf-8")
     return written

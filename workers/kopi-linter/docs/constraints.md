@@ -481,6 +481,53 @@ family on its proposals asks it to be a threshold family and fails it for not be
 exist (`typology.md` section 1.3 puts `adjunct` at 7.1% of clarity activity and 9.6% of
 aggressive) and it is cheap to add to the survey.
 
+## C12. A per-paragraph budget forces uniform cutting; the editor allocates unevenly
+
+Both fixes from C11 were built and measured. 300 gold paragraphs, 7 methods:
+
+| Method | Cases | SARI | Fired | Ceiling | Words | Defects |
+|---|---|---:|---:|---:|---:|---:|
+| adjunct/ranked (calibrated budget) | 3/7 | 0.4243 | 469 | 6% | 2,619 | 7 |
+| adjunct/ranked-arg (+ argument gate) | **5/7** | 0.4227 | 430 | 5% | 2,402 | 5 |
+| adjunct/ranked-arg-strict | 5/7 | 0.4191 | 420 | 3% | 2,412 | 5 |
+| adjunct/syntactic | 2/7 | 0.4142 | 457 | 2% | 3,715 | 6 |
+| adjunct/frame | 3/7 | **0.5259** | 3 | 67% | 12 | 0 |
+
+**Both changes work and neither rescues the family.** The attestation ceiling doubled, 3% to 6%,
+and the case score went from 2/7 to 5/7, and the ranked models still score well below threshold
+models that make three edits in three hundred paragraphs. `adjunct` stays unregistered.
+
+Attribution is clean, which is what the variants were for:
+
+* **C11a, the calibrated budget**, fixed three of the four argument failures on its own. With a
+  realistic word target the ranker never reaches far enough down its ordering to hit them. This
+  was not a licence problem at all; it was an oversized quota.
+* **C11b, the distributional argument gate**, fixed the fourth and cost almost nothing. Measured
+  on the originals alone, `depend on` scores 1.00, `consist of` 1.00, `focus on` 0.85 and `draw
+  on` 0.74, against `take during` at 0.04 and `be in` at 0.05. It is a fact about the language
+  rather than about one teacher, which is the first licence in this project that should transfer
+  to prose the corpus has never seen. It also cut introduced defects from 7 to 5.
+
+**What the residual says.** The ranker is 1.88x random at ordering (C10) and reaches a 6% ceiling
+in the pipeline, and that gap is the finding. Ranking was evaluated only on the 883 paragraphs of
+1,523 that dropped at least one phrase and kept at least one. The pipeline runs on all of them
+and spends its budget in every one, because the target is a median applied per paragraph. The
+gold editor does not cut every paragraph by the median; it cuts some deeply and leaves others
+alone, and a per-paragraph quota cannot express that.
+
+This is `typology.md` D6 arriving as a measurement rather than a note, and it is C7, restraint,
+surfacing exactly where C7 predicted it would. Budget allocation is a **document-level** problem:
+given a requested reduction, decide which paragraphs absorb it. A uniform per-paragraph quota
+guarantees the linter edits paragraphs the editor would have left untouched, and no improvement
+in ranking can fix that, because the ranking is only ever asked which phrase goes first, never
+whether any should go at all.
+
+**Next.** Give the budget a per-paragraph *decision* before the per-phrase ordering: predict
+whether this paragraph is one the editor would cut, and only then spend. The features are to
+hand and cost nothing extra, since the ranker already computes them: the paragraph's best
+droppability score, how many candidates clear it, and the paragraph's length. Compare against
+the current always-spend behaviour on the same cases and corpus.
+
 ## C8. The irreducible core, restated with the build's evidence
 
 `typology.md` puts free paraphrase at 14.3% of transformations and calls it the honest problem.
@@ -514,18 +561,21 @@ Derived from the constraints rather than from the family sizes, which is the cha
 
 **Next.**
 
-6. **C11a**, calibrate the ranked budget to the band's *measured median* reduction rather than its
-   compression ceiling. Cheap, and the current run cannot be read as a fair test of ranking until
-   it is done.
-7. **C11b**, an argument-versus-adjunct licence induced distributionally: how often does this
-   governor lemma occur with this preposition against how often it occurs without any, so that a
-   near-obligatory preposition reads as an argument. Neither a hand-written verb lexicon nor a
-   per-category drop rate, and the corpus can answer it. Without this, `adjunct` stays unregistered
-   and the 46% deletion ceiling in C1 stays out of reach.
-7. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
+6. ~~**C11a**, calibrate the ranked budget to the measured median.~~ Built. Fixed three of the
+   four argument failures on its own: the quota was the problem, not the licence.
+7. ~~**C11b**, a distributional argument-versus-adjunct licence.~~ Built. Fixed the fourth and
+   cut introduced defects, and it is the first licence here that is a fact about the language
+   rather than about one teacher. Together the two took the case score from 2/7 to 5/7 and the
+   attestation ceiling from 3% to 6%, and `adjunct` still stays unregistered.
+
+**Next.**
+
+8. **C12**, a per-paragraph spend decision before the per-phrase ordering. A uniform quota makes
+   the linter edit paragraphs the editor left alone, and no ranking improvement can fix that.
+   This is restraint arriving early because coverage arrived, exactly as C7 predicted.
+9. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
    bounding it. Triage the candidates with the "attested by neither editor" class first.
-8. **C1**, the generation spine, tested in isolation before any family depends on it.
-9. **C7**, restraint, once there is enough coverage for it to matter.
+10. **C1**, the generation spine, tested in isolation before any family depends on it.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
 edits arbitrated.

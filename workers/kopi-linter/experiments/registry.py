@@ -72,7 +72,17 @@ METHODS = (
     ),
     Method(
         "adjunct/ranked", "adjunct", _adjunct(model="ranked"),
-        "band as budget: propose freely, order by droppability, cut to the ceiling",
+        "band as budget: propose freely, order by droppability, spend the word target",
+    ),
+    Method(
+        "adjunct/ranked-arg", "adjunct", _adjunct(model="ranked", argument_ceiling=0.30),
+        "as ranked, plus a distributional argument test: refuse a preposition the "
+        "governor takes 30% of the time or more",
+    ),
+    Method(
+        "adjunct/ranked-arg-strict", "adjunct",
+        _adjunct(model="ranked", argument_ceiling=0.15),
+        "as ranked-arg, but half as tolerant before calling a preposition obligatory",
     ),
     Method(
         "adjunct/syntactic", "adjunct", _adjunct(model="syntactic"),

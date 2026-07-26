@@ -144,20 +144,38 @@ REALISATION = (
     ),
 )
 
+# Adjunct cases run at corpus paragraph length, around 110 words, and that is a
+# requirement rather than a stylistic choice. A ranked family spends a word
+# budget set from the band, so at the firm band a 38-word case can lose only five
+# words: every `fire` case failed because its target phrase did not fit, and
+# every `refuse` case passed because the protected phrase was never reachable.
+# Both readings were artefacts of case length. A case has to be big enough that
+# the method genuinely *could* make the mistake it is being tested for.
 ADJUNCT = (
     Case(
-        "The sample consisted of three interviews with early-career researchers. Each "
-        "conversation lasted about an hour and was recorded with the participant's consent. "
-        "Transcripts were coded descriptively before any thematic work began, and the "
-        "resulting code groups were reviewed twice.",
+        "The sample consisted of three interviews with early-career researchers working "
+        "across two departments. Each conversation lasted about an hour and was recorded "
+        "with the participant's consent, then transcribed in full before any coding began. "
+        "Recruitment ran through departmental mailing lists and word of mouth, which "
+        "produced a group that was more junior than the department as a whole. Transcripts "
+        "were coded descriptively in a first pass, and the resulting code groups were "
+        "reviewed twice before the thematic work started. Where a participant referred to "
+        "a colleague by name, the name was replaced with a generic description at the point "
+        "of transcription rather than afterwards.",
         "adjunct", "refuse",
         "'of three interviews' is the argument of 'consisted', not an adjunct",
         span="of three interviews",
     ),
     Case(
         "The study focuses on youth political communication and activism. Earlier work in "
-        "this area has tended to treat platforms as neutral channels rather than as active "
-        "participants. That assumption is what this chapter sets out to question.",
+        "this area has tended to treat platforms as neutral channels through which messages "
+        "pass, rather than as active participants in how those messages are shaped. That "
+        "assumption is what this chapter sets out to question, drawing on material gathered "
+        "over eighteen months of fieldwork. The argument is not that platforms determine "
+        "what young people say, which would replace one kind of determinism with another, "
+        "but that the shape of a feed makes some kinds of speech easier than others. "
+        "Establishing that requires attention to the ordinary texture of use rather than to "
+        "moments of obvious controversy.",
         "adjunct", "refuse",
         "'on youth political communication' is the argument of 'focuses'",
         span="on youth political communication and activism",
@@ -165,33 +183,53 @@ ADJUNCT = (
     Case(
         "Whether people keep scrolling depends on the recommendation system. Participants "
         "described the feed as something that pulled them along rather than something they "
-        "chose. The design of that system is therefore central to any account of their "
-        "experience.",
+        "chose, and several returned to that image without prompting in later sessions. "
+        "The design of that system is therefore central to any account of their experience, "
+        "even though none of them could describe how it worked in any detail. What they "
+        "could describe, often precisely, was how it felt to be caught by it late at night "
+        "when they had meant to stop an hour earlier. That gap between mechanism and "
+        "experience is where this chapter locates its argument.",
         "adjunct", "refuse",
         "'on the recommendation system' is the argument of 'depends'",
         span="on the recommendation system",
     ),
     Case(
         "This chapter draws on the perspective of other work in the field. It treats the "
-        "platform as an object of everyday practice rather than as a technical artefact. "
-        "The distinction matters for how the analysis proceeds.",
+        "platform as an object of everyday practice rather than as a technical artefact "
+        "with properties that can be read off its architecture. The distinction matters for "
+        "how the analysis proceeds, because it decides what counts as evidence: an "
+        "interface feature is interesting here only insofar as somebody noticed it and did "
+        "something with it. That commitment has costs, and the most obvious is that it "
+        "leaves the infrastructure itself largely undescribed. Other work has taken the "
+        "opposite route and described the infrastructure carefully while saying little "
+        "about how it is lived with.",
         "adjunct", "refuse",
         "'on the perspective' is the argument of 'draws'",
         span="on the perspective",
     ),
     Case(
-        "Participants were given an alias in the form of a randomly chosen name. "
-        "Interviewees who referred to other people by name had those names transcribed "
-        "generically, as brother, mother, or roommate. Locations were described in broad "
-        "geographic terms.",
+        "Data anonymisation proceeded in several steps. Participants were given an alias in "
+        "the form of a randomly chosen name, and that alias was used consistently across "
+        "field notes, transcripts and the final write-up. Interviewees who referred to "
+        "other people by name had those names transcribed generically, as brother, mother "
+        "or roommate, at the point of transcription. Locations were described in broad "
+        "geographic terms, particularly where a participant lived outside the city in which "
+        "the fieldwork was based. Care was taken not to name the universities participants "
+        "studied at, or their places of work, since either would narrow the field of "
+        "possible identities considerably.",
         "adjunct", "fire",
         "'in the form of a randomly chosen name' is a droppable adjunct",
         span="in the form of a randomly chosen name",
     ),
     Case(
-        "Notes were compiled into a spreadsheet after each session. In this spreadsheet, "
-        "each topic received its own row, while the notes were placed in separate columns "
-        "for each participant. This summary sheet gave a first overview of the data.",
+        "Notes were compiled into a spreadsheet after each session, usually the same "
+        "evening while the conversation was still fresh. In this spreadsheet, each topic "
+        "received its own row, while the notes were placed in separate columns for each "
+        "participant. This summary sheet gave a first overview of the data and made it "
+        "possible to see which topics had been covered thinly and which had been returned "
+        "to repeatedly without prompting. It also made the gaps visible early enough to "
+        "adjust the remaining sessions, which mattered more than the tidiness of the "
+        "record itself.",
         "adjunct", "fire",
         "sentence-initial locative adjunct, droppable with its comma",
         span="In this spreadsheet",
@@ -199,7 +237,12 @@ ADJUNCT = (
     Case(
         "Notes were taken by the researcher during the interview sessions. They recorded "
         "what was said about each of the main topics covered, and were written up the same "
-        "evening while the conversation was still fresh.",
+        "evening while the conversation was still fresh in mind. These notes were not "
+        "verbatim and were never treated as a substitute for the transcript, but they "
+        "carried something the transcript did not: a sense of which answers had come "
+        "easily and which had taken effort to reach. That distinction shaped which passages "
+        "were returned to during coding, and it is the kind of judgement that is difficult "
+        "to reconstruct after the fact.",
         "adjunct", "fire",
         "temporal adjunct, droppable",
         span="during the interview sessions",

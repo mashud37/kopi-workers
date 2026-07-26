@@ -62,7 +62,14 @@ def _adjuncts(samples, nlp, minimum: int) -> Path:
     seen, dropped = adjuncts.base_rate(result)
     ui.ok(f"{seen} prepositional phrases, {dropped} dropped by the gold editor "
           f"({100.0 * dropped / seen if seen else 0:.1f}% base rate)")
-    written = adjuncts.write_table(result, TABLES["adjunct"], minimum=minimum)
+
+    bar = BatchProgress(len(samples), "surveying governor attachment")
+    attach = adjuncts.attachment(samples, nlp, on_progress=lambda i, n, s: bar.advance())
+    bar.finish()
+    ui.ok(f"{len(attach['governors'])} governors, {len(attach['pairs'])} governor-preposition "
+          f"pairs, measured on the originals alone")
+
+    written = adjuncts.write_table(result, TABLES["adjunct"], minimum=minimum, attach=attach)
     for level, count in written.items():
         ui.info(f"{level}: {count} keys seen at least {minimum} times")
     return TABLES["adjunct"]

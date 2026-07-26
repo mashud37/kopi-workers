@@ -53,10 +53,13 @@ class Licence:
         minimum: fewest observations before an induced rate is trusted.
         flat: confidence the syntactic baseline asserts, having no evidence of
             its own to offer.
+        argument_ceiling: refuse when the governor takes this preposition at
+            least this often. 1.0 disables the test. See :func:`is_argument`.
     """
     model: str = "ranked"
     minimum: int = 5
     flat: float = 0.75
+    argument_ceiling: float = 1.0
 
 
 DEFAULT = Licence()
@@ -89,6 +92,23 @@ def commonness(content) -> float:
     zipf = _zipf()
     scores = [zipf(lemma, "en") for lemma in sorted(content)]
     return sum(scores) / len(scores) if scores else 0.0
+
+
+def is_argument(prep, governor, ceiling: float) -> bool:
+    """Whether this preposition looks obligatory for this governor.
+
+    The argument-versus-adjunct test, asked distributionally rather than from a
+    verb lexicon. "Depends" takes "on" in most of its occurrences, so "on" is its
+    argument and may not be dropped; "written" spreads across "in", "with",
+    "for" and many others, so no single one of them is obligatory. Measured on
+    the originals alone, so this licence is a fact about the language rather than
+    about one teacher's edits, and should transfer to unseen prose.
+    """
+    if ceiling >= 1.0:
+        return False
+    table = _table("attachment")
+    entry = table.get(f"{governor.pos_}:{governor.lemma_.lower()}:{prep.lemma_.lower()}")
+    return bool(entry) and entry[0] >= ceiling
 
 
 def droppability(prep, governor, content, minimum: int = 5) -> float:
@@ -147,6 +167,8 @@ def _span(doc, start: int, end: int) -> tuple[int, int]:
 
 
 def _confidence(prep, governor, content, licence: Licence) -> tuple[float, str]:
+    if is_argument(prep, governor, licence.argument_ceiling):
+        return 0.0, "argument"
     if licence.model == "syntactic":
         return licence.flat * _structural(prep, governor, content), "structural"
     if not _structural(prep, governor, content):
