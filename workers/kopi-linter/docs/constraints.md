@@ -316,18 +316,78 @@ and nowhere near sufficient.
 rate used as a confidence, a threshold it could not reach, two firings. That was read at the time
 as a fact about light-verb constructions. It was a fact about the architecture.
 
-**Strategy for the next cycle: band as budget, not as threshold.** For deletion families the band
-should rank candidates by droppability and take them until the word target is met, rather than
-admitting everything above a fixed probability. `lint/select.py` already carries budget machinery
-that nothing currently uses, and `bands.admits` is the wrong gate for this family. The comparison
-that settles it is `adjunct/ranked` against the four models above, on the same cases and corpus.
+**Strategy: band as budget, not as threshold.** For deletion families the band should rank
+candidates by droppability and take them until the word target is met, rather than admitting
+everything above a fixed probability. `lint/select.py` already carries budget machinery that
+nothing currently uses, and `bands.admits` is the wrong gate for this family.
 
-This is a change to the selection stage rather than to a rule, so it belongs in its own cycle
-with its own evaluation, not bolted onto this one.
+## C10. The rate ranks even though it cannot license
 
-**Second candidate, if ranking is not enough.** Condition the rate on the band as well as the
-frame. The gradient is known to exist (`typology.md` section 1.3 puts `adjunct` at 7.1% of
-clarity activity and 9.6% of aggressive), and it is cheap to add to the survey.
+**Confirmed.** Ranking is separable from the pipeline and much cheaper to evaluate: in each
+paragraph the gold editor dropped some number of the phrases present, so take that number as
+given, order the candidates, and ask how many of the top choices were the editor's. `manage.py
+rank`, all 1,523 gold paragraphs, of which 883 both dropped and kept a phrase, 14,719 candidates.
+
+| Scorer | precision@k | lift over random | MAP |
+|---|---:|---:|---:|
+| **rate + commonness** | **0.432** | **1.88x** | 0.527 |
+| rate + earliness | 0.420 | 1.83x | 0.523 |
+| rate | 0.415 | 1.81x | 0.517 |
+| commonness | 0.332 | 1.44x | 0.422 |
+| earliness | 0.323 | 1.41x | 0.424 |
+| *random* | *0.230* | *1.00x* | *0.291* |
+| depdist | 0.185 | 0.80x | 0.241 |
+| redundancy | 0.154 | 0.67x | 0.255 |
+| words | 0.144 | 0.63x | 0.193 |
+
+The ordering is stable: an earlier pass over 250 paragraphs put the same three scorers on top in
+the same order, at 1.77x, 1.62x and 1.64x.
+
+**The induced rate is a good ranker and a useless licence.** Same statistic, same table, 1.81x
+random as an ordering after C9 showed it could not clear any threshold. That settles the design:
+the rate stays, the threshold goes, and the band becomes a budget.
+
+**Three negative results worth as much as the positive one.** All three are techniques this
+project had already committed to on paper.
+
+*Redundancy is anti-predictive, at 0.67x random.* A phrase whose content words recur elsewhere in
+the paragraph is markedly **less** likely to be dropped. Recurrence marks topical importance, not
+redundancy. This is a direct hit on `typology.md` D1, which proposed reusing kopi-editor's
+IDF-weighted overlap machinery for exactly this purpose: for phrase-level dropping it would have
+actively chosen the wrong phrases. The machinery may still be right for whole-sentence dropping,
+where it was originally built, but that now needs its own test rather than an assumption.
+
+*Dependency locality does not transfer.* `depdist` scores 0.80x random, below chance. Dependency
+distance minimisation is listed in `approaches.md` section 2.1 as a strong candidate for the
+engine's objective function; it does not predict which adjunct a human editor removes.
+
+*Length carries nothing.* `words` at 0.63x, the worst scorer tested. The obvious heuristic for a
+word-budget product, "drop the longest", is worse than shuffling.
+
+**What did work is the pairing of a corpus statistic with an information-theoretic one.** Neither
+`rate` nor `commonness` alone reaches 1.88x; together they do, and they are the only two scorers
+whose blend beats both its parts. The reading is that a drop needs the phrase to be both the kind
+of phrase editors drop *and* low in information, and that the two conditions are close to
+independent.
+
+**One methodological correction, recorded because it inverted a reading.** The first run scored
+`random` by calling `Random(0).random()` per candidate, which constructs a fresh generator each
+time and therefore returns a constant, silently turning the random baseline into a document-order
+baseline. It is now seeded once per paragraph. Separately, the reference must be the shuffle
+baseline (0.221) and not the corpus drop rate (0.137): shuffling beats the corpus rate because
+paragraphs with many drops contribute more picks, so a blind order gets more chances precisely
+where hits are easy. Comparing against the corpus rate credits every scorer with about 0.6x of
+lift it has not earned, and the first version of this table did exactly that.
+
+**Next.** Wire `select` to spend a word budget in rank order for families marked as ranked,
+and compare `adjunct/ranked` against the four C9 models on cases and corpus. The ranker to wire
+is `rate + commonness`, with the caveat that its blend weights are unfitted: `commonness` is
+divided by 7 to bring Zipf onto the same scale as a probability, which is a scaling choice and
+not a fitted one.
+
+**Still open, if ranking is not enough.** Condition the rate on the band as well as the frame.
+The gradient is known to exist (`typology.md` section 1.3 puts `adjunct` at 7.1% of clarity
+activity and 9.6% of aggressive) and it is cheap to add to the survey.
 
 ## C8. The irreducible core, restated with the build's evidence
 

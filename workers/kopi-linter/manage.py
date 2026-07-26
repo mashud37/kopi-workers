@@ -2,9 +2,45 @@
 import argparse
 import sys
 
-from cli import eval_cmd, evidence_cmd, experiment_cmd, induce_cmd, install, lint_cmd, ui
+from cli import (
+    eval_cmd,
+    evidence_cmd,
+    experiment_cmd,
+    induce_cmd,
+    install,
+    lint_cmd,
+    rank_cmd,
+    ui,
+)
 from cli import menu as menu_mod
 from lint import bands
+
+
+def _measurement_parsers(sub) -> None:
+    """Subcommands that read the gold corpus and write a report."""
+    evidence = sub.add_parser(
+        "evidence", help="Mine the gold edit corpus into a transformation report"
+    )
+    evidence.add_argument("--role", choices=["opus", "qwen", "all"],
+                          help="whose edits to analyse (default: ask)")
+    evidence.add_argument("-n", "--limit", type=int, help="stop after this many edits")
+
+    experiment = sub.add_parser(
+        "experiment", help="Compare every method for one transformation family"
+    )
+    experiment.add_argument("family", nargs="?", help="family to compare (default: ask)")
+    experiment.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    ranker = sub.add_parser(
+        "rank", help="Compare scoring functions for which phrase to drop first"
+    )
+    ranker.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    inducer = sub.add_parser("induce", help="Rebuild rule tables from the gold corpus")
+    inducer.add_argument("--family", default="support-verb", choices=induce_cmd.FAMILIES,
+                         help="which table to rebuild (default: support-verb)")
+    inducer.add_argument("--minimum", type=int, default=4,
+                         help="fewest observations for a construction to be tabled")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -13,13 +49,7 @@ def _parser() -> argparse.ArgumentParser:
         description="Deterministic, fully local plain-language linter for academic prose.",
     )
     sub = parser.add_subparsers(dest="command")
-
-    evidence = sub.add_parser(
-        "evidence", help="Mine the gold edit corpus into a transformation report"
-    )
-    evidence.add_argument("--role", choices=["opus", "qwen", "all"],
-                          help="whose edits to analyse (default: ask)")
-    evidence.add_argument("-n", "--limit", type=int, help="stop after this many edits")
+    _measurement_parsers(sub)
 
     linter = sub.add_parser("lint", help="Lint a document and write the edited text")
     linter.add_argument("file", nargs="?",
@@ -30,18 +60,6 @@ def _parser() -> argparse.ArgumentParser:
     scorer = sub.add_parser("evaluate", help="Score the linter against Opus on the gold corpus")
     scorer.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
     scorer.add_argument("--show", action="store_true", help="show edits Opus did not make")
-
-    experiment = sub.add_parser(
-        "experiment", help="Compare every method for one transformation family"
-    )
-    experiment.add_argument("family", nargs="?", help="family to compare (default: ask)")
-    experiment.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
-
-    inducer = sub.add_parser("induce", help="Rebuild rule tables from the gold corpus")
-    inducer.add_argument("--family", default="support-verb", choices=induce_cmd.FAMILIES,
-                         help="which table to rebuild (default: support-verb)")
-    inducer.add_argument("--minimum", type=int, default=4,
-                         help="fewest observations for a construction to be tabled")
 
     sub.add_parser("install", help="Check dependencies, models, and the corpus link")
     return parser
@@ -59,6 +77,8 @@ def main():
         return eval_cmd.run(limit=args.limit, show=args.show)
     if args.command == "experiment":
         return experiment_cmd.run(family=args.family, limit=args.limit)
+    if args.command == "rank":
+        return rank_cmd.run(limit=args.limit)
     if args.command == "induce":
         return induce_cmd.run(minimum=args.minimum, family=args.family)
     if args.command == "install":

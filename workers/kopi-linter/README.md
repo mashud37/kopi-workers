@@ -101,6 +101,7 @@ also a direct subcommand.
 |---|---|
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N]` |
+| Compare scoring functions for which phrase to drop first | `manage.py rank [-n N]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |
 | Mine the gold edit corpus into a transformation report | `manage.py evidence [--role {opus\|qwen\|all}] [-n N]` |
 | Rebuild rule tables from the gold corpus | `manage.py induce [--family {support-verb\|adjunct}] [--minimum N]` |

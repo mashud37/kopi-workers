@@ -73,7 +73,8 @@ Status vocabulary, used strictly:
 | `harness.py` | Function-word deletions checked on the anchored surface, because the content-lemma test degenerates to a constant | built, unverified |
 | | Grammaticality check | **missing**; this is what would have caught the it-cleft |
 | | Damage rate on a hand-checked held-out set | **missing**; nothing substitutes for it |
-| | Method-versus-method comparison for one family | **missing**; `experiments/` |
+| `experiments/compare.py` | Method-versus-method comparison for one family, cases plus corpus | running |
+| `experiments/ranking.py` | Ranking evaluation (precision at oracle k, MAP) against a shuffle baseline, decoupled from the pipeline | running |
 
 ## 6. Headline numbers, with their caveats
 
