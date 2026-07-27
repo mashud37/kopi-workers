@@ -45,8 +45,13 @@ class Gates:
     """Which licence conditions to enforce. Defaults are the shipped rule.
 
     Attributes:
-        copula_only: refuse when the deleted span holds anything but forms of
-            "be", which is what stops the rule eating modals and adverbs.
+        copula_only: require the deleted auxiliary chain to end in a form of
+            "be", which separates the passive "who had been using" from the
+            active perfect "that has shaped". It no longer carries the job of
+            keeping modals and adverbs out of the span; :func:`_survivor` does
+            that by construction, and the ablation is correspondingly weak,
+            changing one firing in 400 paragraphs because :func:`_copula`
+            already demands a be-auxiliary on the participle branch.
         subject_relativiser: refuse when the relativiser is not the clause
             subject, which is what stops it stranding an object.
         adjective_complement: refuse a bare predicate adjective, which cannot
@@ -63,22 +68,47 @@ class Gates:
 DEFAULT = Gates()
 
 
-def _deletes_only_copula(doc, relativiser, target) -> bool:
-    """Whether the span about to be deleted holds nothing but forms of "be".
+def _survivor(doc, relativiser, limit, gates: Gates):
+    """The first token that survives the reduction, or None when it is unsafe.
 
-    A reduction removes everything from the relativiser up to the surviving
-    phrase, so anything else caught in between is destroyed with it. Two kinds of
-    word live there and neither may go: a modal ("a resource that people **can**
-    use creatively") and an adverb ("practices that are **increasingly**
-    personalised"). Requiring the span to be copular auxiliaries only is what
-    makes this a reduction rather than a deletion.
+    The span is **built rather than checked**, which is the whole point. The
+    earlier version asked whether everything between the relativiser and the
+    clause head was a copula and refused whenever anything else turned up. That
+    conflates two questions: what makes the reduction safe, and how much of the
+    text it may delete. Refusing on an adverb ("that is *socially* organised")
+    or on a perfect passive ("who *had been* using") threw away reductions that
+    are perfectly sound; only the boundary was wrong. Stopping the span at the
+    end of the auxiliary chain instead of at the clause head keeps the adverb
+    and deletes exactly the words that carry no meaning of their own.
+
+    Two conditions still refuse outright, because no boundary rescues them:
+
+    * a **modal** anywhere in the chain, since "that can be used" reduces to
+      "can be used" and strands a finite modal on the noun.
+    * a chain that does not end in a form of **"be"**, which is what separates
+      the passive "who had been using" from the active perfect "that has
+      shaped". Reducing the latter yields "a conversation recently shaped a
+      relationship", a main clause asserting something nobody claimed.
+
+    Returns:
+        The token the surviving phrase starts at, or ``None`` to refuse.
     """
-    for token in doc[relativiser.i + 1:target.i]:
+    chain = []
+    for token in doc[relativiser.i + 1:limit.i]:
         if token.is_space or token.is_punct:
             continue
-        if token.tag_ == "MD" or token.pos_ != "AUX" or token.lemma_.lower() != "be":
-            return False
-    return True
+        if token.tag_ == "MD":
+            return None
+        if token.pos_ != "AUX":
+            return token if _copular_chain(chain, gates) else None
+        chain.append(token)
+    return limit if _copular_chain(chain, gates) else None
+
+
+def _copular_chain(chain, gates: Gates) -> bool:
+    if not chain:
+        return False
+    return not gates.copula_only or chain[-1].lemma_.lower() == "be"
 
 
 def _is_cleft_pivot(token) -> bool:
@@ -153,9 +183,10 @@ def _participle_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit 
     confidence = _PARTICIPLE.get(clause.tag_)
     if _copula(clause) is None or confidence is None or clause.idx <= relativiser.idx:
         return None
-    if gates.copula_only and not _deletes_only_copula(doc, relativiser, clause):
+    survivor = _survivor(doc, relativiser, clause, gates)
+    if survivor is None:
         return None
-    return _make(text, relativiser, clause, "relative.participle", confidence)
+    return _make(text, relativiser, survivor, "relative.participle", confidence)
 
 
 def _copular_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | None:
@@ -164,9 +195,10 @@ def _copular_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | N
     predicate, confidence = _predicate_after_copula(clause, gates)
     if predicate is None or predicate.idx <= relativiser.idx:
         return None
-    if gates.copula_only and not _deletes_only_copula(doc, relativiser, predicate):
+    survivor = _survivor(doc, relativiser, predicate, gates)
+    if survivor is None:
         return None
-    return _make(text, relativiser, predicate, "relative.copular", confidence)
+    return _make(text, relativiser, survivor, "relative.copular", confidence)
 
 
 def propose(doc, gates: Gates = DEFAULT):

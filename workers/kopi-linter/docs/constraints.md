@@ -30,23 +30,40 @@ changing, and placing it. None of that infrastructure exists, so the families th
 work in every real example (voice restoration, nominalisation, sentence merge, lexical
 substitution) are not merely unbuilt, they are unbuildable in the current architecture.
 
-**How far deletion alone can go.** Deletion-reachable word counts from `typology.md` section
-1.2, assuming a family is reachable when its dominant subtype removes rather than rewrites:
+**How far deletion alone can go. Corrected 2026-07-26: 68.9%, not 46%.** The original figure
+classified whole families as deletion-reachable or not, by their dominant subtype. Measured
+instead per finding, by whether the target span is empty, the answer is much higher, because
+several families I had written off as generation are overwhelmingly deletion:
 
-| Family | Words moved | Deletion-reachable |
-|---|---:|---:|
-| `sentence` dropping | 8,255 | 8,255 |
-| `adjunct` (92% is PP-dropped) | 6,374 | ~5,865 |
-| `relative-clause` | 1,043 | 1,043 |
-| `stance` | 883 | 883 |
-| `modifier` / `intensifier` / `filler` | 765 | 765 |
-| `clause` (16% is clause-dropped) | 3,208 | ~513 |
-| **Total** | | **~17,300 of 37,622 (46%)** |
+| Family | Dropped | Rewritten | Deletion share | Drop decisions | Words per decision |
+|---|---:|---:|---:|---:|---:|
+| `sentence` | 8,255 | 0 | 100% | 457 | 18.1 |
+| `adjunct` | 5,640 | 734 | 88% | 1,722 | 3.3 |
+| `clause` | 3,000 | 208 | 94% | 724 | 4.1 |
+| `realisation` | 2,052 | 234 | 90% | 1,573 | 1.3 |
+| `voice` | 1,895 | 1,137 | 62% | 462 | 4.1 |
+| `phrase` | 1,215 | 5,961 | 17% | 426 | 2.9 |
+| `relative-clause` | 1,001 | 42 | 96% | 184 | 5.4 |
+| `stance` | 860 | 23 | 97% | 612 | 1.4 |
+| `lexical` | 821 | 41 | 95% | 778 | 1.1 |
+| `modifier` | 580 | 28 | 95% | 440 | 1.3 |
+| `support-verb` | 0 | 2,600 | 0% | 0 | |
+| `nominalisation` | 0 | 333 | 0% | 0 | |
+| **Total** | **25,930** | **11,692** | **68.9%** | | |
 
-So a purely deleting linter tops out near **half** of Opus's word reduction, and only if every
-one of those families is built and licensed perfectly. This is the single most important number
-in the document: it sets the ceiling of the current architecture and says that a generation
-spine is not optional, only deferrable.
+`clause` at 94% and `voice` at 62% are the corrections that matter: both were counted as
+generation families and both are mostly Opus cutting rather than rewriting. Only `phrase`,
+`support-verb` and `nominalisation` genuinely require words to be written.
+
+So a purely deleting linter tops out near **seven tenths** of Opus's word reduction, not half,
+and only if every one of those families is built and licensed perfectly. A generation spine is
+still not optional, but it is further deferrable than this document claimed.
+
+**The second column of that table matters as much as the first.** Words per decision ranges from
+18.1 (`sentence`) to 1.1 (`lexical`). Every decision is a licence risk and every licence risk is
+paid for in accuracy, so for an engine whose binding constraint is precision, the families worth
+building first are the ones that move the most words per decision taken. `sentence` moves 5.5x
+more per decision than `adjunct`, the family this project has spent most of its cycles on.
 
 **Strategy.** Defer generation, but stop pretending it is a family. Build it once as shared
 infrastructure: `lemminflect` for inflection, the parse for agreement features, and a
@@ -55,8 +72,14 @@ form. Then voice, nominalisation, connective and lexical all become licence prob
 engineering problems.
 
 **Experiments.**
-1. *Feasibility floor.* Build the ~46% deletion ceiling into the harness as a reference line, so
-   any deletion family's contribution is reported against what deletion can ever achieve.
+1. *Feasibility floor.* Build the deletion ceiling into the harness as a reference line, so any
+   deletion family's contribution is reported against what deletion can ever achieve. **Convert
+   the units carefully.** 68.9% is a share of *words moved*; closure is denominated in *edit
+   operations*, of which the corpus holds 52,749. Deleting a word costs one operation, so the
+   25,930 droppable words are 49.2% of the gap, and that is the reach ceiling for a
+   deletion-only engine: **49.2 closure points at perfect accuracy, 25.6 at today's 76%, 39.4 at
+   90%.** The linter's own run confirms the conversion, having spent 352 operations to remove
+   349 words.
 2. *Generation spine, tested in isolation.* Given a gold (source lemma, target lemma, slot)
    triple mined from the `derivational-swap` and `morphology` families, how often does the
    realiser produce Opus's exact surface form? A spine that scores below about 95% here will
@@ -568,6 +591,69 @@ paraphrase stays last.
 
 ---
 
+## C13. Linguistic validity does not predict attestation
+
+**Evidence.** Two extensions to the relative-clause rule were diagnosed by walking all 2,719
+relative clauses in the corpus originals and attributing each refusal to the gate that caused
+it. Both are textbook whiz-deletion. Their attestation could not be more different
+(`manage.py probe`, counting only candidates whose treatment in the gold is decidable):
+
+| Generator | Candidates | attested | declined | rate | Verdict |
+|---|---:|---:|---:|---:|---|
+| `relative/all-gates`, the shipped rule | 186 | 16 | 23 | **41.0%** | built |
+| `relative/lexical-probe`, `which revolve` to `revolving` | 647 | 1 | 169 | **0.6%** | **refused** |
+
+The second is the larger opportunity by a factor of three and a half, is described in every
+grammar of English, and Opus declines it 169 times to 1.
+
+**Anchor the probe on the left, or it lies.** The first version of this measurement did not, and
+reported the shipped rule at 15 of 15 with no counterexamples. The reduced form is usually a
+*suffix* of the original, so a gold that kept "that is socially organised" contains "socially
+organised" and scored as attested for a reduction it never made. Prefixing three words of
+untouched context makes the two readings mutually exclusive. The corrected figure is 41%, and the
+lesson is the one this document keeps relearning: a test that cannot return "declined" is not a
+test, and it will always agree with whatever is under it.
+
+**Three numbers, one rule, all correct.** The shipped rule reads 86% on the harness attestation
+ceiling, 76.1% on closure accuracy and 41% on the probe. They measure different things and the
+spread is informative rather than contradictory: the ceiling counts the 147 paragraphs Opus
+rewrote wholesale as attested by default, closure counts them as progress because a small
+deletion inside a larger one does move the text toward the gold, and the probe refuses to count
+them at all. Use the probe to decide whether to build, closure to decide whether it worked.
+
+**Why it is a constraint.** A rule's licence cannot be argued from grammar. "This transformation
+is valid English" and "this editor performs this transformation" are independent claims, and only
+the second one predicts closure. Building the lexical-verb reduction would have added 647
+instances of reach at roughly 1% accuracy; by the closure identity that multiplies to `2(0.01) -
+1 = -0.98`, so it is very nearly pure damage. In any coverage-based measure it would have looked
+like the single biggest advance the project had made.
+
+**What this retro-explains.** The withdrawn support-verb family and the unregistered adjunct
+family were both argued from linguistic soundness first and measured second. The order has to be
+the other way round, and it is cheap: an attestation probe over the gold corpus costs one parse
+pass and answers the question before any rule is written.
+
+**Strategy.** No family is built before an attestation probe on the construction it targets. The
+probe is the same shape every time: find the construction in the originals, apply the intended
+transformation, and ask whether the gold contains the result, the original, or neither. Report
+the ratio among decidable cases, since "dropped or rewritten" is the majority class everywhere
+and tells you nothing.
+
+**Experiments.**
+1. ~~*Probe before build, as a subcommand.*~~ Built: `manage.py probe <generator>`, over any
+   `doc -> Edits` callable including deliberately loose ones with no licence at all. Looseness is
+   the point, since the question is asked before the licence exists. The refused lexical-verb
+   generator is kept in `rules/probe_lexical_relative.py` and registered under its own family so
+   no experiment picks it up, which keeps this finding reproducible.
+2. *Retro-probe the queue.* Run it over the families in `plan.md` section 3 before any of them is
+   scheduled, and expect at least one more to die the way the lexical-verb reduction did.
+3. *Calibrate the probe against closure.* The 41%/76.1% spread is explained above but not
+   measured. Probing a generator and then shipping it gives both numbers on the same edits, and
+   two or three such pairs would say what probe rate predicts positive marginal closure. Until
+   then, 20% is a guess dressed as a threshold.
+
+---
+
 ## Ordering
 
 Derived from the constraints rather than from the family sizes, which is the change from
@@ -603,16 +689,26 @@ Derived from the constraints rather than from the family sizes, which is the cha
    disguise. On precision, which is the metric that matters here, firing only where a strong
    candidate exists gives a 1.24x lift on 47% of paragraphs.
 
+9. ~~**Phase 1**, harvest the relative-clause family.~~ Built, as **C13**. The impure-span fix
+   took closure from 0.2% to 0.3% at 72.3% marginal accuracy; the fifteen-times-larger
+   lexical-verb extension was refused on 1.1% attestation. The family is now close to exhausted:
+   96% of its gold word movement is Opus dropping the clause, not reducing it.
+
 **Next.**
 
-9. **C12a**, wire that high-precision gate as a restraint rule and re-measure the attestation
-   ceiling. Cheap, and the result is already in hand.
-10. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
+10. **C12a**, wire the high-precision gate as a restraint rule and re-measure the attestation
+    ceiling. Cheap, and the result is already in hand.
+11. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
+    bounding it, and now blocking: closure rewards agreement with one editor, so a rule that is
+    right about Opus and wrong about English raises it. Triage with "attested by neither" first.
+12. **`sentence` dropping**, promoted past `adjunct` by C1's corrected table. 8,255 words, 100%
+    deletion, and 18.1 words per decision against `adjunct`'s 3.3. For a precision-limited engine
+    the right family is the one that moves the most words per licence risk taken. Needs C12b.
+13. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
     choose which paragraphs absorb it. The first thing in this project that cannot be decided one
     paragraph at a time, and `typology.md` D6 now confirmed rather than assumed.
-11. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
-    bounding it. Triage the candidates with the "attested by neither editor" class first.
-12. **C1**, the generation spine, tested in isolation before any family depends on it.
+14. **C1**, the generation spine, tested in isolation before any family depends on it. Further
+    deferrable than this document used to claim, since deletion reaches 68.9% and not 46%.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
 edits arbitrated.

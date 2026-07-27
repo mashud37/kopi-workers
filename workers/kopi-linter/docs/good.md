@@ -103,11 +103,26 @@ without handling its negative cases has not handled the family.
 | Must not fire | Why | Status |
 |---|---|---|
 | `It is X **that is** key to my thesis` | it-cleft; the pivot is not a relative clause and the sentence loses its predicate | **observed breaking** |
-| `the resource **that people can** use creatively` | deleting the span destroys the modal | fixed, `_deletes_only_copula` |
-| `practices **that are increasingly** personalised` | deleting the span destroys the adverb and with it a claim | fixed, same gate |
+| `the resource **that people can** use creatively` | deleting the span destroys the modal | fixed, `_survivor` refuses on `MD` |
+| `a conversation **that has** recently shaped a relationship` | active perfect, not passive; reducing it yields a main clause asserting something nobody claimed | fixed, be-terminal chain |
 | `the theory **that is** central` | bare adjective cannot follow the noun | fixed, complement required |
 | `the data **which we** collected` | relativiser is the object, not the subject; deleting it strands the verb | fixed, `_SUBJECT_DEPS` gate |
 | `the claim, **which is** false, was repeated` | non-restrictive; reduction changes the clause's relation to the head | untested |
+
+Must fire, and stop in the right place:
+
+| Must fire | Why it was refused before | Status |
+|---|---|---|
+| `practices **that are** increasingly personalised` | the adverb was inside the deleted span, so the rule refused rather than moving the boundary | fixed, `survives="increasingly"` |
+| `participants **who had been** using TikTok` | the chain holds `had`, which the old purity test rejected although the reduction is sound | fixed, `survives="using"` |
+
+**The change of verdict on the adverb case is recorded here deliberately**, per §7. It was a
+`refuse` case whose stated reason was "deleting the span destroys the adverb". The span no longer
+contains the adverb, so the reason had become false of the output and the case was testing an
+implementation detail rather than a licence condition. It is now a `fire` case that additionally
+asserts the adverb survives. The `survives` field exists because of it: `span` matches by
+containment, so a case asking for `that are` to go is passed by a rule that deletes
+`that are increasingly` and eats the adverb with it, which is precisely the §3.4 defect class.
 
 ### 3.2 Surface realisation
 

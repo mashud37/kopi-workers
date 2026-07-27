@@ -9,6 +9,7 @@ from cli import (
     induce_cmd,
     install,
     lint_cmd,
+    probe_cmd,
     rank_cmd,
     ui,
 )
@@ -35,6 +36,12 @@ def _measurement_parsers(sub) -> None:
         "rank", help="Compare scoring functions for which phrase to drop first"
     )
     ranker.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    prober = sub.add_parser(
+        "probe", help="Ask whether Opus performs a transformation, before building it"
+    )
+    prober.add_argument("method", nargs="?", help="candidate generator (default: ask)")
+    prober.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
 
     inducer = sub.add_parser("induce", help="Rebuild rule tables from the gold corpus")
     inducer.add_argument("--family", default="support-verb", choices=induce_cmd.FAMILIES,
@@ -79,6 +86,8 @@ def main():
         return experiment_cmd.run(family=args.family, limit=args.limit)
     if args.command == "rank":
         return rank_cmd.run(limit=args.limit)
+    if args.command == "probe":
+        return probe_cmd.run(name=args.method, limit=args.limit)
     if args.command == "induce":
         return induce_cmd.run(minimum=args.minimum, family=args.family)
     if args.command == "install":

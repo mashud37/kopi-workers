@@ -103,6 +103,7 @@ also a direct subcommand.
 | Action | Command |
 |---|---|
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
+| Ask whether Opus performs a transformation at all | `manage.py probe <generator> [-n N]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N]` |
 | Compare scoring functions for which phrase to drop first | `manage.py rank [-n N]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |
@@ -110,10 +111,19 @@ also a direct subcommand.
 | Rebuild rule tables from the gold corpus | `manage.py induce [--family {support-verb\|adjunct}] [--minimum N]` |
 | Check dependencies, models, and the corpus link | `manage.py install` |
 
-`experiment` is the one to reach for while the design is open: it runs every registered
-method for a family against the same licence cases and the same corpus, and writes a
-comparison. A method with no alternative to be compared against has been measured, not
-evaluated.
+**`probe` comes first, before anything is built.** Point any candidate generator at the gold
+corpus and it reports what Opus did there: `attested`, `declined`, or `rewritten or
+dropped`. Only the first two are decidable and only their ratio means anything. This exists
+because linguistic validity turned out not to predict attestation at all: reducing `which
+revolve around time` to `revolving around time` is textbook whiz-deletion described in every
+grammar of English, and Opus declines it 169 times to 1. Building it would have added 647
+instances of reach at an accuracy that *subtracts* closure, while looking like the project's
+biggest advance in any coverage-based measure.
+
+`experiment` is the one to reach for once a family survives the probe: it runs every
+registered method for a family against the same licence cases and the same corpus, and
+writes a comparison. A method with no alternative to be compared against has been measured,
+not evaluated.
 
 `--role opus` measures the gold standard, `--role qwen` measures the cheap served model on
 the same paragraphs, and the difference between the two reports is the editorial judgement
@@ -189,7 +199,7 @@ paragraphs, against Opus's edit of the same paragraph at the same band:
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **0.2%** | 0.4% | 78.1% |
+| **kopi-linter** | **0.3%** | 0.7% | 76.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
 `reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
@@ -207,15 +217,20 @@ composite does not:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2439 | 0.0000 | 0.7316 | 0.0000 |
-| kopi-linter | 0.5250 | 0.0012 | 0.7322 | 0.8415 |
+| kopi-linter | 0.5208 | 0.0018 | 0.7324 | 0.8280 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
 That table says the linter beats a 32B model, which is why it is not the headline. The
-score is delete precision earned on 108 changed paragraphs out of 1,523 and 229 words moved
-against Opus's 23,047, and precision over few deletions is easy. The `add` column, 0.0012
+score is delete precision earned on 154 changed paragraphs out of 1,523 and 349 words moved
+against Opus's 23,047, and precision over few deletions is easy. The `add` column, 0.0018
 against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
-every rule it has deletes. On 18 real body paragraphs Opus cuts 14.5% of the words, Qwen
-21.8%, and the linter 0.7%.
+every rule it has deletes.
+
+The two metrics have already disagreed once, usefully. The relative-clause extension of
+2026-07-26 moved closure up (0.2% to 0.3%) and SARI **down** (0.5250 to 0.5208), because
+SARI's delete component is precision-only by design and penalises doing more work at
+slightly lower precision even when that work is net-correct. For "how close are we to
+Opus", closure is right by construction.
 
 **What is nonetheless real.** Scoping the repair layer to edit joins (constraints C6) moved
 SARI from 0.4580 to 0.5250 and delete precision from 0.6408 to 0.8415, purely by making the

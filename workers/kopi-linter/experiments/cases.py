@@ -29,6 +29,13 @@ class Case:
             asks only whether the method did *anything*, which for a family that
             offers several candidates per paragraph is barely a test, and which
             fails a refuse case for editing some other phrase correctly.
+        survives: text that must **not** be inside the deleted span, on a case
+            that is otherwise expected to fire. ``span`` alone cannot express
+            this, because it matches by containment: a case asking for "that
+            are" to go is passed by a rule that deletes "that are increasingly"
+            and eats the adverb with it. Section 3.4 of ``good.md`` calls that
+            the single defect class behind most of the negative cases, so it
+            needs to be assertable rather than argued about in a docstring.
 
     A case has to be the size of the thing it tests. The first version of the
     adjunct cases was one sentence each, and every ``fire`` case failed: at the
@@ -42,6 +49,7 @@ class Case:
     why: str
     observed: bool = False
     span: str = ""
+    survives: str = ""
 
 
 RELATIVE = (
@@ -67,9 +75,30 @@ RELATIVE = (
     ),
     Case(
         "These are practices that are increasingly personalised by the platform.",
-        "relative-clause", "refuse",
-        "deleting the span destroys the adverb and with it a claim",
+        "relative-clause", "fire",
+        "the adverb must survive the reduction, not block it: 'that are' goes and "
+        "'increasingly personalised' stays",
         observed=True,
+        span="that are",
+        survives="increasingly",
+    ),
+    Case(
+        "She described a conversation that has recently shaped a relationship "
+        "with her sister over the last year.",
+        "relative-clause", "refuse",
+        "active perfect, not a passive: the auxiliary chain ends in 'have', and "
+        "reducing it yields 'a conversation recently shaped a relationship', a "
+        "main clause asserting something nobody claimed",
+        span="that has",
+    ),
+    Case(
+        "This study followed participants who had been using TikTok since "
+        "early 2019 and throughout the pandemic.",
+        "relative-clause", "fire",
+        "perfect passive: the whole auxiliary chain goes because it ends in "
+        "'be', which the older span test refused for containing 'had'",
+        span="who had been",
+        survives="using",
     ),
     Case(
         "The theory that is central has been widely discussed.",

@@ -15,7 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
-from rules import rule_adjunct, rule_relative
+from rules import probe_lexical_relative, rule_adjunct, rule_relative
 from rules.rule_adjunct import Licence
 from rules.rule_relative import Gates
 
@@ -52,13 +52,20 @@ METHODS = (
         "every licence condition enforced, including the it-cleft block",
         baseline=True,
     ),
+    # Probe-only, on its own family name so no experiment picks it up. Kept so
+    # that C13's refusal stays reproducible rather than resting on a script.
+    Method(
+        "relative/lexical-probe", "relative-clause-lexical",
+        probe_lexical_relative.propose,
+        "probe only, never registered: 'which revolve around' to 'revolving around'",
+    ),
     Method(
         "relative/no-cleft-gate", "relative-clause", _relative(block_cleft=False),
         "what shipped before 2026-07-26, which broke it-clefts",
     ),
     Method(
         "relative/no-copula-gate", "relative-clause", _relative(copula_only=False),
-        "ablation: allows modals and adverbs into the deleted span",
+        "ablation: drops the be-terminal test, so an active perfect may reduce",
     ),
     Method(
         "relative/no-complement-gate", "relative-clause",

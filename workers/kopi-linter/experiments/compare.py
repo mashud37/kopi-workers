@@ -83,6 +83,22 @@ def _fired(method, case, nlp) -> tuple[bool, str]:
     return _touched(case, acted), what
 
 
+def _swallowed(method, case, nlp) -> str:
+    """Text the case protects that the method deleted anyway, if any.
+
+    Separate from :func:`_touched` because it asks the opposite question. A case
+    can want an edit *and* want it to stop short, and containment matching
+    cannot express that on its own.
+    """
+    if not case.survives:
+        return ""
+    wanted = " ".join(case.survives.split()).lower()
+    for edit in method.propose(nlp(case.text)):
+        if wanted in " ".join(edit.source(case.text).split()).lower():
+            return f"deleted the protected text: {edit.source(case.text)!r}"
+    return ""
+
+
 def run_cases(method, nlp) -> tuple[int, list]:
     """Check one method against every case registered for its family."""
     failures = []
@@ -91,6 +107,10 @@ def run_cases(method, nlp) -> tuple[int, list]:
         fired, what = _fired(method, case, nlp)
         if (case.expect == "refuse") == fired:
             failures.append((case, what))
+            continue
+        swallowed = _swallowed(method, case, nlp)
+        if swallowed:
+            failures.append((case, swallowed))
     return len(relevant), failures
 
 
