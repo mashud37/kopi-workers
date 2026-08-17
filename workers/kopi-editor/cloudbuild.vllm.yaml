@@ -2,7 +2,7 @@
 # (region + PROJECT) and always passes it via --substitutions, so the project is
 # never hard-coded here. A manual `gcloud builds submit` must pass _IMAGE explicitly.
 substitutions:
-  _KOPI_MODEL: Qwen/Qwen3-32B-FP8   # FP8, not AWQ — a bf16-trained LoRA over AWQ corrupts tokens
+  _KOPI_MODEL: Qwen/Qwen3-32B-FP8   # FP8, not AWQ: a bf16-trained LoRA over AWQ corrupts tokens
 
 steps:
   # Pull the last image so its layers seed the build cache; `|| exit 0` makes the
@@ -11,7 +11,7 @@ steps:
     entrypoint: bash
     args: ['-c', 'docker pull ${_IMAGE} || exit 0']
   # --cache-from reuses the pulled layers, so an unchanged ~18GB model bake is NOT
-  # re-downloaded from Hugging Face when only the proxy code changed — code-only
+  # re-downloaded from Hugging Face when only the proxy code changed: code-only
   # rebuilds drop from ~50 min to a few. BuildKit + BUILDKIT_INLINE_CACHE=1 embeds
   # the layer-cache metadata --cache-from needs (the classic builder omits it).
   - name: gcr.io/cloud-builders/docker

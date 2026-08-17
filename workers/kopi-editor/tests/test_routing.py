@@ -24,9 +24,12 @@ def _diag(paragraphs, instructions_for=None, quotes=()):
 def test_returns_every_eligible_paragraph_with_instructions():
     paras = [f"Paragraph {i} " + "word " * 60 for i in range(8)]
     text = "\n\n".join(paras)
-    guarded, qmap = guard(text)
+    quoted = guard(text)
+    guarded, qmap = quoted["text"], quoted["qmap"]
     state = {
-        "text": guarded, "qmap": qmap, "target": word_count(guarded, qmap) - 200,
+        "text": guarded,
+        "qmap": qmap,
+        "target": word_count(guarded, qmap) - 200,
         "diagnosis": _diag(paras),
     }
 
@@ -51,7 +54,8 @@ def test_skips_quotes_and_short_paragraphs():
         "word " * 50,                # 3: eligible
     ]
     text = "\n\n".join(paras)
-    guarded, qmap = guard(text)
+    quoted = guard(text)
+    guarded, qmap = quoted["text"], quoted["qmap"]
     state = {"text": guarded, "qmap": qmap, "target": 0, "diagnosis": _diag(paras, quotes={1})}
 
     cands = step_concision.get_candidates(state)
@@ -62,7 +66,8 @@ def test_no_diagnosis_falls_back_without_spacy():
     """With no diagnosis, eligible non-quote paragraphs still route (no notes)."""
     paras = [f"Paragraph {i} " + "word " * 50 for i in range(3)]
     text = "\n\n".join(paras)
-    guarded, qmap = guard(text)
+    quoted = guard(text)
+    guarded, qmap = quoted["text"], quoted["qmap"]
     state = {"text": guarded, "qmap": qmap, "target": 0}  # no "diagnosis" key
 
     cands = step_concision.get_candidates(state)

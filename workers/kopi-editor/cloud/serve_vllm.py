@@ -1,18 +1,6 @@
-"""Cloud Run service — token-guarded proxy in front of a local vLLM server.
-
-POST /tighten?token=...  {messages: [...]}  -> {edited}
-GET  /healthz            liveness probe (binds immediately, see below)
-
-This presents the **same `/tighten` contract** as cloud/serve.py (the Ollama
-service), so the existing client (`cli/cloud.py`) talks to it unchanged — only
-BASE_URL/JOB_TOKEN differ. It relays the client-built chat messages to a local
-vLLM OpenAI server (127.0.0.1:8001) with Qwen3's reasoning mode **off**
-(`enable_thinking: false`), so the output is the edited paragraph, not a
-`<think>` trace.
-
-`/healthz` returns OK the moment the proxy is up — it does NOT wait for vLLM — so
-Cloud Run's ~240 s startup probe passes while vLLM loads the model in the
-background; `/tighten` returns 503 until vLLM's own /health is ready.
+"""Token-guarded proxy in front of a local vLLM server, presenting the same
+`/tighten` contract as cloud/serve.py so cli/cloud.py needs no changes.
+Relays chat messages with Qwen3 reasoning mode off.
 """
 import json
 import os
@@ -22,8 +10,8 @@ import urllib.error
 
 from flask import Flask, request, jsonify, abort
 
-# Top-level (not lazy inside the handler) so a packaging slip — kopi/ missing from the
-# image — fails at container startup and the build-time import check, never as a 500
+# Top-level (not lazy inside the handler) so a packaging slip (kopi/ missing from the
+# image) fails at container startup and the build-time import check, never as a 500
 # mid-request after a billed generation. citations is pure stdlib; no torch/spaCy here.
 from kopi.citations import restore_casing
 

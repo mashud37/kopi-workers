@@ -1,7 +1,7 @@
-# deploy.ps1 — build + deploy the kopi-editor GPU LLM service to Cloud Run (Windows).
+# deploy.ps1: build + deploy the kopi-editor GPU LLM service to Cloud Run (Windows).
 # Usage: set $env:PROJECT (or run `python manage.py deploy`, which prompts), then: .\deploy.ps1
 #
-# Native PowerShell mirror of deploy.sh — keep the two in sync. Builds the image
+# Native PowerShell mirror of deploy.sh. Keep the two in sync. Builds the image
 # (model baked in via cloudbuild.yaml), deploys a warm L4-GPU service, then writes
 # BASE_URL + JOB_TOKEN back into env.yaml.
 

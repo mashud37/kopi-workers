@@ -1,4 +1,5 @@
-"""`install` — idempotent first-time setup: env.yaml, folders, dependency check."""
+"""Set up the repo idempotently: env.yaml, folders, and a dependency check.
+"""
 import shutil
 import subprocess
 import sys
@@ -24,8 +25,11 @@ def run():
         legacy = config.legacy_cloud_config()
         if legacy:
             config.set_values({
-                "PROJECT": legacy.get("project"), "REGION": legacy.get("region"),
-                "SERVICE": "kopi-editor", "LANG": "british", "LLM": "cloud",
+                "PROJECT": legacy.get("project"),
+                "REGION": legacy.get("region"),
+                "SERVICE": "kopi-editor",
+                "LANG": "british",
+                "LLM": "cloud",
             })
             ui.ok("created env.yaml (seeded project/region from cloud.json)")
         elif config.ENV_EXAMPLE.exists():

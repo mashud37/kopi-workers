@@ -1,21 +1,17 @@
 import re
 from kopi.data_plain import CLICHE_REPLACEMENTS, WORD_SUBSTITUTIONS
+from kopi.pipeline import load_nlp
 from kopi.quote_guard import guard, unguard, word_count
 
 _POS_GATED = frozenset([
-    "previously", "subsequently", "currently", "presently", "formerly",
-    "recently", "nowadays",
+    "previously",
+    "subsequently",
+    "currently",
+    "presently",
+    "formerly",
+    "recently",
+    "nowadays",
 ])
-
-_nlp = None
-
-
-def _get_nlp():
-    global _nlp
-    if _nlp is None:
-        import spacy
-        _nlp = spacy.load("en_core_web_sm")
-    return _nlp
 
 
 def _para_num(text: str, phrase: str) -> str:
@@ -34,7 +30,7 @@ def _preserve_case(original: str, replacement: str) -> str:
     return replacement
 
 
-def _safe_for_adv(doc, word: str) -> set[int]:
+def _safe_for_adv(doc, word: str) -> set[int]:  # lint-style: ignore FN004
     safe_indices = set()
     for token in doc:
         if token.text.lower() == word and token.pos_ == "ADV":
@@ -68,11 +64,10 @@ def _apply_lookup(text: str, lookup: dict, changelog: list, step_label: str, doc
         if not matches:
             continue
         para_ref = _para_num(text, phrase)
-
-        def _repl(m, r=replacement):
-            return _preserve_case(m.group(0), r) if r else ""
-
-        new_text = pattern.sub(_repl, text)
+        new_text = text
+        for m in reversed(matches):
+            repl = _preserve_case(m.group(0), replacement) if replacement else ""
+            new_text = new_text[:m.start()] + repl + new_text[m.end():]
         if new_text != text:
             repl_display = f"'{replacement}'" if replacement else "(deleted)"
             changelog.append({"step": step_label, "detail": f"'{phrase}' -> {repl_display}", "para": para_ref})
@@ -85,20 +80,22 @@ def run(state: dict) -> dict:
     restored = unguard(state["text"], state["qmap"])
     changelog = []
 
+    nlp = load_nlp()
     try:
-        nlp = _get_nlp()
-        doc = nlp(restored)
+        doc = nlp(restored) if nlp is not None else None
     except Exception:
         doc = None
 
-    restored = _apply_lookup(restored, CLICHE_REPLACEMENTS, changelog, "Step 8 — Plain language (cliché)")
-    restored = _apply_lookup(restored, WORD_SUBSTITUTIONS, changelog, "Step 8 — Plain language (word)", doc)
+    restored = _apply_lookup(restored, CLICHE_REPLACEMENTS, changelog, "Step 8: Plain language (cliché)")
+    restored = _apply_lookup(restored, WORD_SUBSTITUTIONS, changelog, "Step 8: Plain language (word)", doc)
 
-    state["text"], state["qmap"] = guard(restored)
-    current = word_count(state["text"], state["qmap"])
+    quoted = guard(restored)
+    guarded, qmap = quoted["text"], quoted["qmap"]
+    state = {**state, "text": guarded, "qmap": qmap}
+    current = word_count(guarded, qmap)
     state["counts"]["step8"] = current
     state["log"].append({
-        "step": "Step 8 — Plain language",
+        "step": "Step 8: Plain language",
         "detail": f"{len(changelog)} substitution(s) -> {current} words",
         "para": None,
     })

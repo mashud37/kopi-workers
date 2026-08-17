@@ -1,8 +1,17 @@
 import re
 
 INTENSIFIER_LEMMAS = frozenset([
-    "very", "really", "quite", "rather", "somewhat", "fairly",
-    "highly", "largely", "extremely", "deeply", "particularly",
+    "very",
+    "really",
+    "quite",
+    "rather",
+    "somewhat",
+    "fairly",
+    "highly",
+    "largely",
+    "extremely",
+    "deeply",
+    "particularly",
 ])
 
 SKIP_AFTER_INTENSIFIER = frozenset(["than", "so", "enough", "when", "different"])
@@ -15,9 +24,21 @@ INTENSIFIER_DEP_PATTERN = [
         "RIGHT_ID": "adv",
         "RIGHT_ATTRS": {
             "DEP": "advmod",
-            "LEMMA": {"IN": ["very", "really", "quite", "rather", "somewhat",
-                             "fairly", "highly", "largely", "extremely",
-                             "deeply", "particularly"]},
+            "LEMMA": {
+                "IN": [
+                    "very",
+                    "really",
+                    "quite",
+                    "rather",
+                    "somewhat",
+                    "fairly",
+                    "highly",
+                    "largely",
+                    "extremely",
+                    "deeply",
+                    "particularly",
+                ],
+            },
         },
     },
 ]

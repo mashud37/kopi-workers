@@ -8,12 +8,16 @@ def _normalise(text):
 
 
 def test_common_american_spellings_are_mapped():
-    for am, br in [
-        ("behaviors", "behaviours"), ("personalization", "personalisation"),
-        ("recognize", "recognise"), ("analyze", "analyse"), ("center", "centre"),
-        ("socializing", "socialising"), ("prioritizes", "prioritises"),
+    for american, british in [
+        ("behaviors", "behaviours"),
+        ("personalization", "personalisation"),
+        ("recognize", "recognise"),
+        ("analyze", "analyse"),
+        ("center", "centre"),
+        ("socializing", "socialising"),
+        ("prioritizes", "prioritises"),
     ]:
-        assert AMERICAN_TO_BRITISH.get(am) == br
+        assert AMERICAN_TO_BRITISH.get(american) == british
 
 
 def test_normalise_preserves_case_and_quote_tokens():

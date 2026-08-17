@@ -9,8 +9,13 @@ def _diag():
         "unnecessary": {"hits": 16, "savings": 51},
         "redundancy": {"count": 9, "savings": 271},
         "paragraphs": [
-            {"index": 0, "words": 80, "is_quote": False,
-             "tags": {"plain-language", "passive", "long-sentence"}, "instructions": ["x", "y"]},
+            {
+                "index": 0,
+                "words": 80,
+                "is_quote": False,
+                "tags": {"plain-language", "passive", "long-sentence"},
+                "instructions": ["x", "y"],
+            },
             {"index": 1, "words": 10, "is_quote": True, "tags": set(), "instructions": []},
         ],
     }
@@ -52,7 +57,7 @@ def test_flesch_band():
     assert "plain English" in report.flesch_band(65)
     assert "very easy" in report.flesch_band(95)
     assert "very difficult" in report.flesch_band(10)
-    assert report.flesch_band(None) == "—"
+    assert report.flesch_band(None) == "-"
 
 
 def test_scale_bar_marks_value_and_target():

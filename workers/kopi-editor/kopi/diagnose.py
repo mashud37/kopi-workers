@@ -1,22 +1,6 @@
-"""Shared deterministic diagnosis — the single core behind all three routes.
-
-Parses the document **once** and produces:
-
-* **Document-level estimates** for the analysis report:
-    - STEP 2 — unnecessary words: filler/padding count + estimated word reduction.
-    - STEP 3 — redundant sentences: count + estimated word reduction.
-    - readability (Flesch) and total word count.
-* **Per-paragraph instructions**: a small, fixed vocabulary of *categorical*
-  editing directives (never verbatim document text), derived from cheap signals.
-  The LLM route hands these to the model so a cheaper-than-Opus model knows
-  exactly what each paragraph needs; the analysis route reports them.
-
-The detectors are reused, not reinvented: ``data_fillers`` / ``data_padding_tails``
-(unnecessary words), ``data_plain`` (clichés + long→short words), ``step_redundancy``
-(IDF-weighted restatement + merge candidates), and ``signals.sentence_features``
-(passive voice, sentence length, parse depth).
-
-This module never mutates text — it only reads the parse.
+"""Parse the document once, producing document-level estimates (fillers,
+redundant sentences, readability) plus per-paragraph editing instructions,
+shared by analyze, proof, and edit. Only reads the parse, never mutates text.
 """
 import re
 
@@ -29,14 +13,14 @@ from kopi import step_redundancy
 # Paragraphs shorter than this are left alone (too little to edit meaningfully).
 _MIN_PARA_WORDS = 40
 
-# Per-paragraph density thresholds for raising a tag. Deliberately low — a single
+# Per-paragraph density thresholds for raising a tag. Deliberately low: a single
 # clear hit is enough to nudge the model, and the directives are non-destructive.
 _WORDINESS_HITS = 1          # filler/padding phrases present
 _PLAIN_HITS = 1              # clichés or long words present
 _LONG_SENTENCE_WORDS = 40    # mean sentence length above this -> suggest splitting
 _PASSIVE_RATIO = 0.30        # fraction of sentences with a passive construction
 
-# The plain-language directive is ALWAYS applied — the plain-language rules run
+# The plain-language directive is ALWAYS applied: the plain-language rules run
 # regardless of their impact on word count.
 _PLAIN_LANGUAGE = (
     "Plain language: replace long or Latinate words with short plain ones; "
@@ -68,7 +52,7 @@ _SECTION_NUM = re.compile(r"^\d+(\.\d+)*\.?\s+\S")
 
 
 def _is_heading(para: str) -> bool:
-    """A title or section heading — never edited, and not a real paragraph.
+    """A title or section heading, never edited, and not a real paragraph.
 
     Caught: markdown headings (``# …``), numbered headings (``1.``, ``1.1 …``,
     ``2.3.4 …``), and short unnumbered titles (a handful of words, no terminal
@@ -81,20 +65,6 @@ def _is_heading(para: str) -> bool:
         return True
     words = first.split()
     return len(words) <= 10 and first[-1] not in ".?!:;," and first[0].isupper()
-
-
-def _snippet(para: str, n: int = 72) -> str:
-    """The paragraph's opening, truncated for a table cell."""
-    s = " ".join(para.split())
-    return (s[:n] + "…") if len(s) > n else s
-
-
-def _para_flesch(para: str):
-    try:
-        import textstat
-        return round(textstat.flesch_reading_ease(para))
-    except Exception:
-        return None
 
 
 def _phrase_count(text: str, phrase: str) -> int:
@@ -114,7 +84,7 @@ def _unnecessary_words(text: str) -> tuple[int, int]:
         for m in pattern.findall(text):
             hits += 1
             savings += len(m.split())
-    return hits, savings
+    return {"hits": hits, "savings": savings}
 
 
 def _plain_hits(text: str) -> int:
@@ -127,8 +97,34 @@ def _plain_hits(text: str) -> int:
     return hits
 
 
-def _redundancy_estimate(text: str, nlp) -> tuple[int, int, set[int]]:
-    """(redundant sentence count, estimated words, paragraph indices touched).
+def _content_lemmas(spans) -> list[set]:
+    """The content lemmas of each sentence, stop words and function words dropped."""
+    per_sentence = []
+    for span in spans:
+        lemmas = set()
+        for token in span:
+            if token.pos_ in step_redundancy._CONTENT_POS and not token.is_stop:
+                lemmas.add(token.lemma_.lower())
+        per_sentence.append(lemmas)
+    return per_sentence
+
+
+def _similarity_matrix(content: list[set], idf: dict) -> list[list[float]]:
+    """Every sentence against every other, by IDF-weighted overlap.
+
+    Lexical rather than embedded, so `analyze` stays fast and needs no model.
+    """
+    matrix = []
+    for left in content:
+        row = []
+        for right in content:
+            row.append(step_redundancy._weighted_overlap(left, right, idf))
+        matrix.append(row)
+    return matrix
+
+
+def _redundancy_estimate(text: str, nlp) -> dict:
+    """Redundant sentence `count`, estimated `words`, and the `paragraphs` touched.
 
     Reuses step_redundancy's IDF-weighted restatement detection on the whole
     document, then maps each flagged restatement back to its paragraph so the
@@ -139,18 +135,11 @@ def _redundancy_estimate(text: str, nlp) -> tuple[int, int, set[int]]:
     spans = [s for s in doc.sents if len(s.text.split()) >= step_redundancy._MIN_WORDS]
     sentences = [s.text.strip() for s in spans]
     if len(sentences) < 2:
-        return 0, 0, set()
+        return {"count": 0, "words": 0, "paragraphs": set()}
 
-    content = [
-        {t.lemma_.lower() for t in span if t.pos_ in step_redundancy._CONTENT_POS and not t.is_stop}
-        for span in spans
-    ]
+    content = _content_lemmas(spans)
     idf = step_redundancy._build_idf(content)
-
-    # Lexical similarity from the IDF-weighted overlap (no embedding model needed
-    # for the report — keeps `analyze` fast and dependency-light).
-    n = len(sentences)
-    sim = [[step_redundancy._weighted_overlap(content[i], content[j], idf) for j in range(n)] for i in range(n)]
+    sim = _similarity_matrix(content, idf)
     pairs = step_redundancy._select_redundant(sentences, content, sim, idf,
                                               sim_threshold=0.55, overlap_threshold=0.40)
 
@@ -162,16 +151,15 @@ def _redundancy_estimate(text: str, nlp) -> tuple[int, int, set[int]]:
             if snippet in para.lower():
                 touched.add(i)
                 break
-    return len(pairs), words, touched
+    return {"count": len(pairs), "words": words, "paragraphs": touched}
 
 
-def _paragraph_instructions(para: str, feats: dict, is_redundant: bool) -> tuple[set[str], list[str]]:
-    """Tags + ordered instruction list for one paragraph. Plain language always."""
+def _paragraph_instructions(para: str, feats: dict, is_redundant: bool) -> dict:
+    """The `tags` and ordered `instructions` for one paragraph. Plain language always."""
     tags = {"plain-language"}
     instructions = [_PLAIN_LANGUAGE]
 
-    hits, _ = _unnecessary_words(para)
-    if hits >= _WORDINESS_HITS:
+    if _unnecessary_words(para)["hits"] >= _WORDINESS_HITS:
         tags.add("wordiness")
         instructions.append(_WORDINESS)
 
@@ -188,7 +176,53 @@ def _paragraph_instructions(para: str, feats: dict, is_redundant: bool) -> tuple
         tags.add("passive")
         instructions.append(_PASSIVE)
 
-    return tags, instructions
+    return {"tags": tags, "instructions": instructions}
+
+
+def _paragraph_entry(i: int, para: str, doc, red_paras: set[int]) -> dict:
+    """Diagnosis entry for one paragraph: display fields plus tags/instructions."""
+    words = len(para.split())
+    is_quote = signals._is_quote_para(para)
+    is_heading = _is_heading(para)
+
+    snippet_text = " ".join(para.split())
+    snippet = (snippet_text[:72] + "…") if len(snippet_text) > 72 else snippet_text
+
+    if is_heading:
+        flesch = None
+    else:
+        try:
+            import textstat
+            flesch = round(textstat.flesch_reading_ease(para))
+        except Exception:
+            flesch = None
+
+    entry = {
+        "index": i,
+        "words": words,
+        "is_quote": is_quote,
+        "is_heading": is_heading,
+        "snippet": snippet,
+        "flesch": flesch,
+        "mean_sent_len": None,
+        "tags": set(),
+        "instructions": [],
+    }
+    if words < _MIN_PARA_WORDS or is_quote or is_heading:
+        return entry
+
+    sents = [signals.sentence_features(s) for s in doc.sents if s.text.strip()]
+    n_sents = len(sents)
+    feats = {
+        "n_sents": n_sents,
+        "mean_sent_len": sum(s["words"] for s in sents) / n_sents if n_sents else 0.0,
+        "passive_sents": sum(1 for s in sents if s["passive"] > 0),
+    }
+    asked = _paragraph_instructions(para, feats, i in red_paras)
+    entry["mean_sent_len"] = round(feats["mean_sent_len"], 1)
+    entry["tags"] = asked["tags"]
+    entry["instructions"] = asked["instructions"]
+    return entry
 
 
 def diagnose(text: str, nlp) -> dict:
@@ -208,8 +242,9 @@ def diagnose(text: str, nlp) -> dict:
     """
     paragraphs = text.split("\n\n")
 
-    total_hits, total_unnecessary = _unnecessary_words(text)
-    red_count, red_words, red_paras = _redundancy_estimate(text, nlp)
+    unnecessary = _unnecessary_words(text)
+    redundancy = _redundancy_estimate(text, nlp)
+    red_paras = redundancy["paragraphs"]
 
     try:
         import textstat
@@ -217,37 +252,15 @@ def diagnose(text: str, nlp) -> dict:
     except Exception:
         readability = None
 
-    out_paras = []
-    for i, (doc, para) in enumerate(zip(nlp.pipe(paragraphs), paragraphs)):
-        words = len(para.split())
-        is_quote = signals._is_quote_para(para)
-        is_heading = _is_heading(para)
-        entry = {
-            "index": i, "words": words, "is_quote": is_quote, "is_heading": is_heading,
-            "snippet": _snippet(para),
-            "flesch": None if is_heading else _para_flesch(para),
-            "mean_sent_len": None, "tags": set(), "instructions": [],
-        }
-        if words < _MIN_PARA_WORDS or is_quote or is_heading:
-            out_paras.append(entry)
-            continue
-        sents = [signals.sentence_features(s) for s in doc.sents if s.text.strip()]
-        n_sents = len(sents)
-        feats = {
-            "n_sents": n_sents,
-            "mean_sent_len": sum(s["words"] for s in sents) / n_sents if n_sents else 0.0,
-            "passive_sents": sum(1 for s in sents if s["passive"] > 0),
-        }
-        tags, instructions = _paragraph_instructions(para, feats, i in red_paras)
-        entry["mean_sent_len"] = round(feats["mean_sent_len"], 1)
-        entry["tags"] = tags
-        entry["instructions"] = instructions
-        out_paras.append(entry)
+    out_paras = [
+        _paragraph_entry(i, para, doc, red_paras)
+        for i, (doc, para) in enumerate(zip(nlp.pipe(paragraphs), paragraphs))
+    ]
 
     return {
         "words": len(text.split()),
         "readability": readability,
-        "unnecessary": {"hits": total_hits, "savings": total_unnecessary},
-        "redundancy": {"count": red_count, "savings": red_words},
+        "unnecessary": unnecessary,
+        "redundancy": {"count": redundancy["count"], "savings": redundancy["words"]},
         "paragraphs": out_paras,
     }

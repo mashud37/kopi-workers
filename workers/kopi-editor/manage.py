@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""kopi-editor — academic copyeditor for the humanities and social sciences.
-
-No arguments launches the interactive menu; any subcommand runs directly.
+"""kopi-editor is an academic copyeditor for the humanities and social
+sciences. No arguments launches the interactive menu; any subcommand runs
+directly.
 """
 import os
 # Allow torch's and spaCy/blis's OpenMP runtimes to coexist (Windows loads two
@@ -21,7 +21,7 @@ def main():
     )
     sub = parser.add_subparsers(dest="command")
 
-    a = sub.add_parser("analyze", help="Diagnose a .docx — report cuts + per-paragraph needs (no edits)")
+    a = sub.add_parser("analyze", help="Diagnose a .docx: report cuts + per-paragraph needs (no edits)")
     a.add_argument("file", help="Input .docx (a bare name resolves against input/)")
 
     p = sub.add_parser("proof", help="Conservative deterministic edit (no LLM) -> output/")

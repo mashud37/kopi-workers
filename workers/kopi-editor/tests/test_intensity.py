@@ -1,5 +1,6 @@
-"""Intensity bands + the top-up shortfall trigger — the control loop that ties the
-requested reduction to how hard the editor actually cuts."""
+"""Test the intensity bands and the top-up shortfall trigger, the loop tying a requested
+reduction to how hard the editor cuts.
+"""
 from kopi import intensity
 
 
@@ -38,12 +39,18 @@ def test_topup_triggers_on_shortfall_only():
 
     paras = [f"Paragraph {i} " + "word " * 80 for i in range(6)]
     text = "\n\n".join(paras)
-    guarded, qmap = guard(text)
+    quoted = guard(text)
+    guarded, qmap = quoted["text"], quoted["qmap"]
     original = len(text.split())
 
     # Asked to remove 200 but nothing was cut yet -> a top-up is planned.
-    state = {"text": guarded, "qmap": qmap, "reduction": 200,
-             "original_words": original, "counts": {"step1": original}}
+    state = {
+        "text": guarded,
+        "qmap": qmap,
+        "reduction": 200,
+        "original_words": original,
+        "counts": {"step1": original},
+    }
     extra = step_concision.topup_candidates(state)
     assert extra and all(c["routing_reason"].startswith("top-up") for c in extra)
 

@@ -1,4 +1,5 @@
-"""`update` — upgrade Python dependencies and refresh the spaCy model."""
+"""Upgrade the Python dependencies and refresh the spaCy model.
+"""
 import subprocess
 import sys
 

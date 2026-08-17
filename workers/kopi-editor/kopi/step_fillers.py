@@ -4,17 +4,14 @@ from kopi.data_padding_tails import TAIL_PATTERNS
 from kopi.quote_guard import unguard
 
 
-def _find_phrase(text: str, phrase: str) -> int:
-    return len(re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE).findall(text))
-
-
 def run(state: dict) -> dict:
     restored = unguard(state["text"], state["qmap"])
     found = []
     total_phrase_savings = 0
 
     for phrase, replacement in sorted(PHRASE_REPLACEMENTS.items(), key=lambda x: -len(x[0])):
-        count = _find_phrase(restored, phrase)
+        phrase_pattern = re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE)
+        count = len(phrase_pattern.findall(restored))
         if count:
             pw = len(phrase.split())
             rw = len(replacement.split()) if replacement else 0
@@ -30,11 +27,10 @@ def run(state: dict) -> dict:
             tail_count += len(matches)
             total_tail_savings += sum(len(m.split()) for m in matches)
 
-    state["fillers"] = found
-    state["tail_savings_estimate"] = total_tail_savings
+    state = {**state, "fillers": found, "tail_savings_estimate": total_tail_savings}
     state["counts"]["step2_estimate"] = total_phrase_savings + total_tail_savings
     state["log"].append({
-        "step": "Step 2 — Filler scan",
+        "step": "Step 2: Filler scan",
         "detail": (
             f"{len(found)} phrase type(s) (~{total_phrase_savings} words), "
             f"{tail_count} tail match(es) (~{total_tail_savings} words)"

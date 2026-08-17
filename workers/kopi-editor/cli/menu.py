@@ -1,4 +1,6 @@
-"""Interactive menu — mirrors the subcommands one-to-one (cli.md §2)."""
+"""Interactive menu shown when manage.py runs with no arguments, mirroring the
+subcommands one to one.
+"""
 from cli import config, install, update, settings, analyze, proof, edit, cloud, deploy, ui
 
 
@@ -10,28 +12,20 @@ def _pick_docx():
         if idx is None:
             return None
         return str(docs[idx])
-    ui.warn(f"no .docx files in {config.INPUT_DIR} — drop one in, or type a path")
+    ui.warn(f"no .docx files in {config.INPUT_DIR}: drop one in, or type a path")
     return ui.ask("Path to a .docx") or None
 
 
 def _analyze_flow():
     f = _pick_docx()
-    if not f:
-        return
-    try:
+    if f:
         analyze.run(f)
-    except SystemExit as e:
-        ui.warn(str(e))
 
 
 def _proof_flow():
     f = _pick_docx()
-    if not f:
-        return
-    try:
+    if f:
         proof.run(f)
-    except SystemExit as e:
-        ui.warn(str(e))
 
 
 def _edit_flow():
@@ -39,19 +33,11 @@ def _edit_flow():
     if not f:
         return
     r = ui.ask("Words to remove (optional, blank = plain-language pass)")
-    reduction = int(r) if r and r.isdigit() else None
-    try:
-        edit.run(f, reduction)
-    except SystemExit as e:
-        ui.warn(str(e))
+    edit.run(f, int(r) if r and r.isdigit() else None)
 
 
 def _deploy_status_flow():
-    wait = ui.confirm("Wait for the build to finish, then deploy?", default_yes=True)
-    try:
-        deploy.status(wait)
-    except SystemExit as e:
-        ui.warn(str(e))
+    deploy.status(ui.confirm("Wait for the build to finish, then deploy?", default_yes=True))
 
 
 def _cloud_test_flow():
@@ -59,50 +45,28 @@ def _cloud_test_flow():
     if not src:
         ui.warn("no source file; run `edit` first or pass a path")
         return
-    n = ui.ask("Paragraphs to send (integer or 'all')", "3")
-    try:
-        cloud.smoke(src, n)
-    except SystemExit as e:
-        ui.warn(str(e))
+    cloud.smoke(src, ui.ask("Paragraphs to send (integer or 'all')", "3"))
+
+
+_ACTIONS = [
+    ("Analyze", "diagnose what could be cut + per-paragraph needs (no edits)", _analyze_flow),
+    ("Proof", "conservative deterministic edit, no LLM -> output/", _proof_flow),
+    ("Full edit", "plain-language edit via the LLM backend -> output/", _edit_flow),
+    ("Settings", "LLM backend / model / language", settings.run),
+    ("Show config", "the effective configuration", config.show),
+    ("Deploy service", "fire the vLLM/Qwen3 image build async (frees the terminal)", deploy.run),
+    ("Deploy status", "check the pending build; finish + deploy when it's ready",
+     _deploy_status_flow),
+    ("Cloud smoke test", "send paragraphs straight to the GPU service", _cloud_test_flow),
+    ("Update", "upgrade dependencies + spaCy model", update.run),
+    ("Install / setup", "env.yaml, folders, dependency check", install.run),
+]
 
 
 def main():
     ui.header("kopi-editor")
     while True:
-        choice = ui.menu(
-            "Main menu",
-            [
-                ("Analyze", "diagnose what could be cut + per-paragraph needs (no edits)"),
-                ("Proof", "conservative deterministic edit, no LLM -> output/"),
-                ("Full edit", "plain-language edit via the LLM backend -> output/"),
-                ("Settings", "LLM backend / model / language"),
-                ("Show config", "the effective configuration"),
-                ("Deploy service", "fire the vLLM/Qwen3 image build async (frees the terminal)"),
-                ("Deploy status", "check the pending build; finish + deploy when it's ready"),
-                ("Cloud smoke test", "send paragraphs straight to the GPU service"),
-                ("Update", "upgrade dependencies + spaCy model"),
-                ("Install / setup", "env.yaml, folders, dependency check"),
-            ],
-        )
+        choice = ui.menu("Main menu", [(label, desc) for label, desc, _ in _ACTIONS])
         if choice is None:
             return
-        if choice == 0:
-            _analyze_flow()
-        elif choice == 1:
-            _proof_flow()
-        elif choice == 2:
-            _edit_flow()
-        elif choice == 3:
-            settings.run()
-        elif choice == 4:
-            config.show()
-        elif choice == 5:
-            deploy.run()
-        elif choice == 6:
-            _deploy_status_flow()
-        elif choice == 7:
-            _cloud_test_flow()
-        elif choice == 8:
-            update.run()
-        elif choice == 9:
-            install.run()
+        ui.run_action(_ACTIONS[choice][2])

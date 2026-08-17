@@ -1,14 +1,6 @@
-"""Cloud Run service — token-guarded HTTP wrapper over the paragraph editor.
-
-POST /tighten?token=...  {messages: [...]}            -> {edited}   (preferred)
-POST /tighten?token=...  {paragraph, instructions}    -> {edited}   (back-compat)
-GET  /healthz            liveness probe
-
-The client builds the full prompt (system + user) and sends it as ``messages``;
-this service just relays them to the warm Ollama model. Keeping the prompt on the
-client means prompt changes need no redeploy. Ollama runs in the same container
-with the model baked in, so it stays warm while the instance is up. The
-acceptance guard runs on the *client*; the token guards the endpoint.
+"""Relay client-built chat messages to the warm local Ollama model through a
+token-guarded `/tighten` endpoint, with `/healthz` for liveness. The client
+builds the prompt and runs the acceptance guard.
 """
 import os
 
@@ -49,4 +41,5 @@ def tighten():
     if not paragraph:
         abort(400, "missing paragraph or messages")
     from kopi.llm import edit_paragraph
-    return jsonify({"edited": edit_paragraph(paragraph, instructions=data.get("instructions"))})
+    edited = edit_paragraph(paragraph, {"instructions": data.get("instructions")})
+    return jsonify({"edited": edited})

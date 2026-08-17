@@ -1,12 +1,6 @@
-"""Anthropic API LLM backend — an alternative to the self-hosted GPU service.
-
-Set ``LLM: api`` in env.yaml (or via ``manage.py settings``) with an
-ANTHROPIC_API_KEY. Reuses the same paragraph prompt as the local/cloud paths;
-the acceptance guard runs locally. No GPU, no cold start — each paragraph is a
-sub-second Messages API call, sent in parallel with live progress.
-
-Uses the official ``anthropic`` SDK (the workspace standard, per pepa-sum and
-the claude-api policy), imported lazily so it isn't required unless LLM=api.
+"""Edit paragraphs through the Anthropic Messages API when `LLM: api` is set,
+instead of the self-hosted GPU service. Uses the same prompt and acceptance
+guard as the other backends.
 """
 import threading
 import time
@@ -17,10 +11,11 @@ from cli import config, ui
 
 _WORKERS = 4
 _MAX_TOKENS = 1024
+_HEARTBEAT_SECONDS = 5
 
 # Published Anthropic list prices, USD per 1M tokens (input, output). Cached
 # 2026-06; update if rates change. Prompt-cache writes bill at 1.25x the input
-# rate, reads at 0.10x — applied in _cost().
+# rate, reads at 0.10x (applied in _cost()).
 _PRICING = {
     "claude-fable-5":    (10.0, 50.0),
     "claude-opus-4-8":   (5.0, 25.0),
@@ -46,43 +41,116 @@ def _cost(model: str, totals: dict) -> float | None:
 
 
 def _require():
-    if not config.anthropic_api_key():
-        raise SystemExit("no Anthropic API key — set it with `python manage.py settings`.")
+    if not config.get("ANTHROPIC_API_KEY"):
+        raise SystemExit("no Anthropic API key: set it with `python manage.py settings`.")
 
 
-def _client():
-    try:
-        import anthropic
-    except ImportError:
-        raise SystemExit("anthropic SDK not installed — run: pip install anthropic")
-    return anthropic.Anthropic(api_key=config.anthropic_api_key())
+def _edit_one(client, text: str, instructions, style: dict) -> dict:
+    """One API call, returning the edited `text` and the call's `usage`.
 
-
-def _edit_one(client, model: str, text: str, instructions, lang: str = "british",
-              mode: str = "firm", floor: int | None = None) -> tuple[str, object]:
-    # The system prompt is identical for every paragraph at the same intensity, so
-    # mark it cacheable: the first call per (lang, mode) writes it, the rest read it
-    # at 0.10x input price — a large saving when tightening a whole document.
+    The system prompt is identical for every paragraph at the same intensity, so
+    it is marked cacheable: the first call per (lang, mode) writes it and the rest
+    read it at 0.10x input price, a large saving when tightening a whole document.
+    """
     from kopi.llm import _system_for, _build_user_message
+
+    system = _system_for(style["lang"], style["mode"])
     resp = client.messages.create(
-        model=model,
+        model=style["model"],
         max_tokens=_MAX_TOKENS,
-        system=[{"type": "text", "text": _system_for(lang, mode), "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": _build_user_message(text, instructions, floor)}],
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user",
+                   "content": _build_user_message(text, instructions, style["floor"])}],
     )
     out = "".join(b.text for b in resp.content if b.type == "text").strip()
-    return out, resp.usage
+    return {"text": out, "usage": resp.usage}
 
 
-def _edit_all(candidates: list) -> list:
-    """Send candidates to Anthropic in parallel, guard locally, shape results for
-    step_concision.apply_results. A heartbeat keeps the wait visible."""
-    from kopi.step_concision import edit_with_retry, _get_model, _MAX_COMPRESSION as _DEFAULT_MAX_COMPRESSION
+class _Tally:
+    """What the worker threads share: how many paragraphs are done, and the token bill."""
 
-    # Pre-load the embedding model ONCE before the workers start, so the parallel
-    # guard checks don't race to initialise sentence-transformers (concurrent
-    # torch init throws "Cannot copy out of meta tensor").
+    def __init__(self, total: int) -> None:
+        self.total = total
+        self.done = 0
+        self.started = time.time()
+        self.tokens = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
+        self.guard = threading.Lock()
+
+    def add_usage(self, usage) -> None:
+        with self.guard:
+            self.tokens["input"] += getattr(usage, "input_tokens", 0) or 0
+            self.tokens["output"] += getattr(usage, "output_tokens", 0) or 0
+            self.tokens["cache_write"] += getattr(usage, "cache_creation_input_tokens", 0) or 0
+            self.tokens["cache_read"] += getattr(usage, "cache_read_input_tokens", 0) or 0
+
+    def finished_one(self) -> None:
+        with self.guard:
+            self.done += 1
+
+    def elapsed(self) -> int:
+        return int(time.time() - self.started)
+
+    def line(self) -> str:
+        with self.guard:
+            done = self.done
+        return f"editing {done}/{self.total} done · {self.elapsed()}s elapsed"
+
+
+class _ApiCall:
+    """One paragraph's call settings, held so a corrective retry asks on the same terms."""
+
+    def __init__(self, client, style: dict, tally: _Tally) -> None:
+        self.client = client
+        self.style = style
+        self.tally = tally
+
+    def edit(self, text: str, instructions) -> str:
+        answer = _edit_one(self.client, text, instructions, self.style)
+        self.tally.add_usage(answer["usage"])  # counted for a corrective retry too
+        return answer["text"]
+
+
+def _beat(tally: _Tally, stop) -> None:
+    """Report progress every few seconds so a long API run never looks stalled."""
+    while not stop.wait(_HEARTBEAT_SECONDS):
+        ui.info(tally.line())
+
+
+def _work(cand: dict, session: dict) -> dict:
+    """Edit one candidate through the API, guarded, with one corrective retry.
+
+    `edit_with_retry` calls the API, guards locally, and on a recoverable
+    rejection re-prompts once with a softer instruction. The paragraph's
+    intensity (mode, floor, ceiling) comes from the candidate.
+    """
+    from kopi.step_concision import edit_with_retry, _MAX_COMPRESSION
+
+    caller = _ApiCall(session["client"], {
+        "model": session["model"],
+        "lang": session["lang"],
+        "mode": cand.get("mode", "firm"),
+        "floor": cand.get("floor"),
+    }, session["tally"])
+    try:
+        outcome = {"cand": cand, **edit_with_retry(
+            caller.edit, cand["text"], cand.get("instructions"),
+            cand.get("max_compression", _MAX_COMPRESSION))}
+    except Exception as error:
+        outcome = {"cand": cand, "error": f"api error: {error}"}
+    session["tally"].finished_one()
+    return outcome
+
+
+def _preload_guard_model() -> None:
+    """Load the embedding model before the workers start.
+
+    The parallel guard checks would otherwise race to initialise
+    sentence-transformers, and concurrent torch init throws "Cannot copy out of
+    meta tensor".
+    """
+    from kopi.step_concision import _get_model
     from kopi.progress import StepSpinner
+
     sp = StepSpinner("loading embedding model")
     sp.start()
     try:
@@ -92,62 +160,18 @@ def _edit_all(candidates: list) -> list:
     finally:
         sp.done()
 
-    client = _client()
-    model = config.anthropic_model()
-    lang = config.lang()
-    total = len(candidates)
-    start = time.time()
-    progress = {"done": 0}
-    tokens = {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}
-    lock = threading.Lock()
-    stop = threading.Event()
 
-    def heartbeat():
-        while not stop.wait(5):
-            with lock:
-                d = progress["done"]
-            ui.info(f"editing {d}/{total} done · {int(time.time() - start)}s elapsed")
-
-    hb = threading.Thread(target=heartbeat, daemon=True)
-    hb.start()
-
-    def _make_edit_fn(mode, floor):
-        def _edit_fn(text, instructions):
-            edited, usage = _edit_one(client, model, text, instructions, lang, mode, floor)
-            with lock:  # count tokens for every call, including a corrective retry
-                tokens["input"] += getattr(usage, "input_tokens", 0) or 0
-                tokens["output"] += getattr(usage, "output_tokens", 0) or 0
-                tokens["cache_write"] += getattr(usage, "cache_creation_input_tokens", 0) or 0
-                tokens["cache_read"] += getattr(usage, "cache_read_input_tokens", 0) or 0
-            return edited
-        return _edit_fn
-
-    def work(cand):
-        # edit_with_retry calls the API, guards locally, and on a recoverable
-        # rejection re-prompts once with a softer/corrective instruction. The
-        # paragraph's intensity (mode/floor/ceiling) comes from the candidate.
-        edit_fn = _make_edit_fn(cand.get("mode", "firm"), cand.get("floor"))
-        try:
-            r = {"cand": cand, **edit_with_retry(
-                edit_fn, cand["text"], cand.get("instructions"),
-                cand.get("max_compression", _DEFAULT_MAX_COMPRESSION))}
-        except Exception as e:
-            r = {"cand": cand, "error": f"api error: {e}"}
-        with lock:
-            progress["done"] += 1
-        return r
-
-    collected = []
+def _open_client():
+    """An Anthropic client on the configured key."""
     try:
-        with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
-            futures = [pool.submit(work, c) for c in candidates]
-            for fut in as_completed(futures):
-                collected.append(fut.result())
-    finally:
-        stop.set()
-        hb.join(timeout=1)
-    ui.ok(f"editing complete: {total}/{total} · {int(time.time() - start)}s")
+        import anthropic
+    except ImportError:
+        raise SystemExit("anthropic SDK not installed, run: pip install anthropic")
+    return anthropic.Anthropic(api_key=config.get("ANTHROPIC_API_KEY"))
 
+
+def _report_cost(model: str, tokens: dict) -> None:
+    """Print what the run spent, or say so when the model has no published price."""
     in_total = tokens["input"] + tokens["cache_write"] + tokens["cache_read"]
     cost = _cost(model, tokens)
     cost_str = f"≈ ${cost:.4f}" if cost is not None else "cost n/a (unpriced model)"
@@ -156,18 +180,55 @@ def _edit_all(candidates: list) -> list:
         f"{tokens['output']:,} out  |  {cost_str} ({model})"
     )
 
+
+def _shape_results(collected: list) -> list:
+    """Turn each finished call into the row `step_concision.apply_results` expects."""
     results = []
     for r in collected:
         cand = r["cand"]
+        failed = r.get("error")
         results.append({
             "index": cand["index"],
-            "accepted": False if r.get("error") else r["accepted"],
-            "edited": cand["text"] if r.get("error") else r["edited"],
-            "reason": r["error"] if r.get("error") else r["reason"],
-            "saved": 0 if r.get("error") else r["saved"],
+            "accepted": False if failed else r["accepted"],
+            "edited": cand["text"] if failed else r["edited"],
+            "reason": failed if failed else r["reason"],
+            "saved": 0 if failed else r["saved"],
             "routing_reason": cand.get("routing_reason"),
         })
     return results
+
+
+def _edit_all(candidates: list) -> list:
+    """Send candidates to Anthropic in parallel, guard locally, shape the results.
+
+    A heartbeat thread keeps the wait visible while the workers run.
+    """
+    _preload_guard_model()
+    session = {
+        "client": _open_client(),
+        "model": config.get("ANTHROPIC_MODEL"),
+        "lang": config.get("LANG"),
+        "tally": _Tally(len(candidates)),
+    }
+    tally = session["tally"]
+
+    stop = threading.Event()
+    heartbeat = threading.Thread(target=_beat, args=(tally, stop), daemon=True)
+    heartbeat.start()
+
+    collected = []
+    try:
+        with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
+            futures = [pool.submit(_work, cand, session) for cand in candidates]
+            for fut in as_completed(futures):
+                collected.append(fut.result())
+    finally:
+        stop.set()
+        heartbeat.join(timeout=1)
+
+    ui.ok(f"editing complete: {tally.total}/{tally.total} · {tally.elapsed()}s")
+    _report_cost(session["model"], tally.tokens)
+    return _shape_results(collected)
 
 
 def tighten(state: dict, candidates: list | None = None) -> dict:
@@ -184,7 +245,7 @@ def tighten(state: dict, candidates: list | None = None) -> dict:
     if not candidates:
         ui.info("no paragraphs qualify for tightening")
         return state
-    ui.info(f"{len(candidates)} paragraph(s) -> Anthropic {config.anthropic_model()}")
+    ui.info(f"{len(candidates)} paragraph(s) -> Anthropic {config.get('ANTHROPIC_MODEL')}")
     return apply_results(state, _edit_all(candidates))
 
 
@@ -192,7 +253,7 @@ def smoke(source, n):
     """Send n paragraphs from a text file straight to the API, bypassing routing.
 
     A diagnostic that exercises the API path end-to-end without the spaCy
-    candidate selection — `n` is an integer or "all".
+    candidate selection: `n` is an integer or "all".
     """
     _require()
     text = Path(source).read_text(encoding="utf-8")
@@ -200,11 +261,17 @@ def smoke(source, n):
     if n != "all":
         paras = paras[:int(n)]
     candidates = [
-        {"index": i, "text": p, "budget": max(1, int(len(p.split()) * 0.2)),
-         "focus": [], "fat_index": None, "routing_reason": "smoke (no routing)"}
+        {
+            "index": i,
+            "text": p,
+            "budget": max(1, int(len(p.split()) * 0.2)),
+            "focus": [],
+            "fat_index": None,
+            "routing_reason": "smoke (no routing)",
+        }
         for i, p in enumerate(paras)
     ]
-    ui.step(f"API smoke test — {len(candidates)} paragraph(s) via {config.anthropic_model()}")
+    ui.step(f"API smoke test: {len(candidates)} paragraph(s) via {config.get('ANTHROPIC_MODEL')}")
     results = _edit_all(candidates)
     for r in sorted(results, key=lambda r: r["index"]):
         ew = len(r.get("edited", "").split())

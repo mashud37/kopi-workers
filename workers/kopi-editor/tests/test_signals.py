@@ -11,12 +11,14 @@ def test_is_quote_para():
     assert not signals._is_quote_para('He said "yes" and then continued at length here.')
 
 
+class _CyclicTok:
+    def __init__(self):
+        self.head = self
+
+
 def test_tree_depth_is_bounded():
     """A cyclic parse must not hang the depth walk (bounded at 1000)."""
-    class _Tok:
-        def __init__(self):
-            self.head = self
-    a = _Tok(); b = _Tok()
+    a = _CyclicTok(); b = _CyclicTok()
     a.head = b; b.head = a  # cycle
     assert signals._tree_depth(a) == 1000
 

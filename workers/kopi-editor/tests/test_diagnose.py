@@ -1,8 +1,6 @@
-"""Unit tests for the diagnosis helpers and the LLM prompt builder.
-
-The pure helpers (filler/plain detection, per-paragraph instruction derivation)
-need neither spaCy nor a model. The full `diagnose()` entry point is covered by
-the route smoke tests that run with spaCy available.
+"""Unit tests for the diagnosis helpers and the LLM prompt builder. These pure
+functions need neither spaCy nor a model; `diagnose()` itself is covered by
+the route smoke tests.
 """
 from kopi import diagnose
 from kopi.llm import _build_user_message, _system_for
@@ -10,9 +8,9 @@ from kopi.llm import _build_user_message, _system_for
 
 def test_unnecessary_words_detects_fillers_and_padding():
     text = "It is worth noting that the fact that this matters, in this regard."
-    hits, savings = diagnose._unnecessary_words(text)
-    assert hits >= 1
-    assert savings >= 1
+    found = diagnose._unnecessary_words(text)
+    assert found["hits"] >= 1
+    assert found["savings"] >= 1
 
 
 def test_plain_hits_detects_cliches_and_long_words():
@@ -24,17 +22,17 @@ def test_plain_hits_detects_cliches_and_long_words():
 
 def test_paragraph_instructions_always_includes_plain_language():
     feats = {"n_sents": 2, "mean_sent_len": 10, "passive_sents": 0}
-    tags, instructions = diagnose._paragraph_instructions("A clean short paragraph.", feats, False)
-    assert "plain-language" in tags
-    assert any("Plain language" in i for i in instructions)
+    asked = diagnose._paragraph_instructions("A clean short paragraph.", feats, False)
+    assert "plain-language" in asked["tags"]
+    assert any("Plain language" in i for i in asked["instructions"])
 
 
 def test_paragraph_instructions_flags_wordiness_redundancy_passive():
     para = "It is worth noting that the fact that this is the case matters here."
     feats = {"n_sents": 3, "mean_sent_len": 40, "passive_sents": 2}  # long + passive
-    tags, instructions = diagnose._paragraph_instructions(para, feats, is_redundant=True)
-    assert {"wordiness", "redundancy", "long-sentence", "passive"} <= tags
-    assert len(instructions) >= 4
+    asked = diagnose._paragraph_instructions(para, feats, is_redundant=True)
+    assert {"wordiness", "redundancy", "long-sentence", "passive"} <= asked["tags"]
+    assert len(asked["instructions"]) >= 4
 
 
 def test_build_user_message_without_notes_is_just_the_paragraph():

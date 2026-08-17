@@ -1,21 +1,6 @@
-"""Editing intensity derived from the requested word reduction.
-
-The requested reduction sets HOW HARD to edit, not just a figure for the report.
-A ratio ``r = reduction / original_words`` selects a band, and the band fixes two
-things that used to be hard-coded constants disconnected from the request:
-
-* the acceptance guard's per-paragraph compression ceiling (``max_compression``);
-* the prompt stance — whether the model may drop a sentence (``allow_drop``) and
-  how firmly it is told to cut (the ``mode`` name, which selects the system block).
-
-With no reduction requested the band is ``clarity``: plain-language edits only,
-every sentence preserved, length barely moved. That is what stops an over-eager
-model from gutting a manuscript nobody asked to shorten. A large request lands in
-``aggressive``: the guard opens up and the prompt authorises real structural
-concision. The ratio framing makes "500 words" mean *more* on a short manuscript
-than on a long one — exactly how a copy editor reads it.
-
-Thresholds are deliberately simple constants; tune them here, not per call.
+"""Turn the requested word reduction into an editing band (clarity to
+aggressive) that sets the guard's compression ceiling and the prompt's
+cutting stance, chosen by a length ratio.
 """
 
 # Band table for a requested reduction, ordered by increasing aggressiveness.
@@ -41,7 +26,7 @@ def plan(reduction: int, original_words: int) -> dict:
         original_words: length of the document being edited.
 
     Returns:
-        ``{mode, max_compression, allow_drop, frac}`` — ``frac`` is the per-paragraph
+        ``{mode, max_compression, allow_drop, frac}``: ``frac`` is the per-paragraph
         target fraction to shed (0 in clarity mode); ``max_compression`` is the guard
         ceiling for every paragraph this run.
     """
@@ -69,7 +54,7 @@ def paragraph_floor(words: int, frac: float) -> int:
 def describe(plan_: dict, reduction: int) -> str:
     """One-line summary of the chosen intensity for the run log / UI."""
     if plan_["mode"] == "clarity":
-        return "clarity (no reduction requested — plain-language edits only)"
+        return "clarity (no reduction requested, plain-language edits only)"
     pct = int(round(plan_["max_compression"] * 100))
     drop = "may drop redundant sentences" if plan_["allow_drop"] else "keeps every sentence"
     return f"{plan_['mode']} (target -{reduction}, up to {pct}%/paragraph, {drop})"

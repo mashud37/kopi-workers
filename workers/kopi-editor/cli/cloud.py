@@ -1,12 +1,11 @@
-"""GCloud LLM client: POST flagged paragraphs to the warm Cloud Run service.
-
-Reads BASE_URL + JOB_TOKEN from config (written by `manage.py deploy`). Each
-paragraph is sent to the GPU service over HTTPS; the acceptance guard runs
-locally (where sentence-transformers is already loaded). The service stays warm
-during a session, so after the first (cold-start) request each one is just
-generation — paragraphs are sent in parallel with live progress.
+"""Send flagged paragraphs to the deployed Cloud Run GPU service over HTTPS
+using BASE_URL and JOB_TOKEN from config. The acceptance guard runs locally
+while paragraphs are sent in parallel.
 """
 import json
+import os
+import threading
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -31,26 +30,23 @@ _VCPU_PER_SEC = 0.0000180           # per vCPU
 _MEM_PER_SEC = 0.0000020            # per GiB
 
 
-def _gpu_rate() -> float:
-    import os
-    override = os.environ.get("KOPI_GPU_PER_SEC")
-    if override:
-        return float(override)
-    return _GPU_PER_SEC.get(config.gpu_type(), _GPU_PER_SEC["nvidia-l4"])
-
-
-def _run_cost(seconds: float) -> float:
+def _run_cost(seconds: float) -> float:  # lint-style: ignore FN004
     """Estimated USD for ``seconds`` of active service time (GPU+CPU+memory),
     using the configured instance shape."""
-    per_sec = _gpu_rate() + config.deploy_cpu() * _VCPU_PER_SEC + config.deploy_mem() * _MEM_PER_SEC
+    override = os.environ.get("KOPI_GPU_PER_SEC")
+    if override:
+        gpu_per_sec = float(override)
+    else:
+        gpu_per_sec = _GPU_PER_SEC.get(config.get("GPU_TYPE"), _GPU_PER_SEC["nvidia-l4"])
+    per_sec = gpu_per_sec + int(config.get("CPU")) * _VCPU_PER_SEC + int(config.get("MEMORY")) * _MEM_PER_SEC
     return seconds * per_sec
 
 
 def _require():
-    if not config.base_url():
-        raise SystemExit("no service deployed — run `python manage.py deploy` first.")
-    if not config.job_token():
-        raise SystemExit("no JOB_TOKEN in env.yaml — re-run `python manage.py deploy`.")
+    if not config.get("BASE_URL"):
+        raise SystemExit("no service deployed: run `python manage.py deploy` first.")
+    if not config.get("JOB_TOKEN"):
+        raise SystemExit("no JOB_TOKEN in env.yaml: re-run `python manage.py deploy`.")
 
 
 def _post_one(text: str, instructions, mode: str = "firm", floor: int | None = None) -> str:
@@ -60,9 +56,10 @@ def _post_one(text: str, instructions, mode: str = "firm", floor: int | None = N
     #  - `paragraph`/`instructions`: an older deployed service that builds the
     #    prompt itself still works (with its baked prompt) until it is redeployed.
     from kopi.llm import build_messages
-    url = f"{config.base_url().rstrip('/')}/tighten?token={config.job_token()}"
+    base = config.get("BASE_URL").rstrip("/")
+    url = f"{base}/tighten?token={config.get('JOB_TOKEN')}"
     body = json.dumps({
-        "messages": build_messages(text, instructions, config.lang(), mode, floor),
+        "messages": build_messages(text, instructions, config.get("LANG"), mode, floor),
         "paragraph": text,
         "instructions": instructions,
     }).encode("utf-8")
@@ -71,17 +68,79 @@ def _post_one(text: str, instructions, mode: str = "firm", floor: int | None = N
         return json.loads(resp.read())["edited"]
 
 
+class _PostRequest:
+    """A callable that remembers one candidate's mode and floor, so
+    ``edit_with_retry`` can call it as ``edit_fn(text, instructions)``."""
+
+    def __init__(self, mode, floor):
+        self.mode = mode
+        self.floor = floor
+
+    def __call__(self, text, instructions):
+        return _post_one(text, instructions, self.mode, self.floor)
+
+
+class _Progress:
+    """A thread-safe done-count shared between the worker pool and the heartbeat."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._done = 0
+
+    def increment(self):
+        with self._lock:
+            self._done += 1
+
+    def read(self):
+        with self._lock:
+            return self._done
+
+
+def _heartbeat(hb_state):
+    """Print elapsed time every few seconds so the wait is never silent:
+    during the first (cold-start) request no paragraph has completed yet, and
+    a static progress bar would look frozen for up to ~90s."""
+    while not hb_state["stop"].wait(5):
+        done = hb_state["progress"].read()
+        elapsed = int(time.time() - hb_state["start"])
+        extra = "  (loading the model on the GPU, up to ~90s)" if done == 0 else ""
+        ui.info(f"tightening {done}/{hb_state['total']} done · {elapsed}s elapsed{extra}")
+
+
+def _work(cand, progress):
+    # edit_with_retry POSTs the paragraph, guards it, and on a recoverable
+    # rejection re-POSTs once with a softer/corrective instruction. The
+    # paragraph's intensity (mode/floor/ceiling) comes from the candidate.
+    from kopi.step_concision import edit_with_retry, _MAX_COMPRESSION as _DEFAULT_MAX_COMPRESSION
+    mode, floor = cand.get("mode", "firm"), cand.get("floor")
+    try:
+        edit_fn = _PostRequest(mode, floor)
+        result = edit_with_retry(
+            edit_fn, cand["text"], cand.get("instructions"),
+            cand.get("max_compression", _DEFAULT_MAX_COMPRESSION))
+        r = {"cand": cand, **result}
+    except Exception as e:
+        r = {"cand": cand, "error": f"service error: {e}"}
+    progress.increment()
+    return r
+
+
+def _shape_result(r):
+    cand = r["cand"]
+    return {
+        "index": cand["index"],
+        "accepted": False if r.get("error") else r["accepted"],
+        "edited": cand["text"] if r.get("error") else r["edited"],
+        "reason": r["error"] if r.get("error") else r["reason"],
+        "saved": 0 if r.get("error") else r["saved"],
+        "routing_reason": cand.get("routing_reason"),
+    }
+
+
 def _edit_all(candidates: list) -> list:
     """Send candidates to the service in parallel, guard locally, shape results
-    for step_concision.apply_results.
-
-    A heartbeat prints elapsed time every few seconds so the wait is never
-    silent — during the first (cold-start) request no paragraph has completed
-    yet, and a static progress bar would look frozen for up to ~90s.
-    """
-    import threading
-    import time
-    from kopi.step_concision import edit_with_retry, _get_model, _MAX_COMPRESSION as _DEFAULT_MAX_COMPRESSION
+    for step_concision.apply_results."""
+    from kopi.step_concision import _get_model
 
     # Pre-load the embedding model ONCE before the workers start. The guard's
     # cosine check loads sentence-transformers lazily; letting 4 threads race to
@@ -99,41 +158,17 @@ def _edit_all(candidates: list) -> list:
 
     total = len(candidates)
     start = time.time()
-    progress = {"done": 0}
-    lock = threading.Lock()
+    progress = _Progress()
     stop = threading.Event()
 
-    def heartbeat():
-        while not stop.wait(5):
-            with lock:
-                d = progress["done"]
-            elapsed = int(time.time() - start)
-            extra = "  (loading the model on the GPU, up to ~90s)" if d == 0 else ""
-            ui.info(f"tightening {d}/{total} done · {elapsed}s elapsed{extra}")
-
-    hb = threading.Thread(target=heartbeat, daemon=True)
+    hb_state = {"stop": stop, "progress": progress, "total": total, "start": start}
+    hb = threading.Thread(target=_heartbeat, args=(hb_state,), daemon=True)
     hb.start()
-
-    def work(cand):
-        # edit_with_retry POSTs the paragraph, guards it, and on a recoverable
-        # rejection re-POSTs once with a softer/corrective instruction. The
-        # paragraph's intensity (mode/floor/ceiling) comes from the candidate.
-        mode, floor = cand.get("mode", "firm"), cand.get("floor")
-        try:
-            r = {"cand": cand, **edit_with_retry(
-                lambda t, instr: _post_one(t, instr, mode, floor),
-                cand["text"], cand.get("instructions"),
-                cand.get("max_compression", _DEFAULT_MAX_COMPRESSION))}
-        except Exception as e:
-            r = {"cand": cand, "error": f"service error: {e}"}
-        with lock:
-            progress["done"] += 1
-        return r
 
     collected = []
     try:
         with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
-            futures = [pool.submit(work, c) for c in candidates]
+            futures = [pool.submit(_work, c, progress) for c in candidates]
             for fut in as_completed(futures):
                 collected.append(fut.result())
     finally:
@@ -142,22 +177,11 @@ def _edit_all(candidates: list) -> list:
     elapsed = time.time() - start
     ui.ok(f"tightening complete: {total}/{total} · {int(elapsed)}s")
     ui.info(
-        f"≈ ${_run_cost(elapsed):.4f} ({config.gpu_type()} service, {int(elapsed)}s active; "
+        f"≈ ${_run_cost(elapsed):.4f} ({config.get('GPU_TYPE')} service, {int(elapsed)}s active; "
         f"list price, excludes post-run idle keep-alive before scale-to-zero)"
     )
 
-    results = []
-    for r in collected:
-        cand = r["cand"]
-        results.append({
-            "index": cand["index"],
-            "accepted": False if r.get("error") else r["accepted"],
-            "edited": cand["text"] if r.get("error") else r["edited"],
-            "reason": r["error"] if r.get("error") else r["reason"],
-            "saved": 0 if r.get("error") else r["saved"],
-            "routing_reason": cand.get("routing_reason"),
-        })
-    return results
+    return [_shape_result(r) for r in collected]
 
 
 def tighten(state: dict, candidates: list | None = None) -> dict:
@@ -174,7 +198,7 @@ def tighten(state: dict, candidates: list | None = None) -> dict:
     if not candidates:
         ui.info("no paragraphs qualify for tightening")
         return state
-    ui.info(f"{len(candidates)} paragraph(s) -> {config.service()} (first request loads the model on the GPU)")
+    ui.info(f"{len(candidates)} paragraph(s) -> {config.get('SERVICE')} (first request loads the model on the GPU)")
     results = _edit_all(candidates)
     return apply_results(state, results)
 
@@ -187,11 +211,17 @@ def smoke(source, n):
     if n != "all":
         paras = paras[:int(n)]
     candidates = [
-        {"index": i, "text": p, "budget": max(1, int(len(p.split()) * 0.2)),
-         "focus": [], "fat_index": None, "routing_reason": "smoke (no routing)"}
+        {
+            "index": i,
+            "text": p,
+            "budget": max(1, int(len(p.split()) * 0.2)),
+            "focus": [],
+            "fat_index": None,
+            "routing_reason": "smoke (no routing)",
+        }
         for i, p in enumerate(paras)
     ]
-    ui.step(f"Cloud smoke test — {len(candidates)} paragraph(s) from {Path(source).name}")
+    ui.step(f"Cloud smoke test: {len(candidates)} paragraph(s) from {Path(source).name}")
     results = _edit_all(candidates)
     for r in sorted(results, key=lambda r: r["index"]):
         ew = len(r.get("edited", "").split())

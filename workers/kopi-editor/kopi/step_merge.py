@@ -26,6 +26,21 @@ def _para_num(text: str, phrase: str) -> str:
     return "P?"
 
 
+def _drop_replacement(m):
+    connector = m.group(2).lower()
+    return f", {connector} "
+
+
+def _semi_replacement(m):
+    connector = m.group(2).rstrip(",").lower()
+    return f"; {connector}, "
+
+
+def _this_is_replacement(m):
+    conjunction = m.group(0).split()[-1].lower().rstrip()
+    return f" {conjunction} "
+
+
 def run(state: dict) -> dict:
     if state.get("no_llm") is None:
         pass
@@ -33,47 +48,42 @@ def run(state: dict) -> dict:
     restored = unguard(state["text"], state["qmap"])
     changelog = []
 
-    def _drop_replacer(m):
+    for m in _CONNECTOR_DROP.finditer(restored):
         connector = m.group(2).lower()
-        result = f", {connector} "
         changelog.append({
-            "step": "Step 6 — Merge",
+            "step": "Step 6: Merge",
             "detail": f"connector merge: '. {m.group(2)}' -> ', {connector}'",
             "para": _para_num(restored, m.group(2)),
         })
-        return result
+    text = _CONNECTOR_DROP.sub(_drop_replacement, restored)
 
-    def _semi_replacer(m):
+    for m in _CONNECTOR_SEMI.finditer(text):
         connector = m.group(2).rstrip(",").lower()
-        result = f"; {connector}, "
         changelog.append({
-            "step": "Step 6 — Merge",
+            "step": "Step 6: Merge",
             "detail": f"connector merge: '. {m.group(2)}' -> '; {connector},'",
             "para": _para_num(restored, m.group(2)),
         })
-        return result
+    text = _CONNECTOR_SEMI.sub(_semi_replacement, text)
 
-    def _this_is_replacer(m):
+    for m in _THIS_IS.finditer(text):
         conjunction = m.group(0).split()[-1].lower().rstrip()
-        result = f" {conjunction} "
         changelog.append({
-            "step": "Step 6 — Merge",
+            "step": "Step 6: Merge",
             "detail": f"'This is {conjunction}' bridge removed",
             "para": None,
         })
-        return result
-
-    text = _CONNECTOR_DROP.sub(_drop_replacer, restored)
-    text = _CONNECTOR_SEMI.sub(_semi_replacer, text)
-    text = _THIS_IS.sub(_this_is_replacer, text)
+    text = _THIS_IS.sub(_this_is_replacement, text)
 
     text = re.sub(r" {2,}", " ", text)
 
-    state["text"], state["qmap"] = guard(text)
+    quoted = guard(text)
+    guarded_text, qmap = quoted["text"], quoted["qmap"]
+    state = {**state, "text": guarded_text, "qmap": qmap}
     current = word_count(state["text"], state["qmap"])
     state["counts"]["step6_merge"] = current
     state["log"].append({
-        "step": "Step 6 — Merge",
+        "step": "Step 6: Merge",
         "detail": f"{len(changelog)} deterministic merge(s) -> {current} words",
         "para": None,
     })

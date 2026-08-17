@@ -21,7 +21,7 @@ def test_leaves_correct_citation_untouched():
 
 
 def test_does_not_fabricate_a_missing_citation():
-    # The model dropped the citation entirely — restoration must not re-add it,
+    # The model dropped the citation entirely: restoration must not re-add it,
     # so the guard still rejects a genuine loss.
     original = "A claim (Herzog 1941) stands."
     edited = "A claim stands."

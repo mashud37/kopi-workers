@@ -1,19 +1,13 @@
-"""Per-sentence parse features used by the diagnosis core.
-
-``sentence_features`` turns one spaCy sentence span into a small feature dict
-(length, subordination, passive voice, parse depth, an estimated removable-word
-count) that :mod:`kopi.diagnose` reads to decide which editing instructions a
-paragraph needs. ``_is_quote_para`` flags whole-paragraph quotations, which are
-never edited.
-
-This module only reads the parse — it never mutates text.
+"""Turn one spaCy sentence span into feature counts (length, subordination,
+passive voice, parse depth, removable words) that `kopi.diagnose` uses to
+pick paragraph instructions. Only reads the parse.
 """
 
 _SUBORD_DEPS = frozenset(["relcl", "acl", "advcl", "ccomp", "xcomp", "csubj", "csubjpass"])
 _PASSIVE_DEPS = frozenset(["nsubjpass", "auxpass", "csubjpass"])
 _NOMINAL_SUFFIXES = ("tion", "sion", "ment", "ity", "ness", "ance", "ence", "ism")
 
-# Below this length a sentence is left alone — short sentences carry no fat.
+# Below this length a sentence is left alone: short sentences carry no fat.
 _MIN_SENT_WORDS = 8
 # Hard ceiling on the fraction of a sentence we believe is removable.
 _MAX_RATIO = 0.35
@@ -80,7 +74,7 @@ def sentence_features(sent) -> dict:
 
 
 def _is_quote_para(para: str) -> bool:
-    """A paragraph that is wholly a (block) quotation — never edited."""
+    """A paragraph that is wholly a (block) quotation, never edited."""
     s = para.strip()
     if not s:
         return True

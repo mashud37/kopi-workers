@@ -1,25 +1,21 @@
-"""Lean shared setup for the three routes.
-
-There is no longer a fixed 12-step pipeline. Each route (analyze / proof / edit)
-loads spaCy once, runs the shared :mod:`kopi.diagnose` core, and then performs
-its own small action set. ``prepare`` builds the common state every route needs.
+"""Shared setup for the three routes (analyze, proof, edit): loads spaCy once,
+runs the diagnosis core, then lets each route perform its own actions.
+`prepare` builds the common state.
 """
+from functools import lru_cache
+
 from kopi.quote_guard import guard, unguard
 from kopi import diagnose
 
-_nlp = None
 
-
+@lru_cache(maxsize=1)
 def load_nlp():
     """Load (and cache) the spaCy pipeline, or None if unavailable."""
-    global _nlp
-    if _nlp is None:
-        try:
-            import spacy
-            _nlp = spacy.load("en_core_web_sm")
-        except Exception:
-            _nlp = False
-    return _nlp or None
+    try:
+        import spacy
+        return spacy.load("en_core_web_sm")
+    except Exception:
+        return None
 
 
 def prepare(text: str, target: int, lang: str = "british", reduction: int = 0) -> dict:
@@ -53,7 +49,8 @@ def prepare(text: str, target: int, lang: str = "british", reduction: int = 0) -
     finally:
         sp.done()
 
-    guarded, qmap = guard(text)
+    quoted = guard(text)
+    guarded, qmap = quoted["text"], quoted["qmap"]
     return {
         "text": guarded,
         "qmap": qmap,
@@ -79,6 +76,5 @@ def prepare(text: str, target: int, lang: str = "british", reduction: int = 0) -
 def finalize(state: dict) -> dict:
     """Run the final check and materialise the unguarded output text."""
     from kopi import step_check
-    step_check.run(state)
-    state["final_text"] = unguard(state["text"], state["qmap"])
-    return state
+    state = step_check.run(state)
+    return {**state, "final_text": unguard(state["text"], state["qmap"])}

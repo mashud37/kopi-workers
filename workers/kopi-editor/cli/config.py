@@ -1,9 +1,6 @@
-"""Effective configuration: the GCloud LLM service target and editing defaults.
-
-Precedence for every value: environment variable -> env.yaml -> built-in
-default. env.yaml is the gitignored config (env.yaml.example is the committed
-template), so the JOB_TOKEN that guards the Cloud Run service lives there safely.
-BASE_URL and JOB_TOKEN are written by `manage.py deploy`.
+"""Resolve effective configuration (Cloud Run target, editing defaults) from
+environment variable, then env.yaml, then a built-in default. BASE_URL and
+JOB_TOKEN come from `manage.py deploy`.
 """
 import os
 from pathlib import Path
@@ -27,7 +24,7 @@ _ENV_OVERRIDE = {
     "MODEL": "KOPI_MODEL",
     "LANG": "KOPI_LANG",
     "LLM": "KOPI_LLM",
-    # Deployed instance shape — used only to estimate run cost accurately.
+    # Deployed instance shape, used only to estimate run cost accurately.
     "GPU_TYPE": "KOPI_GPU_TYPE",
     "CPU": "KOPI_CPU",
     "MEMORY": "KOPI_MEMORY",
@@ -36,7 +33,7 @@ _ENV_OVERRIDE = {
     "ANTHROPIC_MODEL": "KOPI_ANTHROPIC_MODEL",
 }
 
-# MODEL (self-hosted/cloud) and ANTHROPIC_MODEL (api) have NO default — the user
+# MODEL (self-hosted/cloud) and ANTHROPIC_MODEL (api) have NO default: the user
 # chooses explicitly in `settings`, and `edit` refuses to run until one is set.
 # This keeps the choice (and its cost) deliberate rather than silently defaulting
 # to an expensive model.
@@ -72,21 +69,6 @@ def get(key, default=None):
     return default if default is not None else _DEFAULTS.get(key)
 
 
-def project():          return get("PROJECT")
-def region():           return get("REGION")
-def service():          return get("SERVICE")
-def base_url():         return get("BASE_URL")
-def job_token():        return get("JOB_TOKEN")
-def model():            return get("MODEL")
-def lang():             return get("LANG")
-def llm_backend():      return get("LLM")
-def gpu_type():         return get("GPU_TYPE")
-def deploy_cpu():       return int(get("CPU"))
-def deploy_mem():       return int(get("MEMORY"))
-def anthropic_api_key(): return get("ANTHROPIC_API_KEY")
-def anthropic_model():   return get("ANTHROPIC_MODEL")
-
-
 def set_values(updates):
     """Persist settings into env.yaml, preserving everything else. None drops."""
     data = _file_values()
@@ -112,20 +94,24 @@ def newest_output():
 
 def show():
     from cli import ui
-    ui.header("kopi-editor — config")
-    ui.info(f"env.yaml: {ENV_FILE if ENV_FILE.exists() else '(not created — run install)'}")
+    ui.header("kopi-editor: config")
+    ui.info(f"env.yaml: {ENV_FILE if ENV_FILE.exists() else '(not created, run install)'}")
     rows = [
-        ("llm backend", llm_backend()),
-        ("language", lang()),
-        ("project", project()), ("region", region()), ("service", service()),
-        ("base url", base_url()), ("job token", "(set)" if job_token() else None),
-        ("self-hosted model", model()),
-        ("anthropic key", "(set)" if anthropic_api_key() else None),
-        ("anthropic model", anthropic_model()),
+        ("llm backend", get("LLM")),
+        ("language", get("LANG")),
+        ("project", get("PROJECT")),
+        ("region", get("REGION")),
+        ("service", get("SERVICE")),
+        ("base url", get("BASE_URL")),
+        ("job token", "(set)" if get("JOB_TOKEN") else None),
+        ("self-hosted model", get("MODEL")),
+        ("anthropic key", "(set)" if get("ANTHROPIC_API_KEY") else None),
+        ("anthropic model", get("ANTHROPIC_MODEL")),
     ]
     for label, val in rows:
         (ui.ok if val else ui.warn)(f"{label}: {val or '(unset)'}")
-    if llm_backend() == "cloud" and not base_url():
-        ui.warn("cloud editing needs the service deployed — run `manage.py deploy`")
-    if llm_backend() == "api" and not anthropic_api_key():
-        ui.warn("api editing needs an Anthropic key — set it with `manage.py settings`")
+    backend = get("LLM")
+    if backend == "cloud" and not get("BASE_URL"):
+        ui.warn("cloud editing needs the service deployed: run `manage.py deploy`")
+    if backend == "api" and not get("ANTHROPIC_API_KEY"):
+        ui.warn("api editing needs an Anthropic key: set it with `manage.py settings`")

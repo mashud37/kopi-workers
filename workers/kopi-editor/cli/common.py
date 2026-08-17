@@ -18,9 +18,9 @@ def resolve_docx(file: str) -> Path:
     return path
 
 
-def load_text(file: str) -> tuple[Path, str, int]:
-    """Resolve + extract a .docx. Returns (path, text, word_count)."""
+def load_text(file: str) -> dict:
+    """Resolve and extract a .docx, as its `path`, `text` and `words` count."""
     from kopi.extract import extract_docx
     path = resolve_docx(file)
     text = extract_docx(path)
-    return path, text, len(text.split())
+    return {"path": path, "text": text, "words": len(text.split())}

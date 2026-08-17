@@ -30,7 +30,7 @@ PHRASE_REPLACEMENTS = {
     "is of the opinion that": "believes",
     "holds the view that": "believes",
     "takes the view that": "believes",
-    # Wordiness (Microsoft style equivalents — previously handled by Vale)
+    # Wordiness (Microsoft style equivalents, previously handled by Vale)
     "in order to": "to",
     "in order that": "so that",
     "due to the fact that": "because",

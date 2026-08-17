@@ -1,6 +1,6 @@
-"""`analyze` — diagnostic report. Runs the deterministic diagnosis, prints a
-readability + wordiness + redundancy summary, and writes a full report to
-output/<name>_analysis.md."""
+"""Run the deterministic diagnosis and print a readability, wordiness, and redundancy
+summary, writing the full report to `output/<name>_analysis.md`.
+"""
 from cli import config, ui, common
 
 
@@ -15,7 +15,8 @@ def run(file):
     sp = StepSpinner("loading document")
     sp.start()
     try:
-        path, text, words = common.load_text(file)
+        loaded = common.load_text(file)
+        path, text, words = loaded["path"], loaded["text"], loaded["words"]
     finally:
         sp.done()
     ui.info(f"{words} words")
@@ -27,7 +28,7 @@ def run(file):
     finally:
         sp.done()
     if nlp is None:
-        raise SystemExit("spaCy model missing — run `python manage.py update` (downloads en_core_web_sm).")
+        raise SystemExit("spaCy model missing: run `python manage.py update` (downloads en_core_web_sm).")
 
     sp = StepSpinner("analysing document")
     sp.start()

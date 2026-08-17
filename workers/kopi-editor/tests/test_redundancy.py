@@ -1,8 +1,6 @@
-"""Unit tests for the redundancy scoring in kopi/step_redundancy.py.
-
-These exercise the pure scoring/selection functions with hand-built lemma sets
-and similarity matrices, so they need neither spaCy nor a sentence-transformer
-model.
+"""Unit tests for the redundancy scoring in kopi/step_redundancy.py. These
+exercise the pure scoring and selection functions with hand-built lemma sets
+and similarity matrices, needing neither spaCy nor a model.
 """
 from kopi import step_redundancy as red
 

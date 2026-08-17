@@ -1,13 +1,13 @@
-"""`proof` — conservative deterministic editing, no LLM. Applies safe mechanical
-fixes (fillers, padding, clichés, long→short words, grammar) and writes the
-edited text + change log to output/."""
+"""Apply the safe mechanical fixes with no model call (fillers, padding, cliches, long
+words, grammar), writing the edited text and a change log to `output/`.
+"""
 from cli import config, ui, common
 
 
 def run(file, lang=None):
     from kopi.progress import StepSpinner
 
-    lang = lang or config.lang()
+    lang = lang or config.get("LANG")
 
     path = common.resolve_docx(file)
     ui.step(f"Proofing {path.name}")
@@ -15,7 +15,8 @@ def run(file, lang=None):
     sp = StepSpinner("loading document")
     sp.start()
     try:
-        path, text, words = common.load_text(file)
+        loaded = common.load_text(file)
+        path, text, words = loaded["path"], loaded["text"], loaded["words"]
     finally:
         sp.done()
     ui.info(f"{words} words | conservative deterministic edit (no LLM)")
@@ -28,7 +29,7 @@ def run(file, lang=None):
     ui.info("  · 2/3  Apply deterministic edits")
     ui.info("  · 3/3  Write outputs")
 
-    # No word target for proofing — pass the current length so the final check
+    # No word target for proofing: pass the current length so the final check
     # reports "at target" rather than a spurious shortfall.
     state = prepare(text, words, lang)
     state["run_info"] = {"backend": "skip", "model": None}
@@ -37,7 +38,8 @@ def run(file, lang=None):
 
     from datetime import datetime
     run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
-    edited, changelog, diff = write_outputs(state, path, run_dir)
+    written = write_outputs(state, path, run_dir)
+    edited, changelog, diff = written["edited"], written["report"], written["diff"]
     final = state["counts"].get("final", words)
     ui.ok(f"removed {words - final} words; final {final}")
     ui.ok(f"edited text: {edited}")

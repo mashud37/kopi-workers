@@ -1,12 +1,6 @@
-"""Citation detection and casing repair, shared by the editor guard and the serving
-layer. Pure stdlib so the featherweight `/tighten` proxy can import it without pulling
-numpy/torch.
-
-Small models lowercase an author surname mid-sentence — '(Hallinan & Striphas 2016)'
-comes back as '(Hallinan & striphas 2016)'. The citation is otherwise intact, so the
-acceptance guard's exact-match rejection is a false negative on a trivial, mechanical
-error. `restore_casing` repairs it deterministically: any citation whose case-folded
-form matches one in the original is rewritten to the original's exact casing.
+"""Find citations like `(Author, Year)` and restore original casing an LLM
+lowercased mid-sentence, matching case-folded forms against the source text.
+Pure stdlib so the lightweight `/tighten` proxy can import it.
 """
 import re
 
@@ -31,4 +25,11 @@ def restore_casing(original: str, edited: str) -> str:
     canon = {c.lower(): c for c in find(original)}
     if not canon:
         return edited
-    return CITATION_RE.sub(lambda m: canon.get(m.group(0).lower(), m.group(0)), edited)
+    pieces = []
+    last_end = 0
+    for match in CITATION_RE.finditer(edited):
+        pieces.append(edited[last_end:match.start()])
+        pieces.append(canon.get(match.group(0).lower(), match.group(0)))
+        last_end = match.end()
+    pieces.append(edited[last_end:])
+    return "".join(pieces)
