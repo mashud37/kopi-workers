@@ -1,0 +1,18 @@
+# Data-generation dependencies (generate + build + the bridge to kopi-editor).
+# Training deps are heavy and platform-sensitive: see requirements-train.txt,
+# installed only on the GPU box (learning.md §3.5).
+anthropic
+pyyaml
+
+# Cloud training submit/pull (train-cloud, pull-adapter): light pure-Python clients
+# that run on the laptop; the GPU stack stays in requirements-train.txt.
+# google-cloud-* = Vertex backend; huggingface_hub = HF Jobs backend (run_job/Jobs API).
+google-cloud-aiplatform
+google-cloud-storage
+huggingface_hub>=1.8.0
+
+# The bridge imports kopi-editor's kopi.* package (sibling repo), which needs the
+# editor's own runtime: spaCy + en_core_web_sm, sentence-transformers, textstat.
+# Install kopi-editor's requirements in the same environment:
+#   pip install -r ../kopi-editor/requirements.txt
+#   python -m spacy download en_core_web_sm
