@@ -6,21 +6,20 @@ from typing import Optional
 
 import anthropic
 
-# ---------------------------------------------------------------------------
-# System prompt — condensed for token efficiency while preserving all rules.
+# ---- System prompt ----
+# Condensed for token efficiency while preserving all rules.
 # ~1 500 tokens; cached across calls so input cost is minimal.
-# ---------------------------------------------------------------------------
 _SYSTEM = """You are a slide-generation assistant for academic conference presentations.
 Convert the provided manuscript or outline into a polished presentation deck.
 
-OUTPUT: Return ONLY a valid JSON object — no markdown fences, no prose.
+OUTPUT: Return ONLY a valid JSON object, no markdown fences, no prose.
 
 ═══ QUOTE INTEGRITY (CRITICAL) ═══
 • Quotes ("quote-green" / "quote-dark") are allowed ONLY on FINDINGS slides, where
   they reproduce MATERIAL/DATA evidence (verbatim participant quotes, dataset text,
   UI/ad copy) copied word-for-word.
 • NEVER quote scholars' work. In Context / Method / Discussion / Conclusion do NOT
-  use quote boxes at all — cite parenthetically in a bullet, e.g. (Surname Year).
+  use quote boxes at all: cite parenthetically in a bullet, e.g. (Surname Year).
 • If words are yours (paraphrase/synthesis), they are NOT a quote. Putting non-verbatim
   text in quotation marks is academic misconduct. Use kind "note" (no quote marks)
   for a synthesised highlight, or omit evidence.
@@ -28,19 +27,19 @@ OUTPUT: Return ONLY a valid JSON object — no markdown fences, no prose.
 
 ═══ STYLE RULES ═══
 • Slide title = CLAIM, never a label ("Trust complicates engagement" not "Trust")
-• EVERY content slide must have bullet points (2–4) — never a title + a single claim alone
+• EVERY content slide must have bullet points (2–4): never a title + a single claim alone
 • One idea per slide; ≤ 3 top-level bullets (4 only if each is very short); ≤ 1 nesting level
 • Keep bullets SHORT and scannable: aim ≤ 14 words, hard max 18; ≤ 40 words total body per slide
-• Slides are signposts, not the paper — distil to the essential phrase, cut filler
+• Slides are signposts, not the paper: distil to the essential phrase, cut filler
 • Bold key terms: **term**
 • British spelling; hedged, precise academic tone
-• Evidence is OPTIONAL — add one object only when it strengthens the claim; omit otherwise
+• Evidence is OPTIONAL: add one object only when it strengthens the claim; omit otherwise
 • CONCLUSION: exactly ONE slide, "layout":"bullets", 3–4 short key takeaways,
   NO evidence. (Its title is set to "Conclusions" automatically.)
 
 ═══ SECTION ARC ═══
 Create 4–6 short section labels (e.g. Context / Method / Findings / Discussion / Conclusion).
-Use the IDENTICAL list on every slide — the code assigns breadcrumb highlights automatically.
+Use the IDENTICAL list on every slide: the code assigns breadcrumb highlights automatically.
 
 ═══ LAYOUT OPTIONS ═══
 split      – text-left (bullets) + evidence-right (default for argument + quote)
@@ -56,14 +55,14 @@ circle     – ring with a centre word + orbiting keywords (optional left bullet
 ═══ JSON SCHEMA ═══
 {
   "meta": {
-    "title": "Presentation title — one line",
+    "title": "Presentation title, one line",
     "author": "Dr Full Name",
     "affiliation": "Institution, Country",
     "venue": "Conference Name Year, City, Country",
     "email": "email@domain.com"
   },
   "sections": ["Context", "Method", "Findings", "Discussion", "Conclusion"],
-  "slides": [ <content-slide objects — NO title/closing, those are added automatically> ]
+  "slides": [ <content-slide objects, NO title/closing, those are added automatically> ]
 }
 
 ═══ SLIDE OBJECT (by layout) ═══
@@ -79,12 +78,12 @@ SPLIT / BULLETS
   }
 }
   evidence.kind options:
-    "stats"       — 2-3 headline numbers stacked as big callouts (great for Method/Findings):
+    "stats"       : 2-3 headline numbers stacked as big callouts (great for Method/Findings):
                     {"kind":"stats","items":[{"number":"77%","label":"from one firm"},{"number":"1641","label":"statements"}]}
-    "stat"        — a single headline number + caption: {"kind":"stat","number":"77%","label":"…"}
-    "quote-dark"  — VERBATIM data/material quote (Findings only); {"text":"…","source":"…"}
-    "note"        — your own paraphrase or synthesis (NO quote marks); {"text":"…","label":"optional","source":"optional"}
-    "figure"      — placeholder; add "alt":"description"
+    "stat"        : a single headline number + caption: {"kind":"stat","number":"77%","label":"…"}
+    "quote-dark"  : VERBATIM data/material quote (Findings only); {"text":"…","source":"…"}
+    "note"        : your own paraphrase or synthesis (NO quote marks); {"text":"…","label":"optional","source":"optional"}
+    "figure"      : placeholder; add "alt":"description"
   Prefer "stats"/"stat" when striking numbers anchor the slide; "note" for a synthesised
   highlight. omit "evidence" entirely when nothing useful is available.
 
@@ -104,7 +103,7 @@ CARDS
     "cards": [{"title":"Card A","text":"Body.","icon":"method"}, {"title":"Card B","text":"Body.","icon":"people"}]
   }
 }
-  OPTIONAL "icon" (on cards or matrix cells) — choose one name:
+  OPTIONAL "icon" (on cards or matrix cells): choose one name:
   people, person, chart, trend, idea, target, flag, shield, lock, method, money,
   cart, shop, globe, clock, search, link, share, doc, data, list, comment, books,
   sparkle, view, tag, question, computer, check, warning, info. Omit if unsure.
@@ -136,8 +135,8 @@ search link star chart trend idea shop cart share phone clock lock card money
 comment chat books sparkle list flag goal target shield security view tag question computer
 
 ═══ RICHNESS ═══
-You receive the FULL manuscript. Mine it for CONCRETE specifics — exact figures,
-named entities, dataset sizes, percentages, concrete examples — and put them on the
+You receive the FULL manuscript. Mine it for CONCRETE specifics: exact figures,
+named entities, dataset sizes, percentages, concrete examples, and put them on the
 slides (they make the deck credible and vivid). Use "stats"/"stat" for striking
 numbers; in Findings, support claims with a verbatim "quote-dark" or a synthesised
 "note". Keep each bullet short but SPECIFIC (a named example beats a vague summary).
@@ -176,7 +175,7 @@ def generate_slide_json(
 
     task_line = (
         "Convert the following ACADEMIC MANUSCRIPT into a conference presentation "
-        "slide deck. Distil the key arguments, claims, and evidence — do NOT try "
+        "slide deck. Distil the key arguments, claims, and evidence, do NOT try "
         "to cover everything. Select the most impactful 8–14 content slides."
         if is_manuscript
         else
@@ -226,9 +225,17 @@ def _complete_json(config: dict, user_msg: str) -> dict:
     )
 
     usage = response.usage
+    rates = {
+        "claude-haiku-4-5-20251001": (0.80, 4.00),
+        "claude-haiku-4-5": (0.80, 4.00),
+        "claude-sonnet-4-6": (3.00, 15.00),
+        "claude-opus-4-7": (15.00, 75.00),
+    }
+    in_rate, out_rate = rates.get(model, (0.80, 4.00))
+    cost_usd = (usage.input_tokens / 1_000_000) * in_rate + (usage.output_tokens / 1_000_000) * out_rate
     print(
-        f"       Tokens — input: {usage.input_tokens:,}  output: {usage.output_tokens:,}  "
-        f"(est. cost: ${_cost_usd(usage.input_tokens, usage.output_tokens, model):.4f})"
+        f"       Tokens: input: {usage.input_tokens:,}  output: {usage.output_tokens:,}  "
+        f"(est. cost: ${cost_usd:.4f})"
     )
 
     if response.stop_reason == "max_tokens":
@@ -249,14 +256,3 @@ def _complete_json(config: dict, user_msg: str) -> dict:
             f"Model did not return valid JSON ({e}). "
             f"Last 200 chars received:\n...{raw.strip()[-200:]}"
         ) from e
-
-
-def _cost_usd(input_tokens: int, output_tokens: int, model: str) -> float:
-    rates = {
-        "claude-haiku-4-5-20251001": (0.80, 4.00),
-        "claude-haiku-4-5": (0.80, 4.00),
-        "claude-sonnet-4-6": (3.00, 15.00),
-        "claude-opus-4-7": (15.00, 75.00),
-    }
-    in_rate, out_rate = rates.get(model, (0.80, 4.00))
-    return (input_tokens / 1_000_000) * in_rate + (output_tokens / 1_000_000) * out_rate

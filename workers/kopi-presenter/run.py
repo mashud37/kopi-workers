@@ -1,17 +1,5 @@
-#!/usr/bin/env python3
-"""
-kopi-presenter CLI — manuscript/outline -> PowerPoint (.pptx) + PDF.
-
-Pipeline: parse -> LLM slide JSON -> lint -> house rules -> build .pptx -> export PDF.
-
-Usage:
-    python run.py input/manuscript.docx
-    python run.py input/outline.txt --venue "ICA 2026, Brisbane"
-    python run.py input/paper.docx --review          # review/edit the plan first
-    python run.py input/paper.docx --emoji            # emoji instead of Fluent icons
-    python run.py input/paper.docx --dry-run          # print JSON plan only
-    python run.py input/paper.docx --plan plan.json   # skip LLM, rebuild from JSON
-    python run.py input/paper.docx --no-pdf           # .pptx only
+"""Turn a manuscript or outline into a styled .pptx and a PDF: parse the input, plan
+the slides with a model, apply the house rules, then render.
 """
 
 import argparse
@@ -39,7 +27,26 @@ from slides.rules import apply_house_rules
 _log = lambda *a, **kw: print(*a, **kw, file=sys.stderr)
 
 
-def main() -> None:
+def _build_plan(input_path: Path, args, config: dict) -> dict:
+    """Parse the input file and either call the model or load an existing JSON
+    plan for it. Returns the parsed content plus the slide plan."""
+    _log(f"\n[1/5] Parsing  {input_path.name} ...")
+    content = parse_input(input_path, condense=args.condense)
+    _log(f"       {len(content.split()):,} words "
+         f"({'condensed' if args.condense else 'full text'})")
+
+    if args.plan:
+        _log(f"[2/5] Loading JSON  {args.plan} ...")
+        with open(args.plan, encoding="utf-8") as f:
+            slide_data = json.load(f)
+    else:
+        _log(f"[2/5] Calling {config.get('llm', {}).get('model', 'LLM')} ...")
+        slide_data = generate_slide_json(content, config, venue_override=args.venue)
+
+    return {"content": content, "slide_data": slide_data}
+
+
+def _parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(
         description="Generate academic conference slides from a manuscript or outline."
     )
@@ -56,7 +63,20 @@ def main() -> None:
                     help="Use colour emoji instead of the default Segoe Fluent icons")
     ap.add_argument("--condense", action="store_true",
                     help="Condense long .docx paragraphs (first+last sentence) instead of sending the full text")
-    args = ap.parse_args()
+    return ap.parse_args()
+
+
+def _print_step_plan(input_path: Path, args: argparse.Namespace) -> None:
+    _log(f"\n▶ kopi-presenter  {input_path.name}")
+    _log("  · 1/5  Parse input")
+    _log("  · 2/5  Generate slide JSON" if not args.plan else "  · 2/5  Load JSON plan")
+    _log("  · 3/5  Lint & apply house rules")
+    _log("  · 4/5  Build .pptx")
+    _log("  · 5/5  Export PDF" if not (args.no_render or args.no_pdf) else "  · 5/5  Export PDF (skipped)")
+
+
+def main() -> None:
+    args = _parse_args()
 
     input_path = Path(args.input_file)
     if not input_path.exists():
@@ -69,20 +89,11 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
 
-    # ── 1. Parse ────────────────────────────────────────────────────────────
-    _log(f"\n[1/5] Parsing  {input_path.name} ...")
-    content = parse_input(input_path, condense=args.condense)
-    _log(f"       {len(content.split()):,} words "
-         f"({'condensed' if args.condense else 'full text'})")
+    _print_step_plan(input_path, args)
 
-    # ── 2. LLM or load JSON ─────────────────────────────────────────────────
-    if args.plan:
-        _log(f"[2/5] Loading JSON  {args.plan} ...")
-        with open(args.plan, encoding="utf-8") as f:
-            slide_data = json.load(f)
-    else:
-        _log(f"[2/5] Calling {config.get('llm', {}).get('model', 'LLM')} ...")
-        slide_data = generate_slide_json(content, config, venue_override=args.venue)
+    # ---- 1+2. Parse, then LLM or load JSON ----
+    plan = _build_plan(input_path, args, config)
+    content, slide_data = plan["content"], plan["slide_data"]
 
     if args.dry_run:
         _log("\n── JSON plan (dry-run) ──────────────────────────────────")
@@ -94,16 +105,16 @@ def main() -> None:
     _write_json(json_path, slide_data)
     _log(f"       JSON → {json_path.name}")
 
-    # ── 2b. Optional conversational review ──────────────────────────────────
+    # ---- 2b. Optional conversational review ----
     if args.review:
         slide_data = _review_plan(json_path, slide_data, config)
 
-    # ── 3. Lint ─────────────────────────────────────────────────────────────
+    # ---- 3. Lint ----
     _log("[3/5] Linting ...")
     slide_data = lint_and_repair(slide_data, content, config)
     slide_data = apply_house_rules(slide_data)
 
-    # ── 4. Emit .pptx ───────────────────────────────────────────────────────
+    # ---- 4. Emit .pptx ----
     pptx_path = output_dir / f"{stem}.pptx"
     _log(f"[4/5] Building  {pptx_path.name} ...")
     build_pptx(slide_data, pptx_path, config)
@@ -111,7 +122,7 @@ def main() -> None:
     _log(f"       {n_slides} content slides  (+title +closing = {n_slides + 2} total)")
     _log(f"       → {pptx_path.name}  ({pptx_path.stat().st_size // 1024} KB)")
 
-    # ── 5. Render PDF ─────────────────────────────────────────────────────────
+    # ---- 5. Render PDF ----
     if args.no_render or args.no_pdf:
         _log("[5/5] Skipping PDF (--no-pdf/--no-render).")
     else:
@@ -155,7 +166,7 @@ def _print_outline(data: dict) -> None:
         for col in body.get("columns", []):
             _log(f"          ◦ {_plain(col.get('lead', ''))}: {_plain(col.get('text', ''))}")
         if body.get("center") or body.get("keywords"):
-            _log(f"          ◯ {_plain(body.get('center', ''))} — {', '.join(body.get('keywords', []))}")
+            _log(f"          ◯ {_plain(body.get('center', ''))}: {', '.join(body.get('keywords', []))}")
         ev = body.get("evidence") or {}
         if ev:
             if ev.get("kind") == "stats":

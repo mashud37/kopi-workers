@@ -5,8 +5,22 @@ import re
 
 import anthropic
 
+_VALID_LAYOUTS = {
+    "split",
+    "iconrow",
+    "cards",
+    "matrix",
+    "stepflow",
+    "statement",
+    "bullets",
+    "boxes",
+    "circle",
+    "prose",
+}
+
 
 def lint_and_repair(slide_data: dict, original_content: str, config: dict) -> dict:
+    print("       Checking slide JSON ...")
     errors = _lint(slide_data)
     if not errors:
         print("       Lint: OK")
@@ -17,31 +31,24 @@ def lint_and_repair(slide_data: dict, original_content: str, config: dict) -> di
         print(f"         • {e}")
 
     if not config.get("linter", {}).get("auto_repair", True):
-        print("       Auto-repair disabled — proceeding with original JSON")
+        print("       Auto-repair disabled, proceeding with original JSON")
         return slide_data
 
     print("       Attempting repair ...")
     repaired = _repair(slide_data, errors, config)
 
+    print("       Verifying repair ...")
     second = _lint(repaired)
     if not second:
         print("       Repair: OK")
     else:
-        print(f"       Repair incomplete — {len(second)} issue(s) remain (proceeding):")
+        print(f"       Repair incomplete: {len(second)} issue(s) remain (proceeding):")
         for e in second:
             print(f"         • {e}")
     return repaired
 
 
-# ---------------------------------------------------------------------------
-# Lint rules
-# ---------------------------------------------------------------------------
-
-_VALID_LAYOUTS = {
-    "split", "iconrow", "cards", "matrix", "stepflow", "statement", "bullets",
-    "boxes", "circle", "prose",
-}
-
+# ---- Lint rules ----
 
 def _lint(data: dict) -> list[str]:
     errors: list[str] = []
@@ -84,14 +91,12 @@ def _lint(data: dict) -> list[str]:
         for j, b in enumerate(bullets):
             wc = len(b.get("text", "").split())
             if wc > 24:
-                errors.append(f"{pfx} bullet[{j}]: {wc} words — shorten to ≤18")
+                errors.append(f"{pfx} bullet[{j}]: {wc} words, shorten to ≤18")
 
     return errors
 
 
-# ---------------------------------------------------------------------------
-# Repair
-# ---------------------------------------------------------------------------
+# ---- Repair ----
 
 def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
     api_key = config.get("api", {}).get("anthropic_key", "")
@@ -104,7 +109,7 @@ def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
     prompt = (
         f"Fix the following validation errors in the slide JSON. "
         f"Shorten over-long bullets by distilling to the essential phrase "
-        f"(do not just truncate). Return ONLY the corrected JSON — no fences, no prose.\n\n"
+        f"(do not just truncate). Return ONLY the corrected JSON, no fences, no prose.\n\n"
         f"ERRORS:\n{error_list}\n\n"
         f"JSON:\n{json.dumps(slide_data, indent=2, ensure_ascii=False)}"
     )
@@ -120,5 +125,5 @@ def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
         raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
         return json.loads(raw.strip())
     except Exception as exc:
-        print(f"       Repair call failed ({exc}) — using original JSON")
+        print(f"       Repair call failed ({exc}), using original JSON")
         return slide_data

@@ -20,7 +20,7 @@ def load_config() -> dict:
     if CONFIG_LOCAL_PATH.exists():
         with open(CONFIG_LOCAL_PATH, encoding="utf-8") as f:
             local = yaml.safe_load(f) or {}
-        _deep_merge(config, local)
+        config = _deep_merge(config, local)
 
     env_key = os.getenv("ANTHROPIC_API_KEY")
     if env_key:
@@ -29,9 +29,11 @@ def load_config() -> dict:
     return config
 
 
-def _deep_merge(base: dict, override: dict) -> None:
+def _deep_merge(base: dict, override: dict) -> dict:
+    merged = dict(base)
     for k, v in override.items():
-        if isinstance(v, dict) and isinstance(base.get(k), dict):
-            _deep_merge(base[k], v)
+        if isinstance(v, dict) and isinstance(merged.get(k), dict):
+            merged[k] = _deep_merge(merged[k], v)
         else:
-            base[k] = v
+            merged[k] = v
+    return merged

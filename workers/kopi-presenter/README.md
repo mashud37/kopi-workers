@@ -1,124 +1,95 @@
-# kopi-presenter — automated slide decks (PPTX + PDF)
+# kopi-presenter
 
-Turn a manuscript or outline into a finished, presentation-ready **PowerPoint
-deck** (`.pptx`) and a **PDF**, in one command:
+Turning a finished paper into a conference deck is mechanical but slow: pull out the argument, cut it to slide-sized claims, and lay each one out with consistent style. kopi-presenter exists to do that in one command: it turns a manuscript or outline into a presentation-ready PowerPoint deck (`.pptx`) and a PDF. A language model reads the text and distils it into a structured slide plan (sections, slides, layouts, evidence); deterministic Python then checks that plan against a set of house rules and builds a styled `.pptx`, and a PDF is exported alongside it for handout or print. There is no server component: everything runs from a single script against a local file, and only the manuscript text sent to the model leaves the machine.
 
-```bash
-python run.py input/manuscript.docx
+## Data flow
+
+```mermaid
+flowchart TD
+    DOC[/"input/manuscript.docx<br/>or outline.txt"/] --> PARSE["Parse text<br/>(condense optional)"]
+    PARSE --> LLM["Generate slide plan<br/>(Claude)"]
+    PLAN[/"--plan FILE<br/>reuse existing JSON"/] -.skips LLM.-> LINT
+    LLM --> JSON[("output/&lt;name&gt;.json")]
+    JSON --> REVIEW{"--review?"}
+    REVIEW -->|"feedback"| LLM
+    REVIEW -->|"accept"| LINT["Lint + auto-repair"]
+    LINT --> RULES["Apply house rules:<br/>quotes, bullets,<br/>merged conclusions"]
+    RULES --> BUILD["Build .pptx<br/>(python-pptx)"]
+    BUILD --> PPTX[("output/&lt;name&gt;.pptx")]
+    PPTX --> RENDER["Export PDF<br/>(PowerPoint or LibreOffice)"]
+    RENDER --> PDF[("output/&lt;name&gt;.pdf")]
+
+    classDef store fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a;
+    classDef route fill:#e6f4ea,stroke:#34a853,color:#1a1a1a;
+    class DOC,PLAN,JSON,PPTX,PDF store;
+    class REVIEW route;
 ```
 
-An LLM distils your text into a structured slide plan; deterministic Python then
-builds a styled `.pptx` (editable in PowerPoint) and exports a PDF.
-
-## How it works
+## Layout
 
 ```
-parse (.docx/.txt)  →  LLM slide JSON  →  lint  →  house rules  →  build .pptx  →  export PDF
-```
-
-- **LLM** (`slides/llm.py`) returns a strict JSON plan (sections, slides, layouts, evidence).
-- **House rules** (`slides/rules.py`) enforce integrity deterministically: quotes only
-  on Findings slides, every content slide has bullets, a single merged Conclusions slide.
-- **Builder** (`slides/emitter_pptx.py`) renders the deck with `python-pptx`:
-  breadcrumb nav, claim titles + accent rule, bold/colour key terms, stat callouts,
-  quote/note boxes, two-column cards, matrix, stepflow, circle motif, emoji/icon row.
-- **Renderer** (`slides/renderer_pptx.py`) exports PDF via PowerPoint (best fidelity),
-  falling back to LibreOffice.
-
-## Repo layout
-
-```
-run.py              pipeline entry point
-config.yaml         config template (no secrets)
-config.local.yaml   your local config + API key (gitignored)
+run.py             pipeline entrypoint
+config.yaml        config template, no secrets
+config.local.yaml  local config + API key (gitignored)
 requirements.txt
-slides/
-  parser.py         .docx/.txt -> text
-  llm.py            text -> slide JSON (Claude)
-  linter.py         validate + auto-repair the JSON
-  rules.py          deterministic house rules
-  emitter_pptx.py   slide JSON -> .pptx (python-pptx)
-  renderer_pptx.py  .pptx -> .pdf (PowerPoint / LibreOffice)
-  icons.py          Segoe Fluent Icons + emoji mapping
-input/              drop manuscripts (.docx) / outlines (.txt) here
-output/             generated .json / .pptx / .pdf land here
+slides/            parser, llm, linter, rules, emitter_pptx, renderer_pptx, icons
+input/             manuscripts (.docx) and outlines (.txt) go here
+output/            generated .json / .pptx / .pdf land here
 ```
 
 ## Setup
 
-```bash
-pip install -r requirements.txt          # anthropic, python-pptx, python-docx, pyyaml
-
-cp config.yaml config.local.yaml         # then set api.anthropic_key, or:
-#   set ANTHROPIC_API_KEY=sk-ant-...      (env var overrides the file)
+```
+pip install -r requirements.txt
+cp config.yaml config.local.yaml
 ```
 
-PDF export needs **PowerPoint** (Windows, used by default) or **LibreOffice**
-(auto-detected fallback). The `.pptx` itself needs neither.
+Set `api.anthropic_key` in `config.local.yaml`, or set the `ANTHROPIC_API_KEY` environment variable, which overrides the file. PDF export needs PowerPoint (the default on Windows) or LibreOffice as an auto-detected fallback; the `.pptx` itself needs neither.
 
-## Usage
+## Commands
 
-```bash
-python run.py input/manuscript.docx --venue "ICA 2026, Cape Town, South Africa"
-python run.py input/outline.txt
-python run.py input/paper.docx --review          # review the plan, give plain-language feedback, LLM revises
-python run.py input/paper.docx --emoji           # colour emoji instead of Fluent icons
-python run.py input/paper.docx --dry-run         # print the JSON plan only
-python run.py input/paper.docx --plan output/paper.json   # rebuild from JSON (no LLM)
-python run.py input/paper.docx --no-pdf          # .pptx only
-python run.py input/paper.docx --condense        # trim long paragraphs (cheaper, less rich)
-```
+kopi-presenter has no interactive menu; every action is a flag on the one pipeline entrypoint, `run.py <input_file>`.
 
-Outputs land in `output/` (override with `-o DIR`):
+| Action | Command |
+|---|---|
+| Build a deck (.pptx + PDF) from a manuscript or outline | `run.py input/manuscript.docx` |
+| Set the venue string (overrides manuscript + config default) | `run.py input/paper.docx --venue "ICA 2026, Cape Town"` |
+| Review the plan before rendering, revise it in plain language | `run.py input/paper.docx --review` |
+| Use colour emoji instead of Segoe Fluent icons | `run.py input/paper.docx --emoji` |
+| Print the JSON plan only, write no files | `run.py input/paper.docx --dry-run` |
+| Rebuild from an existing JSON plan, skip the LLM call | `run.py input/paper.docx --plan output/paper.json` |
+| Build the .pptx only, skip PDF export | `run.py input/paper.docx --no-pdf` |
+| Trim long paragraphs before sending them to the model | `run.py input/paper.docx --condense` |
+| Write output somewhere other than `output/` | `run.py input/paper.docx -o DIR` |
 
-| File | Description |
-|------|-------------|
-| `stem.json` | Slide plan — reuse with `--plan` to skip the LLM |
-| `stem.pptx` | **Editable PowerPoint deck** |
-| `stem.pdf`  | **Primary handout/print output** |
+Each field on the deck is derived deterministically after the LLM plan comes back: parsing, linting, house rules, building, and PDF export are all local, so `--dry-run` and `--plan` are the two ways to inspect or reuse a plan without spending another call.
 
-## Configuration (`config.local.yaml`)
+## How it works
 
-```yaml
-llm:
-  model: "claude-sonnet-4-6"   # or claude-haiku-4-5-20251001 / claude-opus-4-7
-  max_tokens: 8192
-defaults:
-  author: "Your Name"
-  affiliation: "Your Institution"
-  email: "you@example.com"
-render:
-  icons: "fluent"              # "fluent" (default) or "emoji"
-linter:
-  auto_repair: true
-```
+- The LLM (`slides/llm.py`) returns a strict JSON plan: sections, slides, layouts, and evidence.
+- House rules (`slides/rules.py`) enforce integrity deterministically: quotes appear only on Findings slides, every content slide has bullets, and there is a single merged Conclusions slide.
+- The builder (`slides/emitter_pptx.py`) renders the deck with `python-pptx`: breadcrumb navigation, claim titles with an accent rule, bold and coloured key terms, stat callouts, quote and note boxes, two-column cards, matrix and stepflow layouts, a circle motif, and an emoji or icon row.
+- The renderer (`slides/renderer_pptx.py`) exports the PDF via PowerPoint for the best fidelity, falling back to LibreOffice when PowerPoint is not available.
 
-By default the **full manuscript** is sent to the LLM for the richest result
-(use `--condense` to trim long paragraphs and save tokens).
+By default the full manuscript is sent to the LLM for the richest result; `--condense` trims long paragraphs first to save tokens, at some cost to richness.
+
+With `--review`, the plan is printed after generation and feedback can be entered in plain language; each round of feedback is one further LLM call that revises the plan, repeated until it is accepted or aborted.
 
 ## Design system
 
-- **Layouts:** `bullets`, `split` (bullets + side evidence), `cards`, `matrix`,
-  `stepflow`, `iconrow`, `boxes`, `circle` (centre word + orbiting keywords).
-- **Evidence (side content):** `stats` (2–3 big numbers), `stat`, `quote-dark`
-  (verbatim, Findings only), `note` (synthesised, no quote marks), `figure`.
-- **Icons:** Segoe Fluent Icons (vector, recoloured to the palette) by name; colour
-  emoji via `--emoji`. Body text auto-sizes to fit; bullets are top-aligned.
-- **Palette:** Office-style — consistent blue chrome (nav, title rule, key terms)
-  plus a categorical set (blue/orange/green/gold/purple/red) for stats, cards,
-  matrix cells and columns.
+- Layouts: `bullets`, `split` (bullets plus side evidence), `cards`, `matrix`, `stepflow`, `iconrow`, `boxes`, `circle` (a centre word with orbiting keywords).
+- Evidence (side content): `stats` (two or three big numbers), `stat`, `quote-dark` (verbatim, Findings slides only), `note` (synthesised, no quote marks), `figure`.
+- Icons: Segoe Fluent Icons (vector, recoloured to the palette) by name, or colour emoji via `--emoji`. Body text auto-sizes to fit; bullets are top-aligned.
+- Palette: consistent blue chrome for navigation, title rule, and key terms, plus a categorical set (blue, orange, green, gold, purple, red) for stats, cards, matrix cells, and columns.
 
-## Models & cost (full 10k-word manuscript ≈ 13k input tokens)
+> Segoe Fluent Icon glyphs render correctly via the PowerPoint PDF path; the LibreOffice fallback may show them blank. Keep PowerPoint installed for icon fidelity, or use `--emoji`.
 
-| Model | ~Cost/deck | Notes |
-|-------|-----------|-------|
-| Haiku 4.5 | ~$0.03 | cheapest; good for outlines / clear papers |
-| Sonnet 4.6 | ~$0.10 | balanced; strong argument selection (default) |
-| Opus 4.7 | ~$0.30–0.50 | richest distillation of dense papers |
+## Cost (full 10k-word manuscript, about 13k input tokens)
 
-## Notes
+| Model | Approx. cost per deck | Notes |
+|---|---|---|
+| Haiku | ~$0.03 | cheapest; good for outlines and clear papers |
+| Sonnet | ~$0.10 | balanced; strong argument selection (default) |
+| Opus | ~$0.30-0.50 | richest distillation of dense papers |
 
-- Segoe Fluent Icon glyphs render via **PowerPoint** (the default PDF path). The
-  **LibreOffice** fallback may show blanks for them — install/keep PowerPoint for
-  icon fidelity, or use `--emoji`.
-- `config.local.yaml` holds your API key and is gitignored — never commit it.
+> Estimates only, verify current Anthropic pricing before relying on them.

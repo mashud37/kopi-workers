@@ -1,16 +1,11 @@
-"""Segoe Fluent Icons helper.
-
-Segoe Fluent Icons ships with Windows 11 (C:\\Windows\\Fonts\\SegoeIcons.ttf) and is
-the icon set PowerPoint's own icon picker draws from. Glyphs live in the Private
-Use Area, so they render only where the font is installed — true for PowerPoint
-(our primary PDF path). The LibreOffice fallback may show blanks for these.
-
-Code points below were verified visually against the installed font.
+"""Map slide icon names to Segoe Fluent Icons code points, the set PowerPoint's own
+picker draws from. The glyphs render only where that font is installed.
 """
 
 from pptx.util import Pt
 
 ICON_FONT = "Segoe Fluent Icons"
+EMOJI_FONT = "Segoe UI Emoji"
 
 # semantic name -> verified PUA code point
 ICONS = {
@@ -82,6 +77,62 @@ SECTION_ICONS = {
     "conclu": "check",
 }
 
+# semantic name -> emoji (used only in --emoji mode)
+EMOJI = {
+    "people": "👥",
+    "person": "🧑",
+    "settings": "⚙️",
+    "method": "🔬",
+    "process": "🔄",
+    "globe": "🌐",
+    "world": "🌍",
+    "check": "✅",
+    "warning": "⚠️",
+    "info": "ℹ️",
+    "doc": "📄",
+    "document": "📄",
+    "data": "📋",
+    "clipboard": "📋",
+    "search": "🔍",
+    "link": "🔗",
+    "star": "⭐",
+    "chart": "📊",
+    "piechart": "📊",
+    "trend": "📈",
+    "growth": "📈",
+    "idea": "💡",
+    "lightbulb": "💡",
+    "shop": "🛍️",
+    "cart": "🛒",
+    "share": "📤",
+    "phone": "📱",
+    "clock": "⏰",
+    "time": "⏳",
+    "lock": "🔒",
+    "card": "💳",
+    "money": "💰",
+    "payment": "💳",
+    "comment": "💬",
+    "discourse": "💬",
+    "chat": "💬",
+    "books": "📚",
+    "library": "📚",
+    "sparkle": "✨",
+    "list": "📝",
+    "flag": "🚩",
+    "goal": "🎯",
+    "target": "🎯",
+    "shield": "🛡️",
+    "security": "🔐",
+    "view": "👀",
+    "attention": "👀",
+    "tag": "🏷️",
+    "question": "❓",
+    "computer": "💻",
+    "device": "📱",
+    "robot": "🤖",
+}
+
 
 def glyph(name):
     """Return the glyph char for a semantic name, or None if unknown."""
@@ -98,48 +149,29 @@ def section_glyph(section):
     return None
 
 
-EMOJI_FONT = "Segoe UI Emoji"
-
-# semantic name -> emoji (used only in --emoji mode)
-EMOJI = {
-    "people": "👥", "person": "🧑", "settings": "⚙️", "method": "🔬",
-    "process": "🔄", "globe": "🌐", "world": "🌍", "check": "✅",
-    "warning": "⚠️", "info": "ℹ️", "doc": "📄", "document": "📄",
-    "data": "📋", "clipboard": "📋", "search": "🔍", "link": "🔗",
-    "star": "⭐", "chart": "📊", "piechart": "📊", "trend": "📈",
-    "growth": "📈", "idea": "💡", "lightbulb": "💡", "shop": "🛍️",
-    "cart": "🛒", "share": "📤", "phone": "📱", "clock": "⏰",
-    "time": "⏳", "lock": "🔒", "card": "💳", "money": "💰",
-    "payment": "💳", "comment": "💬", "discourse": "💬", "chat": "💬",
-    "books": "📚", "library": "📚", "sparkle": "✨", "list": "📝",
-    "flag": "🚩", "goal": "🎯", "target": "🎯", "shield": "🛡️",
-    "security": "🔐", "view": "👀", "attention": "👀", "tag": "🏷️",
-    "question": "❓", "computer": "💻", "device": "📱", "robot": "🤖",
-}
-
-
 def _looks_like_emoji(s):
     return bool(s) and any(ord(c) > 0x2000 for c in str(s))
 
 
-def resolve_icon(name, use_emoji=False):
-    """Return (char, font) for a semantic name, or (None, None) if unresolvable.
+def resolve_icon(name, use_emoji=False) -> dict:
+    """The `char` and `font` for a semantic name, both None if it cannot be resolved.
 
     Default = Fluent vector glyph. With use_emoji=True, return the emoji form.
     If the value passed is itself an emoji char, it is passed through.
     """
+    missing = {"char": None, "font": None}
     if not name:
-        return None, None
+        return missing
     key = str(name).strip().lower()
     if use_emoji:
         ch = EMOJI.get(key) or (name if _looks_like_emoji(name) else None)
-        return (ch, EMOJI_FONT) if ch else (None, None)
+        return {"char": ch, "font": EMOJI_FONT} if ch else missing
     ch = ICONS.get(key)
     if ch:
-        return ch, ICON_FONT
+        return {"char": ch, "font": ICON_FONT}
     if _looks_like_emoji(name):  # LLM handed us an emoji; render it as emoji
-        return name, EMOJI_FONT
-    return None, None
+        return {"char": name, "font": EMOJI_FONT}
+    return missing
 
 
 def add_icon_run(paragraph, name, size_pt, color):

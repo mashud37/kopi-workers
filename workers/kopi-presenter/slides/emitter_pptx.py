@@ -1,15 +1,11 @@
-"""Build a .pptx deck from the structured slide JSON using python-pptx.
-
-Reproduces the design language of the qmd/reveal workstream — segmented
-breadcrumb nav, claim titles with an accent rule, bold+colour key terms,
-stat callouts, quote/note boxes, two-column and iconrow/cards/matrix/stepflow
-layouts — as native PowerPoint shapes (editable, no reference deck needed).
+"""Build a .pptx deck from the structured slide JSON with python-pptx, emitting every
+layout as native editable shapes rather than a reference deck.
 """
 
-import re
-from pathlib import Path
-
 import math
+import re
+import sys
+from pathlib import Path
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -22,7 +18,7 @@ from slides.icons import ICON_FONT, add_icon_run, resolve_icon, section_glyph
 
 USE_EMOJI = False
 
-# ── Canvas (16:9) ───────────────────────────────────────────────────────────
+# ---- Canvas (16:9) ----
 SLIDE_W = 12192000
 SLIDE_H = 6858000
 MARGIN = 610000
@@ -43,7 +39,12 @@ LEFT_W = RIGHT_X - MARGIN - 240000
 FONT = "Segoe UI"
 EMOJI_FONT = "Segoe UI Emoji"
 
-# ── Palette (broad Office-style set) ────────────────────────────────────────
+TITLE_PT = 32
+WORD_LABEL_PT = 16
+# Fraction of white mixed into a colour for a panel fill: 0.88 leaves 12% colour.
+PANEL_TINT = 0.88
+
+# ---- Palette (broad Office-style set) ----
 INK = RGBColor(0x26, 0x26, 0x26)
 MUTED = RGBColor(0x7F, 0x7F, 0x7F)
 HAIRLINE = RGBColor(0xD9, 0xD9, 0xD9)
@@ -62,8 +63,7 @@ CATEGORICAL = [
 
 
 def build_pptx(data: dict, output_path: Path, config: dict) -> None:
-    global USE_EMOJI
-    USE_EMOJI = str(config.get("render", {}).get("icons", "fluent")).lower() == "emoji"
+    use_emoji = str(config.get("render", {}).get("icons", "fluent")).lower() == "emoji"
 
     meta = data.get("meta", {})
     sections = data.get("sections", [])
@@ -82,28 +82,60 @@ def build_pptx(data: dict, output_path: Path, config: dict) -> None:
     blank = prs.slide_layouts[6]
 
     _title_slide(prs.slides.add_slide(blank), title, author, affiliation, venue)
-    for slide in slides:
-        _content_slide(prs.slides.add_slide(blank), slide, sections)
+    total = len(slides)
+    for i, slide_data in enumerate(slides, 1):
+        print(f"       [{i}/{total}] {slide_data.get('title', 'Slide')}", file=sys.stderr)
+        slide = prs.slides.add_slide(blank)
+        slide_title = slide_data.get("title", "Slide")
+        section = slide_data.get("section", sections[0] if sections else "")
+        layout = slide_data.get("layout", "bullets")
+        body = slide_data.get("body", {}) or {}
+        _nav(slide, sections, section)
+        _title(slide, slide_title, size=TITLE_SIZE, icon_glyph=section_glyph(section))
+        _draw_body(slide, layout, body, use_emoji)
     _closing_slide(prs.slides.add_slide(blank), author, email, venue)
 
     prs.save(str(output_path))
 
 
-# ── low-level helpers ────────────────────────────────────────────────────────
+# ---- low-level helpers ----
 
-def _box(slide, left, top, width, height):
+def _area(left, top, width, height) -> dict:
+    """One rectangle of the slide, in EMU."""
+    return {"left": left, "top": top, "width": width, "height": height}
+
+
+def _box(slide, left, top, width, height) -> dict:
+    """A borderless textbox, as the `shape` itself and its text `frame`."""
     tb = slide.shapes.add_textbox(Emu(left), Emu(top), Emu(width), Emu(height))
     tf = tb.text_frame
     tf.word_wrap = True
     tf.margin_left = tf.margin_right = Emu(0)
     tf.margin_top = tf.margin_bottom = Emu(0)
-    return tb, tf
+    return {"shape": tb, "frame": tf}
 
 
-def _rect(slide, left, top, width, height, shape=MSO_SHAPE.RECTANGLE):
-    sp = slide.shapes.add_shape(shape, Emu(left), Emu(top), Emu(width), Emu(height))
+def _shape(slide, kind, box):
+    """One shape of the given kind, with PowerPoint's default shadow turned off."""
+    sp = slide.shapes.add_shape(kind, Emu(box["left"]), Emu(box["top"]),
+                                Emu(box["width"]), Emu(box["height"]))
     sp.shadow.inherit = False
     return sp
+
+
+def _rect(slide, left, top, width, height):
+    """A plain rectangle."""
+    return _shape(slide, MSO_SHAPE.RECTANGLE, _area(left, top, width, height))
+
+
+def _rounded(slide, left, top, width, height):
+    """A rounded rectangle, the shape every panel and card uses."""
+    return _shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, _area(left, top, width, height))
+
+
+def _oval(slide, left, top, width, height):
+    """An ellipse, used for the icon discs."""
+    return _shape(slide, MSO_SHAPE.OVAL, _area(left, top, width, height))
 
 
 def _solid(shape, color):
@@ -117,8 +149,8 @@ def _no_fill(shape):
     shape.line.fill.background()
 
 
-def _tint(color, amount=0.88):
-    """Lighten a colour towards white (amount = fraction of white). ~0.88 = 12% colour."""
+def _tint(color, amount=PANEL_TINT):
+    """Lighten a colour towards white (amount = fraction of white)."""
     r = int(color[0] + (255 - color[0]) * amount)
     g = int(color[1] + (255 - color[1]) * amount)
     b = int(color[2] + (255 - color[2]) * amount)
@@ -179,7 +211,7 @@ def _no_bullet(p):
     pPr.append(pPr.makeelement(qn("a:buNone"), {}))
 
 
-# ── chrome: nav breadcrumb, title, rule ──────────────────────────────────────
+# ---- chrome: nav breadcrumb, title, rule ----
 
 def _nav(slide, sections, current):
     n = max(1, len(sections))
@@ -188,7 +220,7 @@ def _nav(slide, sections, current):
     for i, s in enumerate(sections):
         active = (s == current)
         seg_l = MARGIN + i * seg_w
-        _, tf = _box(slide, seg_l, NAV_TOP, seg_w, NAV_LABEL_H)
+        tf = _box(slide, seg_l, NAV_TOP, seg_w, NAV_LABEL_H)["frame"]
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
         p = tf.paragraphs[0]
         p.alignment = PP_ALIGN.CENTER
@@ -203,8 +235,8 @@ def _nav(slide, sections, current):
         _solid(line, PRIMARY if active else HAIRLINE)
 
 
-def _title(slide, text, size=32, icon_glyph=None):
-    _, tf = _box(slide, MARGIN, TITLE_TOP, SLIDE_W - 2 * MARGIN, BODY_TOP - TITLE_TOP)
+def _title(slide, text, size=TITLE_PT, icon_glyph=None):
+    tf = _box(slide, MARGIN, TITLE_TOP, SLIDE_W - 2 * MARGIN, BODY_TOP - TITLE_TOP)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.TOP
     p = tf.paragraphs[0]
     _no_bullet(p)
@@ -227,7 +259,7 @@ def _title(slide, text, size=32, icon_glyph=None):
     _solid(_rect(slide, MARGIN, rule_y, 880000, 52000), PRIMARY)
 
 
-# ── body font sizing (deterministic shrink-to-fit) ───────────────────────────
+# ---- body font sizing (deterministic shrink-to-fit) ----
 
 def _body_size(words):
     if words <= 24:
@@ -241,12 +273,13 @@ def _body_size(words):
     return 16
 
 
-def _bullets(slide, bullets, left, top, width, height, size=None, anchor=MSO_ANCHOR.TOP):
+def _bullets(slide, bullets, box, size=None, anchor=MSO_ANCHOR.TOP):
+    """Draw the bullet list inside `box`, sized to fit unless `size` says otherwise."""
     words = sum(len(str(b.get("text", "")).split()) for b in bullets)
     if size is None:
         size = _body_size(words)
     spc = 16 if len(bullets) <= 3 and words <= 30 else 11
-    _, tf = _box(slide, left, top, width, height)
+    tf = _box(slide, box["left"], box["top"], box["width"], box["height"])["frame"]
     tf.vertical_anchor = anchor
     tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     first = True
@@ -261,10 +294,11 @@ def _bullets(slide, bullets, left, top, width, height, size=None, anchor=MSO_ANC
             r.font.size = Pt(size)
 
 
-# ── evidence: stat / quote / note ────────────────────────────────────────────
+# ---- evidence: stat / quote / note ----
 
-def _stat(slide, number, label, left, top, color):
-    _, tf = _box(slide, left, top, RIGHT_W, 1000000)
+def _stat(slide, number, label, at, color):
+    """One big number over its label, placed at the `left`/`top` corner in `at`."""
+    tf = _box(slide, at["left"], at["top"], RIGHT_W, 1000000)["frame"]
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.CENTER
     _no_bullet(p)
@@ -277,9 +311,21 @@ def _stat(slide, number, label, left, top, color):
     r2.font.name = FONT; r2.font.bold = True; r2.font.size = Pt(13); r2.font.color.rgb = INK
 
 
-def _evidence_box(slide, left, top, width, height, color, body_runs_list, label=None,
-                  source=None, italic=True, icon=None):
-    sp = _rect(slide, left, top, width, height, MSO_SHAPE.ROUNDED_RECTANGLE)
+def _evidence_box(slide, box, body_runs_list, style):
+    """A tinted panel holding a quote or a note.
+
+    Args:
+        slide: the slide to draw on.
+        box: the area to fill, as `left`, `top`, `width` and `height`.
+        body_runs_list: one list of styled runs per paragraph of the body.
+        style: `color`, and optionally `label`, `source`, `italic` and `icon`.
+    """
+    color = style["color"]
+    label = style.get("label")
+    source = style.get("source")
+    italic = style.get("italic", True)
+    icon = style.get("icon")
+    sp = _rounded(slide, box["left"], box["top"], box["width"], box["height"])
     sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.93)
     sp.line.color.rgb = color; sp.line.width = Pt(1.5)
     tf = sp.text_frame
@@ -315,16 +361,22 @@ def _evidence_box(slide, left, top, width, height, color, body_runs_list, label=
         r.font.name = FONT; r.font.size = Pt(13); r.font.color.rgb = MUTED
 
 
-def _stat_trio(slide, items, left, top, width, height):
-    """Two or three big numbers stacked vertically in the right column."""
+def _stat_trio(slide, items, box):
+    """Two or three big numbers stacked vertically in the right column.
+
+    Args:
+        slide: the slide to draw on.
+        items: up to three mappings with `number` and `label`.
+        box: the area to fill, as `left`, `top`, `width` and `height`.
+    """
     items = items[:3]
     n = max(1, len(items))
     gap = 200000
-    cell_h = (height - (n - 1) * gap) // n
+    cell_h = (box["height"] - (n - 1) * gap) // n
     for i, it in enumerate(items):
-        cy = top + i * (cell_h + gap)
+        cy = box["top"] + i * (cell_h + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
-        _, tf = _box(slide, left, cy, width, cell_h)
+        tf = _box(slide, box["left"], cy, box["width"], cell_h)["frame"]
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
         p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
         r = p.add_run(); r.text = str(it.get("number", ""))
@@ -340,26 +392,41 @@ def _render_evidence(slide, ev):
         return
     kind = ev.get("kind", "note")
     if kind == "stats":
-        _stat_trio(slide, ev.get("items", []), RIGHT_X, BODY_TOP, RIGHT_W, BODY_H)
+        _stat_trio(slide, ev.get("items", []), {
+            "left": RIGHT_X,
+            "top": BODY_TOP,
+            "width": RIGHT_W,
+            "height": BODY_H,
+        })
         return
     if kind == "stat":
         _stat(slide, ev.get("number", ev.get("text", "")), ev.get("label", ev.get("source", "")),
-              RIGHT_X, BODY_TOP + 200000, CATEGORICAL[0])
+              {"left": RIGHT_X, "top": BODY_TOP + 200000}, CATEGORICAL[0])
         return
     if kind == "quote-green" or kind == "quote-dark":
         txt = ev.get("text", "")
-        _evidence_box(slide, RIGHT_X, BODY_TOP, RIGHT_W, BODY_H, PRIMARY,
+        _evidence_box(slide, _area(RIGHT_X, BODY_TOP, RIGHT_W, BODY_H),
                       [[("“" + txt + "”", False, INK)]],
-                      source=("— " + ev["source"]) if ev.get("source") else None,
-                      italic=True, icon="comment")
+                      {
+                          "color": PRIMARY,
+                          "source": ("· " + ev["source"]) if ev.get("source") else None,
+                          "italic": True,
+                          "icon": "comment",
+                      })
         return
     if kind == "note":
-        _evidence_box(slide, RIGHT_X, BODY_TOP, RIGHT_W, BODY_H, CATEGORICAL[1],
-                      [_md_runs(ev.get("text", ""))], label=ev.get("label") or "Note",
-                      source=ev.get("source"), italic=False, icon="idea")
+        _evidence_box(slide, _area(RIGHT_X, BODY_TOP, RIGHT_W, BODY_H),
+                      [_md_runs(ev.get("text", ""))],
+                      {
+                          "color": CATEGORICAL[1],
+                          "label": ev.get("label") or "Note",
+                          "source": ev.get("source"),
+                          "italic": False,
+                          "icon": "idea",
+                      })
         return
     # figure placeholder
-    sp = _rect(slide, RIGHT_X, BODY_TOP, RIGHT_W, BODY_H - 200000, MSO_SHAPE.ROUNDED_RECTANGLE)
+    sp = _rounded(slide, RIGHT_X, BODY_TOP, RIGHT_W, BODY_H - 200000)
     sp.fill.solid(); sp.fill.fore_color.rgb = PANEL; sp.line.color.rgb = HAIRLINE
     tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
@@ -367,23 +434,23 @@ def _render_evidence(slide, ev):
     r.font.name = FONT; r.font.size = Pt(13); r.font.color.rgb = MUTED
 
 
-# ── layouts ───────────────────────────────────────────────────────────────────
+# ---- layouts ----
 
 def _layout_split(slide, body):
     bullets = body.get("bullets", [])
     ev = body.get("evidence") or {}
     if ev:
-        _bullets(slide, bullets, MARGIN, BODY_TOP, LEFT_W, BODY_H)
+        _bullets(slide, bullets, _area(MARGIN, BODY_TOP, LEFT_W, BODY_H))
         _render_evidence(slide, ev)
     else:
-        _bullets(slide, bullets, MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H)
+        _bullets(slide, bullets, _area(MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H))
 
 
 def _layout_bullets(slide, body):
     _layout_split(slide, body)
 
 
-def _layout_iconrow(slide, body):
+def _layout_iconrow(slide, body, use_emoji=False):
     cols = body.get("columns", [])[:3]
     n = max(1, len(cols))
     gap = 280000
@@ -392,9 +459,10 @@ def _layout_iconrow(slide, body):
     for i, col in enumerate(cols):
         cx = MARGIN + i * (col_w + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
-        ch, font = resolve_icon(col.get("icon"), USE_EMOJI)
+        icon = resolve_icon(col.get("icon"), use_emoji)
+        ch, font = icon["char"], icon["font"]
 
-        circ = _rect(slide, int(cx + col_w / 2 - disc / 2), BODY_TOP, disc, disc, MSO_SHAPE.OVAL)
+        circ = _oval(slide, int(cx + col_w / 2 - disc / 2), BODY_TOP, disc, disc)
         circ.fill.solid(); circ.fill.fore_color.rgb = _tint(color, 0.86)
         circ.line.color.rgb = color; circ.line.width = Pt(1)
         ctf = circ.text_frame; ctf.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -405,7 +473,7 @@ def _layout_iconrow(slide, body):
             if font == ICON_FONT:
                 er.font.color.rgb = color
         # text
-        _, tf = _box(slide, cx, BODY_TOP + disc + 120000, col_w, BODY_H - disc - 120000)
+        tf = _box(slide, cx, BODY_TOP + disc + 120000, col_w, BODY_H - disc - 120000)["frame"]
         lead, text, quote = col.get("lead", ""), col.get("text", ""), col.get("quote", "")
         p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
         runs = []
@@ -428,7 +496,7 @@ def _two_col(slide, left_paras, right_paras):
     for idx, paras in enumerate((left_paras, right_paras)):
         cx = MARGIN + idx * (col_w + gap)
         size = _body_size(sum(len(str(b.get("text", "")).split()) for b in paras))
-        _, tf = _box(slide, cx, BODY_TOP, col_w, BODY_H)
+        tf = _box(slide, cx, BODY_TOP, col_w, BODY_H)["frame"]
         first = True
         for j, b in enumerate(paras):
             p = tf.paragraphs[0] if first else tf.add_paragraph(); first = False
@@ -457,11 +525,11 @@ def _layout_cards(slide, body):
     for i, card in enumerate(cards):
         cx = MARGIN + i * (col_w + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
-        sp = _rect(slide, cx, BODY_TOP, col_w, BODY_H, MSO_SHAPE.ROUNDED_RECTANGLE)
+        sp = _rounded(slide, cx, BODY_TOP, col_w, BODY_H)
         sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.92)
         sp.line.color.rgb = color; sp.line.width = Pt(1.25)
         # header bar
-        hdr = _rect(slide, cx, BODY_TOP, col_w, 560000, MSO_SHAPE.ROUNDED_RECTANGLE)
+        hdr = _rounded(slide, cx, BODY_TOP, col_w, 560000)
         _solid(hdr, color)
         htf = hdr.text_frame; htf.vertical_anchor = MSO_ANCHOR.MIDDLE
         htf.margin_left = Emu(200000)
@@ -472,7 +540,7 @@ def _layout_cards(slide, body):
         hr = hp.add_run(); hr.text = card.get("title", "")
         hr.font.name = FONT; hr.font.bold = True; hr.font.size = Pt(18); hr.font.color.rgb = WHITE
         # body
-        _, tf = _box(slide, cx + 200000, BODY_TOP + 700000, col_w - 400000, BODY_H - 880000)
+        tf = _box(slide, cx + 200000, BODY_TOP + 700000, col_w - 400000, BODY_H - 880000)["frame"]
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
         p = tf.paragraphs[0]; _no_bullet(p); p.line_spacing = 1.12
         _add_runs(p, _md_runs(card.get("text", "")))
@@ -490,12 +558,9 @@ def _layout_matrix(slide, body):
         cx = MARGIN + c_ * (cw + gap)
         cy = BODY_TOP + r_ * (ch + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
-        sp = _rect(slide, cx, cy, cw, ch, MSO_SHAPE.ROUNDED_RECTANGLE)
+        sp = _rounded(slide, cx, cy, cw, ch)
         sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.9)
-        sp.line.color.rgb = color; sp.line.width = Pt(1.25)
-        # top accent bar
-        bar = _rect(slide, cx, cy, cw, 70000)
-        _solid(bar, color)
+        sp.line.color.rgb = color; sp.line.width = Pt(6)
         tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.TOP
         tf.margin_left = tf.margin_right = Emu(180000); tf.margin_top = Emu(160000)
         p = tf.paragraphs[0]; _no_bullet(p)
@@ -521,7 +586,7 @@ def _layout_stepflow(slide, body):
     for i, step in enumerate(steps):
         sx = MARGIN + i * (sw + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
-        sp = _rect(slide, sx, sy, sw, sh, MSO_SHAPE.ROUNDED_RECTANGLE)
+        sp = _rounded(slide, sx, sy, sw, sh)
         sp.fill.solid(); sp.fill.fore_color.rgb = PANEL
         sp.line.color.rgb = color; sp.line.width = Pt(1.5)
         tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
@@ -531,7 +596,7 @@ def _layout_stepflow(slide, body):
         for r in p.runs:
             r.font.size = Pt(15)
         if i < n - 1:
-            _, atf = _box(slide, sx + sw, sy, gap, sh)
+            atf = _box(slide, sx + sw, sy, gap, sh)["frame"]
             atf.vertical_anchor = MSO_ANCHOR.MIDDLE
             ap = atf.paragraphs[0]; ap.alignment = PP_ALIGN.CENTER; _no_bullet(ap)
             ar = ap.add_run(); ar.text = "→"
@@ -539,7 +604,7 @@ def _layout_stepflow(slide, body):
 
 
 def _layout_statement(slide, body):
-    _, tf = _box(slide, MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H)
+    tf = _box(slide, MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     p = tf.paragraphs[0]; _no_bullet(p)
     _add_runs(p, _md_runs(body.get("claim", "")))
@@ -553,12 +618,14 @@ def _layout_statement(slide, body):
 
 
 def _layout_boxes(slide, body):
-    _bullets(slide, body.get("bullets", []), MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H)
+    _bullets(slide, body.get("bullets", []), _area(MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN,
+                                              BODY_H))
 
 
-def _word_label(slide, text, cx, cy, color, size=16):
+def _word_label(slide, text, centre, color, size=WORD_LABEL_PT):
+    """One word centred on the `cx`/`cy` point in `centre`."""
     w, h = 1900000, 380000
-    _, tf = _box(slide, int(cx - w / 2), int(cy - h / 2), w, h)
+    tf = _box(slide, int(centre["cx"] - w / 2), int(centre["cy"] - h / 2), w, h)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
     r = p.add_run(); r.text = text
@@ -571,27 +638,39 @@ def _layout_circle(slide, body):
     center = body.get("center", "")
     keywords = body.get("keywords", [])
     if bullets:
-        _bullets(slide, bullets, MARGIN, BODY_TOP, LEFT_W, BODY_H)
+        _bullets(slide, bullets, _area(MARGIN, BODY_TOP, LEFT_W, BODY_H))
         ring_cx = RIGHT_X + RIGHT_W // 2
         ring_d = min(RIGHT_W, BODY_H) - 200000
     else:
         ring_cx = SLIDE_W // 2
         ring_d = min(BODY_H, 3400000)
     ring_cy = BODY_TOP + BODY_H // 2
-    oval = _rect(slide, int(ring_cx - ring_d / 2), int(ring_cy - ring_d / 2),
-                 ring_d, ring_d, MSO_SHAPE.OVAL)
+    oval = _oval(slide, int(ring_cx - ring_d / 2), int(ring_cy - ring_d / 2),
+                 ring_d, ring_d)
     oval.fill.background()
     oval.line.color.rgb = PRIMARY
     oval.line.width = Pt(2)
     if center:
-        _word_label(slide, center, ring_cx, ring_cy, INK, size=20)
+        _word_label(slide, center, {"cx": ring_cx, "cy": ring_cy}, INK, size=20)
     r = ring_d / 2 + 120000
     n = max(1, len(keywords))
     for i, kw in enumerate(keywords):
         ang = -math.pi / 2 + i * (2 * math.pi / n)
         kx = ring_cx + r * math.cos(ang)
         ky = ring_cy + r * math.sin(ang)
-        _word_label(slide, kw, kx, ky, CATEGORICAL[i % len(CATEGORICAL)], size=15)
+        _word_label(slide, kw, {"cx": kx, "cy": ky},
+                    CATEGORICAL[i % len(CATEGORICAL)], size=15)
+
+
+def _draw_body(slide, layout, body, use_emoji):
+    """Draw one slide's body with the layout it asked for.
+
+    Only the icon row cares whether icons render as emoji, so it is the one
+    layout handed that choice.
+    """
+    if layout == "iconrow":
+        return _layout_iconrow(slide, body, use_emoji)
+    return _LAYOUTS.get(layout, _layout_bullets)(slide, body)
 
 
 _LAYOUTS = {
@@ -608,29 +687,19 @@ _LAYOUTS = {
 }
 
 
-def _content_slide(slide, data, sections):
-    title = data.get("title", "Slide")
-    section = data.get("section", sections[0] if sections else "")
-    layout = data.get("layout", "bullets")
-    body = data.get("body", {}) or {}
-    _nav(slide, sections, section)
-    _title(slide, title, size=TITLE_SIZE, icon_glyph=section_glyph(section))
-    _LAYOUTS.get(layout, _layout_bullets)(slide, body)
-
-
-# ── title & closing ──────────────────────────────────────────────────────────
+# ---- title & closing ----
 
 def _title_slide(slide, title, author, affiliation, venue):
     _rect_full = _rect(slide, 0, 0, SLIDE_W, 120000)
     _solid(_rect_full, PRIMARY)
     if venue:
-        _, vtf = _box(slide, MARGIN, 300000, SLIDE_W - 2 * MARGIN, 400000)
+        vtf = _box(slide, MARGIN, 300000, SLIDE_W - 2 * MARGIN, 400000)["frame"]
         vtf.vertical_anchor = MSO_ANCHOR.MIDDLE
         vp = vtf.paragraphs[0]; _no_bullet(vp)
         vr = vp.add_run(); vr.text = venue
         vr.font.name = FONT; vr.font.bold = True; vr.font.size = Pt(15); vr.font.color.rgb = MUTED
     # centred title block
-    _, tf = _box(slide, MARGIN, 2150000, SLIDE_W - 2 * MARGIN, 2400000)
+    tf = _box(slide, MARGIN, 2150000, SLIDE_W - 2 * MARGIN, 2400000)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     tp = tf.paragraphs[0]; tp.alignment = PP_ALIGN.CENTER; _no_bullet(tp)
     tr = tp.add_run(); tr.text = title
@@ -647,12 +716,12 @@ def _title_slide(slide, title, author, affiliation, venue):
 def _closing_slide(slide, author, email, venue):
     rb = _rect(slide, 0, 0, SLIDE_W, 120000)
     _solid(rb, PRIMARY)
-    _, tf = _box(slide, MARGIN, 2400000, SLIDE_W - 2 * MARGIN, 2000000)
+    tf = _box(slide, MARGIN, 2400000, SLIDE_W - 2 * MARGIN, 2000000)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
     r = p.add_run(); r.text = "Thank you"
     r.font.name = FONT; r.font.bold = True; r.font.size = Pt(48); r.font.color.rgb = INK
-    contact = author + (("  —  " + email) if email else "")
+    contact = author + (("  ·  " + email) if email else "")
     p2 = tf.add_paragraph(); p2.alignment = PP_ALIGN.CENTER; _no_bullet(p2); p2.space_before = Pt(18)
     r2 = p2.add_run(); r2.text = contact
     r2.font.name = FONT; r2.font.size = Pt(18); r2.font.color.rgb = MUTED

@@ -1,5 +1,5 @@
-"""Convert a .pptx to .pdf — PowerPoint COM first (best fidelity, colour emoji),
-LibreOffice headless as a fallback."""
+"""Convert a .pptx to PDF with PowerPoint COM, falling back to headless LibreOffice.
+"""
 
 import os
 import shutil

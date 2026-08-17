@@ -10,7 +10,7 @@
 # ============================================================
 
 api:
-  # Anthropic API key — get from https://console.anthropic.com/
+  # Anthropic API key: get from https://console.anthropic.com/
   anthropic_key: "YOUR_ANTHROPIC_API_KEY_HERE"
 
 llm:
@@ -25,7 +25,7 @@ llm:
   #   > 8 000 words / complex  → Sonnet strongly recommended
   model: "claude-haiku-4-5-20251001"
 
-  # Max output tokens — full manuscript decks need ~5–6k; 8 192 leaves headroom
+  # Max output tokens: full manuscript decks need ~5–6k; 8 192 leaves headroom
   max_tokens: 8192
 
 defaults:
