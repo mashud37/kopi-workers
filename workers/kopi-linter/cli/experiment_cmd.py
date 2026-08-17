@@ -7,23 +7,6 @@ from .progress import BatchProgress, StepSpinner
 OUTPUT = Path("output")
 
 
-def _load_parser():
-    sp = StepSpinner("loading spaCy parser")
-    sp.start()
-    try:
-        import spacy
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
-    finally:
-        sp.done()
-
-
-def _pick_family(families) -> str | None:
-    choice = ui.menu("Family", [(f, "") for f in families])
-    return families[choice] if choice is not None else None
-
-
 def _corpus(limit: int | None):
     from evidence.load import load_samples
 
@@ -46,8 +29,7 @@ def _score_each(methods, samples, nlp) -> list:
     for i, method in enumerate(methods, 1):
         ui.info(f"[{i}/{len(methods)}] {method.name}")
         bar = BatchProgress(len(samples), method.name)
-        reports.append(compare.run_corpus(method, samples, nlp,
-                                          on_progress=lambda a, b, c: bar.advance()))
+        reports.append(compare.run_corpus(method, samples, nlp, on_progress=bar.on_item))
         bar.finish()
         last = reports[-1]
         state = "clean" if last.clean else f"{len(last.case_failures)} case failures"
@@ -62,7 +44,10 @@ def run(family: str | None = None, limit: int | None = None) -> None:
     ui.info("plan: pick family, load corpus, load parser, run each method, "
             "check cases, score corpus, write comparison")
 
-    family = family or _pick_family(list(registry.FAMILIES))
+    if not family:
+        families = list(registry.FAMILIES)
+        choice = ui.menu("Family", [(f, "") for f in families])
+        family = families[choice] if choice is not None else None
     if family is None:
         return
     methods = registry.for_family(family)
@@ -71,7 +56,15 @@ def run(family: str | None = None, limit: int | None = None) -> None:
 
     samples = _corpus(limit)
     ui.ok(f"{len(methods)} methods, {len(samples)} gold paragraphs")
-    nlp = _load_parser()
+    sp = StepSpinner("loading spaCy parser")
+    sp.start()
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
+    finally:
+        sp.done()
 
     ui.step("Surface repair cases")
     realisation = compare.check_realisation(nlp)

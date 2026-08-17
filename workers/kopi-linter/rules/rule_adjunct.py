@@ -1,26 +1,6 @@
-"""Dropping a prepositional phrase, the largest deletion-reachable family.
-
-1,958 instances and 6,374 words in the gold corpus, 92% of it a prepositional
-phrase being removed. Proposing the drop is trivial; the whole difficulty is the
-licence, because an adjunct may go and an argument may not, and the parse labels
-both `prep`.
-
-Four models are registered so the question can be settled by measurement rather
-than by preference (see ``experiments/registry.py``):
-
-* ``syntactic``  a naive structural baseline with no lexical knowledge at all
-* ``frame``      the induced drop rate for this exact (governor, preposition)
-* ``backoff``    the induced rate, falling back to coarser keys when unseen
-* ``ranked``     the same rate blended with word commonness, as an *ordering*
-
-``ranked`` is the one the evidence points at. Measured as licences, the first
-three fail in opposite directions: structural fires 647 times at a 2% agreement
-ceiling, induced fires three times because no category's drop rate can reach a
-band threshold (``docs/constraints.md`` C9). Measured as an *ordering* the same
-induced rate reaches 1.88x a shuffle baseline (C10), so the band stops asking
-"may this phrase go?" and starts asking "how many words must go, and which are
-first?". A rule in ``ranked`` mode therefore proposes freely and lets the band's
-word budget decide the depth of the cut.
+"""Propose dropping a prepositional phrase under one of four licence models
+(`syntactic`, `frame`, `backoff`, `ranked`), chosen by measurement since the
+parse alone cannot tell adjunct from argument.
 """
 from dataclasses import dataclass
 from functools import lru_cache
@@ -34,6 +14,7 @@ except ImportError:
     induced_adjuncts = None
 
 _MIN_CONTENT_TOKENS = 2
+_MIN_OBSERVATIONS = 5
 
 # Zipf frequency runs 0 to about 7; the drop rate runs 0 to 1. Dividing brings
 # them onto one scale so they can be added. The halving keeps the result inside
@@ -57,7 +38,7 @@ class Licence:
             least this often. 1.0 disables the test. See :func:`is_argument`.
     """
     model: str = "ranked"
-    minimum: int = 5
+    minimum: int = _MIN_OBSERVATIONS
     flat: float = 0.75
     argument_ceiling: float = 1.0
 
@@ -77,7 +58,7 @@ def _zipf():
     return zipf_frequency
 
 
-def rate(prep, governor, minimum: int = 5) -> float:
+def rate(prep, governor, minimum: int = _MIN_OBSERVATIONS) -> float:
     """Induced drop rate for this phrase, backing off to coarser keys."""
     keys = keys_for(prep, governor)
     for level in LEVELS:
@@ -111,7 +92,7 @@ def is_argument(prep, governor, ceiling: float) -> bool:
     return bool(entry) and entry[0] >= ceiling
 
 
-def droppability(prep, governor, content, minimum: int = 5) -> float:
+def droppability(prep, governor, content, minimum: int = _MIN_OBSERVATIONS) -> float:
     """How readily this phrase goes, in [0, 1]. Ordering, not licence.
 
     The blend that won the ranking comparison: the corpus statistic for how often
@@ -137,59 +118,57 @@ def _structural(prep, governor, content) -> float:
     return 1.0 if siblings else 0.0
 
 
-def _induced(prep, governor, licence: Licence) -> tuple[float, str]:
-    """Drop rate from the induced tables, with backoff. Returns (rate, level)."""
+def _induced(prep, governor, licence: Licence) -> dict:  # lint-style: ignore FN004
+    """Drop rate from the induced tables, with backoff, and the level it came from."""
     keys = keys_for(prep, governor)
     levels = LEVELS if licence.model == "backoff" else ("frame",)
     for level in levels:
         entry = _table(level).get(keys[level])
         if entry and entry[1] >= licence.minimum:
-            return entry[0], level
-    return 0.0, "none"
+            return {"confidence": entry[0], "level": level}
+    return {"confidence": 0.0, "level": "none"}
 
 
-def _ranked(prep, governor, content, licence: Licence) -> tuple[float, str]:
+def _ranked(prep, governor, content, licence: Licence) -> dict:  # lint-style: ignore FN004
     """Ordering score, offered to the band's budget rather than to a threshold."""
-    return droppability(prep, governor, content, licence.minimum), "ranked"
+    score = droppability(prep, governor, content, licence.minimum)
+    return {"confidence": score, "level": "ranked"}
 
 
-def _span(doc, start: int, end: int) -> tuple[int, int]:
-    """Widen a phrase span to the whitespace and comma the drop would strand."""
-    text = doc.text
-    while start > 0 and text[start - 1].isspace():
-        start -= 1
-    while end < len(text) and text[end] in ",;":
-        end += 1
-    if start == 0:
-        while end < len(text) and text[end].isspace():
-            end += 1
-    return start, end
-
-
-def _confidence(prep, governor, content, licence: Licence) -> tuple[float, str]:
+def _confidence(prep, governor, content, licence: Licence) -> dict:  # lint-style: ignore FN004
     if is_argument(prep, governor, licence.argument_ceiling):
-        return 0.0, "argument"
+        return {"confidence": 0.0, "level": "argument"}
     if licence.model == "syntactic":
-        return licence.flat * _structural(prep, governor, content), "structural"
+        return {"confidence": licence.flat * _structural(prep, governor, content),
+                "level": "structural"}
     if not _structural(prep, governor, content):
-        return 0.0, "none"
+        return {"confidence": 0.0, "level": "none"}
     if licence.model == "ranked":
         return _ranked(prep, governor, content, licence)
     return _induced(prep, governor, licence)
 
 
 def propose(doc, licence: Licence = DEFAULT):
-    """Yield a drop for every prepositional phrase the licence admits."""
+    """A drop for every prepositional phrase the licence admits."""
+    text = doc.text
+    edits = []
     for prep, governor, start, end, content in phrases(doc):
-        confidence, level = _confidence(prep, governor, content, licence)
-        if confidence <= 0.0:
+        licensed = _confidence(prep, governor, content, licence)
+        if licensed["confidence"] <= 0.0:
             continue
-        start, end = _span(doc, start, end)
-        yield Edit(
+        while start > 0 and text[start - 1].isspace():
+            start -= 1
+        while end < len(text) and text[end] in ",;":
+            end += 1
+        if start == 0:
+            while end < len(text) and text[end].isspace():
+                end += 1
+        edits.append(Edit(
             start=start, end=end, replacement="",
             rule=f"adjunct.{licence.model}", family="adjunct",
-            confidence=round(confidence, 3),
+            confidence=round(licensed["confidence"], 3),
             note=f"prepositional phrase dropped: '{doc.text[start:end].strip()}' "
-                 f"({level} licence)",
+                 f"({licensed['level']} licence)",
             ranked=licence.model == "ranked",
-        )
+        ))
+    return edits

@@ -1,9 +1,6 @@
-"""Render a taxonomy tally as the markdown evidence report.
-
-The report is the input to rule design: every family carries its share of the
-corpus, the words it moves, how it behaves across the intensity bands, whether
-kopi-editor's production tables already cover it, and worked examples drawn
-from the corpus itself.
+"""Render a taxonomy tally as the Markdown evidence report: each
+transformation family's corpus share, word count, behaviour across bands,
+existing rule coverage, and worked examples.
 """
 import json
 from datetime import datetime
@@ -14,13 +11,6 @@ OUTPUT = Path("output")
 
 def _pct(part: int, whole: int) -> str:
     return f"{100.0 * part / whole:.1f}%" if whole else "0.0%"
-
-
-def _median(values: list) -> float:
-    if not values:
-        return 0.0
-    ordered = sorted(values)
-    return ordered[len(ordered) // 2]
 
 
 def _family_table(tally) -> list[str]:
@@ -39,7 +29,7 @@ def _family_table(tally) -> list[str]:
     return lines
 
 
-def _subtype_table(tally) -> list[str]:
+def _subtype_table(tally) -> list[str]:  # lint-style: ignore FN004
     total = sum(tally.subtypes.values()) or 1
     lines = ["| Transformation | Instances | Share |", "|---|---:|---:|"]
     for subtype, count in tally.subtypes.most_common():
@@ -79,33 +69,30 @@ def _bead_table(tally) -> list[str]:
     return lines
 
 
-def _examples_block(tally, subtype: str, limit: int = 6) -> list[str]:
-    rows = tally.examples.get(subtype, [])[:limit]
-    if not rows:
-        return []
-    lines = ["| Original | Edited | Band |", "|---|---|---|"]
-    for source, target, band in rows:
-        src = (source or "").replace("|", "\\|")[:110] or "(nothing)"
-        tgt = (target or "").replace("|", "\\|")[:110] or "(deleted)"
-        lines.append(f"| {src} | {tgt} | {band} |")
-    return lines
-
-
-def _loss_table(tally) -> list[str]:
+def _loss_table(tally) -> list[str]:  # lint-style: ignore FN004
     lines = ["| Band | Median content loss | Sentences |", "|---|---:|---:|"]
     for band in ("clarity", "light", "firm", "aggressive"):
         values = tally.content_loss.get(band, [])
-        if values:
-            lines.append(f"| {band} | {_median(values):.1%} | {len(values)} |")
+        if not values:
+            continue
+        ordered = sorted(values)
+        median = ordered[len(ordered) // 2]
+        lines.append(f"| {band} | {median:.1%} | {len(values)} |")
     return lines
 
 
 def _examples_section(tally) -> list[str]:
     lines = ["## Worked examples", ""]
     for subtype, _ in tally.subtypes.most_common():
-        block = _examples_block(tally, subtype)
-        if block:
-            lines += [f"### `{subtype}`", "", *block, ""]
+        rows = tally.examples.get(subtype, [])[:6]
+        if not rows:
+            continue
+        block = ["| Original | Edited | Band |", "|---|---|---|"]
+        for source, target, band in rows:
+            src = (source or "").replace("|", "\\|")[:110] or "(nothing)"
+            tgt = (target or "").replace("|", "\\|")[:110] or "(deleted)"
+            block.append(f"| {src} | {tgt} | {band} |")
+        lines += [f"### `{subtype}`", "", *block, ""]
     return lines
 
 

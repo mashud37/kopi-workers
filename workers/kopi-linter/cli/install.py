@@ -1,8 +1,6 @@
-"""Check the parser, the lexical resources, and the link to the edit corpus.
-
-kopi-linter holds no secrets and makes no network calls at runtime, so there is
-nothing to provision: install only verifies that what the analysis needs is
-present, and says exactly how to get anything that is not.
+"""Check that the parser, lexical resources, and edit-corpus link are
+present, and report how to fix what is missing. Provisions nothing, since
+the linter needs no secrets or network calls.
 """
 from pathlib import Path
 
@@ -15,18 +13,6 @@ _PACKAGES = [
     ("textstat", "syllable counts"),
     ("lemminflect", "inflection, for realisation after a tree edit"),
 ]
-
-
-def _check_packages() -> list[str]:
-    missing = []
-    for name, purpose in _PACKAGES:
-        try:
-            __import__(name)
-            ui.ok(f"{name} ({purpose})")
-        except ImportError:
-            ui.warn(f"{name} missing ({purpose})")
-            missing.append(name)
-    return missing
 
 
 def _check_spacy_model() -> bool:
@@ -51,27 +37,31 @@ def _check_wordnet() -> bool:
     return True
 
 
-def _check_corpus() -> None:
-    from evidence.load import PAIRS, load_samples
-    if not PAIRS.exists():
-        ui.warn(f"edit corpus not found at {PAIRS}")
-        return
-    samples = load_samples(roles={"opus"})
-    if not samples:
-        ui.warn("edit corpus present but holds no Opus edits")
-        return
-    ui.ok(f"edit corpus: {len(samples)} gold Opus edits over "
-          f"{len({s.doc for s in samples})} documents")
-
-
 def run():
     ui.step("Install")
     ui.info("plan: check packages, parser model, WordNet, edit corpus, folders")
 
-    missing = _check_packages()
+    missing = []
+    for name, purpose in _PACKAGES:
+        try:
+            __import__(name)
+            ui.ok(f"{name} ({purpose})")
+        except ImportError:
+            ui.warn(f"{name} missing ({purpose})")
+            missing.append(name)
     model_ok = _check_spacy_model()
     wordnet_ok = _check_wordnet()
-    _check_corpus()
+
+    from evidence.load import PAIRS, load_samples
+    if not PAIRS.exists():
+        ui.warn(f"edit corpus not found at {PAIRS}")
+    else:
+        samples = load_samples(roles={"opus"})
+        if not samples:
+            ui.warn("edit corpus present but holds no Opus edits")
+        else:
+            ui.ok(f"edit corpus: {len(samples)} gold Opus edits over "
+                  f"{len({s.doc for s in samples})} documents")
 
     for folder in ("input", "output", "data"):
         Path(folder).mkdir(exist_ok=True)

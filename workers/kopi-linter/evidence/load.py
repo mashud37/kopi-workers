@@ -1,11 +1,6 @@
-"""Normalise the kopi-learner edit corpus into flat evidence records.
-
-kopi-learner mined every kopi-editor run into ``data/pairs/*.jsonl`` and the
-assembled ``data/out/*.jsonl`` splits. Each row is one paragraph edited by one
-model at one intensity band. This module is the only place that knows those
-layouts: everything downstream sees a :class:`Sample`.
-
-The corpus is read-only and lives outside this repo. Nothing here writes to it.
+"""Normalise kopi-learner's mined edit corpus (`data/pairs/*.jsonl`,
+`data/out/*.jsonl`) into flat `Sample` records; this is the only module that
+knows those file layouts. The corpus is read-only.
 """
 import json
 from dataclasses import dataclass
@@ -68,14 +63,6 @@ def _row_to_sample(row: dict) -> Sample | None:
     )
 
 
-def _read_jsonl(path: Path):
-    with path.open(encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
-
-
 def load_samples(roles=None, bands=None) -> list[Sample]:
     """Every edit record in the corpus, deduplicated on (key, role, band).
 
@@ -97,8 +84,11 @@ def load_samples(roles=None, bands=None) -> list[Sample]:
     for path in files:
         if not path.exists():
             continue
-        for row in _read_jsonl(path):
-            sample = _row_to_sample(row)
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            sample = _row_to_sample(json.loads(line))
             if sample is None:
                 continue
             if roles and sample.role not in roles:

@@ -1,21 +1,6 @@
-"""Surface repair after a tree edit.
-
-The evidence says this layer is 17% of everything a good editor does, and that
-it is almost entirely *forced*: articles, prepositions, agreement and
-punctuation change because some other edit changed the structure around them,
-not because anyone set out to change them. Rules that try to handle their own
-repair get it wrong at the joins, so repair runs once, over the whole spliced
-paragraph, after selection.
-
-Nothing here is aware of which rule fired. It looks only at the text that came
-out, which is what lets it fix damage from a combination of edits no single rule
-could have anticipated.
-
-It is also the one stage that can damage text no rule ever touched, because it
-rewrites the whole paragraph rather than a span. Quoted material is therefore
-passed through untouched: a quotation is evidence, and normalising its spacing
-or capitalisation silently edits a source. ``repair`` takes the protected spans
-and repairs only around them.
+"""Repair surface damage (articles, agreement, punctuation) left at edit
+joins after selection, since rule-by-rule repair gets the joins wrong. Runs
+once over the paragraph, skipping quoted spans.
 """
 import re
 
@@ -33,16 +18,55 @@ _MID_SENTENCE_START = re.compile(r"((?<=[.!?])\s+|\n)([a-z])")
 # citation: "cf. boyd, 2010" becomes "cf. Boyd, 2010" and the guard rightly
 # rejects the whole paragraph. Genuinely a closed class, so listing it is safe.
 _ABBREVIATIONS = frozenset([
-    "cf", "eg", "e.g", "ie", "i.e", "etc", "al", "vs", "viz", "ibid", "op",
-    "fig", "figs", "tab", "no", "vol", "vols", "ch", "chap", "pp", "p",
-    "ed", "eds", "trans", "repr", "esp", "approx", "cca", "ca", "circa",
-    "dr", "prof", "mr", "mrs", "ms", "st", "jr", "sr",
+    "cf",
+    "eg",
+    "e.g",
+    "ie",
+    "i.e",
+    "etc",
+    "al",
+    "vs",
+    "viz",
+    "ibid",
+    "op",
+    "fig",
+    "figs",
+    "tab",
+    "no",
+    "vol",
+    "vols",
+    "ch",
+    "chap",
+    "pp",
+    "p",
+    "ed",
+    "eds",
+    "trans",
+    "repr",
+    "esp",
+    "approx",
+    "cca",
+    "ca",
+    "circa",
+    "dr",
+    "prof",
+    "mr",
+    "mrs",
+    "ms",
+    "st",
+    "jr",
+    "sr",
 ])
 _ARTICLE = re.compile(r"\b([Aa]n?)\s+([A-Za-z][\w-]*)")
 
 # Words whose spelling and pronunciation disagree about the article they take.
 _VOWEL_SOUND_CONSONANT_SPELLING = ("hour", "honest", "honour", "heir")
 _CONSONANT_SOUND_VOWEL_SPELLING = ("one", "once", "uni", "use", "user", "usu", "euro", "eu")
+
+# How much context around a join the repair pass needs. An article sits one word
+# before its noun and a sentence start one clause after, so a margin of a short
+# clause each way covers what an edit can disturb without letting the pass roam.
+_MARGIN = 80
 
 
 def _takes_an(word: str) -> bool:
@@ -96,24 +120,6 @@ def _capitalise_sentence_start(match: re.Match) -> str:
     return match.group(1) + match.group(2).upper()
 
 
-def _repair_span(text: str, at_start: bool) -> str:
-    out = _REPEATED_PUNCT.sub(",", text)
-    out = _ORPHANED_COMMA.sub(r"\1", out)
-    out = _SPACE_BEFORE_APOSTROPHE.sub(r"\1", out)
-    out = _SPACE_BEFORE_PUNCT.sub(r"\1", out)
-    out = _SPACE_AFTER_OPEN.sub(r"\1", out)
-    out = _MULTI_SPACE.sub(" ", out)
-    out = _ARTICLE.sub(_fix_article, out)
-    pattern = _SENTENCE_START if at_start else _MID_SENTENCE_START
-    return pattern.sub(_capitalise_sentence_start, out)
-
-
-# How much context around a join the repair pass needs. An article sits one word
-# before its noun and a sentence start one clause after, so a margin of a short
-# clause each way covers what an edit can disturb without letting the pass roam.
-_MARGIN = 80
-
-
 def _merge(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
     merged: list[tuple[int, int]] = []
     for start, end in sorted(spans):
@@ -122,10 +128,6 @@ def _merge(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
         else:
             merged.append((start, end))
     return merged
-
-
-def _widen(spans, length: int) -> list[tuple[int, int]]:
-    return _merge([(max(0, s - _MARGIN), min(length, e + _MARGIN)) for s, e in spans])
 
 
 def _subtract(spans, blocked) -> list[tuple[int, int]]:
@@ -177,14 +179,26 @@ def repair(text: str, windows=None, protected=()) -> str:
         return _splice(text, scope).strip()
     if not windows:
         return text
-    return _splice(text, _subtract(_widen(windows, len(text)), protected))
+    widened = _merge([(max(0, s - _MARGIN), min(len(text), e + _MARGIN)) for s, e in windows])
+    return _splice(text, _subtract(widened, protected))
 
 
 def _splice(text: str, scope: list[tuple[int, int]]) -> str:
-    out, cursor = [], 0
+    pieces, cursor = [], 0
     for start, end in scope:
-        out.append(text[cursor:start])
-        out.append(_repair_span(text[start:end], at_start=start == 0))
+        pieces.append(text[cursor:start])
+        span = text[start:end]
+        at_start = start == 0
+        repaired = _REPEATED_PUNCT.sub(",", span)
+        repaired = _ORPHANED_COMMA.sub(r"\1", repaired)
+        repaired = _SPACE_BEFORE_APOSTROPHE.sub(r"\1", repaired)
+        repaired = _SPACE_BEFORE_PUNCT.sub(r"\1", repaired)
+        repaired = _SPACE_AFTER_OPEN.sub(r"\1", repaired)
+        repaired = _MULTI_SPACE.sub(" ", repaired)
+        repaired = _ARTICLE.sub(_fix_article, repaired)
+        pattern = _SENTENCE_START if at_start else _MID_SENTENCE_START
+        repaired = pattern.sub(_capitalise_sentence_start, repaired)
+        pieces.append(repaired)
         cursor = end
-    out.append(text[cursor:])
-    return "".join(out)
+    pieces.append(text[cursor:])
+    return "".join(pieces)

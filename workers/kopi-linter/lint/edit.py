@@ -1,15 +1,6 @@
-"""The unit of work: one proposed change to one span of text.
-
-A rule never edits. It *proposes*, and proposals compete: two rules will often
-want the same words, and a rule that is right in isolation can be wrong once the
-band, the word budget, or a neighbouring edit is taken into account. Keeping
-proposal separate from application is what lets the engine reason about the set
-of changes rather than apply them in whatever order the rules happened to run,
-and it is what makes the result independent of rule order.
-
-Every edit carries the taxonomy family it belongs to (see ``docs/typology.md``),
-so band gating and per-family reporting work without the rules knowing about
-either.
+"""Define `Edit`, one proposed change to a text span. Keeping proposal
+separate from application lets the engine choose among conflicting edits so
+the result never depends on rule order.
 """
 from dataclasses import dataclass
 

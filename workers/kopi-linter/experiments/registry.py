@@ -1,15 +1,6 @@
-"""Candidate methods, grouped by the family they attack.
-
-A *method* is one way of solving one transformation family. A family with a
-single registered method has not been evaluated, only measured: the comparison
-against an alternative is what turns a number into evidence. So the registry is
-expected to hold several methods per family, including ablations of the shipped
-one, and including methods known to be worse.
-
-Ablations earn their place. Every gate in a rule is a claim about what breaks
-without it, and the cheapest way to test that claim is to register the rule with
-the gate turned off and see what it costs. A gate that costs nothing when removed
-was not doing anything.
+"""Register candidate methods grouped by the transformation family they
+attack, including deliberate ablations, so a family is compared across
+methods rather than measured by a single one.
 """
 from collections.abc import Callable
 from dataclasses import dataclass

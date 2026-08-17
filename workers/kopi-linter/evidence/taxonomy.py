@@ -1,19 +1,6 @@
-"""Classify each aligned edit into a transformation family.
-
-Every span the aligner produces is put through an ordered cascade of structural
-detectors. The order matters: the most specific reading of a span wins, so
-"participants were given an alias" -> "we gave each participant an alias" is
-recorded as a voice change rather than three unrelated word swaps.
-
-Two design commitments, both deliberate:
-
-* **Structural, not lexical.** A family is decided from the dependency parse and
-  from derivational morphology (WordNet), never from a hand-written list of
-  words. The one exception is :mod:`evidence.editor_rules`, which exists to
-  measure what the production tables already cover.
-* **An honest remainder.** Anything the cascade cannot name lands in
-  ``unclassified`` with its text kept. That bucket is the finding, not a
-  failure: it sizes the part of the problem no rule set has touched yet.
+"""Classify each aligned edit span into a transformation family through an
+ordered cascade of dependency and WordNet-morphology detectors, never a word
+list. Unmatched spans land in `unclassified`.
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -23,8 +10,20 @@ from evidence import editor_rules
 
 _NOMINAL_SUFFIXES = ("tion", "sion", "ment", "ity", "ness", "ance", "ence", "ism", "al", "ure")
 _PASSIVE_DEPS = frozenset(["nsubjpass", "auxpass", "csubjpass"])
-_SUBORD_DEPS = frozenset(["relcl", "acl", "advcl", "ccomp", "xcomp", "csubj", "csubjpass"])
 _DEGREE_DEPS = frozenset(["advmod", "npadvmod", "amod"])
+_PREDICATE_DEPS = frozenset(["ROOT", "conj", "ccomp", "advcl", "xcomp"])
+_FUNCTION_POS = frozenset(["DET", "ADP", "PART", "AUX", "PUNCT", "SPACE", "CCONJ", "PRON"])
+_STEM_PREFIX_MINIMUM = 4
+_EXAMPLE_LIMIT = 12
+
+
+def _counters_by_key():
+    return defaultdict(Counter)
+
+
+def _lists_by_key():
+    return defaultdict(list)
+
 
 @lru_cache(maxsize=1)
 def _wn():
@@ -55,13 +54,13 @@ def _related_lemmas(word: str) -> frozenset:
     return frozenset(out)
 
 
-def _shares_stem(a: str, b: str, minimum: int = 4) -> bool:
-    a, b = a.lower(), b.lower()
-    n = min(len(a), len(b))
+def _shares_stem(first: str, second: str) -> bool:
+    first, second = first.lower(), second.lower()
+    shortest = min(len(first), len(second))
     common = 0
-    while common < n and a[common] == b[common]:
+    while common < shortest and first[common] == second[common]:
         common += 1
-    return common >= minimum
+    return common >= _STEM_PREFIX_MINIMUM
 
 
 def _morphologically_linked(source_word: str, target_word: str) -> bool:
@@ -83,16 +82,13 @@ def _syllables(word: str) -> int:
     return textstat.syllable_count(word)
 
 
-_FUNCTION_POS = frozenset(["DET", "ADP", "PART", "AUX", "PUNCT", "SPACE", "CCONJ", "PRON"])
-
-
 def _content_tokens(tokens):
-    return [t for t in tokens if not t.is_punct and not t.is_space]
+    return [token for token in tokens if not token.is_punct and not token.is_space]
 
 
 def _is_function_only(tokens) -> bool:
-    real = [t for t in tokens if not t.is_space]
-    return bool(real) and all(t.pos_ in _FUNCTION_POS for t in real)
+    real = [token for token in tokens if not token.is_space]
+    return bool(real) and all(token.pos_ in _FUNCTION_POS for token in real)
 
 
 def _deictic(token) -> bool:
@@ -105,11 +101,15 @@ def _is_nominalisation(token) -> bool:
     lemma = token.lemma_.lower()
     if not lemma.endswith(_NOMINAL_SUFFIXES):
         return False
-    return any(len(v) > 2 for v in _related_lemmas(lemma))
+    return any(len(related) > 2 for related in _related_lemmas(lemma))
 
 
 def _bead_is_passive(sentences) -> bool:
-    return any(t.dep_ in _PASSIVE_DEPS for s in sentences for t in s)
+    for sentence in sentences:
+        for token in sentence:
+            if token.dep_ in _PASSIVE_DEPS:
+                return True
+    return False
 
 
 @dataclass
@@ -131,10 +131,10 @@ class Tally:
     subtypes: Counter = field(default_factory=Counter)
     words_moved: Counter = field(default_factory=Counter)
     covered: Counter = field(default_factory=Counter)
-    by_band: dict = field(default_factory=lambda: defaultdict(Counter))
-    examples: dict = field(default_factory=lambda: defaultdict(list))
+    by_band: dict = field(default_factory=_counters_by_key)
+    examples: dict = field(default_factory=_lists_by_key)
     findings: list = field(default_factory=list)
-    content_loss: dict = field(default_factory=lambda: defaultdict(list))
+    content_loss: dict = field(default_factory=_lists_by_key)
 
 
 @lru_cache(maxsize=20_000)
@@ -161,10 +161,20 @@ def _is_concrete(lemma: str) -> bool:
 
 
 def _figurative_frame(tokens) -> bool:
-    nouns = [t for t in tokens if t.pos_ == "NOUN"]
+    nouns = [token for token in tokens if token.pos_ == "NOUN"]
     if len(nouns) < 2:
         return False
     return _is_concrete(nouns[0].lemma_.lower()) and not _is_concrete(nouns[-1].lemma_.lower())
+
+
+def _content_lemmas(sentences) -> frozenset:
+    """Every lemma on one side of a bead, without punctuation or stop words."""
+    lemmas = set()
+    for sentence in sentences:
+        for token in sentence:
+            if not token.is_punct and not token.is_stop:
+                lemmas.add(token.lemma_.lower())
+    return frozenset(lemmas)
 
 
 @dataclass
@@ -178,126 +188,136 @@ class BeadContext:
 def bead_context(bead) -> BeadContext:
     return BeadContext(
         voice_shift=_bead_is_passive(bead.source) and not _bead_is_passive(bead.target),
-        source_lemmas=frozenset(
-            t.lemma_.lower() for s in bead.source for t in s if not t.is_punct and not t.is_stop
-        ),
-        target_lemmas=frozenset(
-            t.lemma_.lower() for s in bead.target for t in s if not t.is_punct and not t.is_stop
-        ),
+        source_lemmas=_content_lemmas(bead.source),
+        target_lemmas=_content_lemmas(bead.target),
     )
 
 
 def _touches_passive(tokens) -> bool:
-    return any(t.dep_ in _PASSIVE_DEPS or t.tag_ == "VBN" for t in tokens)
+    return any(token.dep_ in _PASSIVE_DEPS or token.tag_ == "VBN" for token in tokens)
 
 
-def _classify_deletion(span, bead, ctx) -> tuple[str, str]:
+def _any_pair_linked(source_tokens, target_tokens) -> bool:
+    """Whether any word on one side is morphologically related to any word on the other."""
+    for source in source_tokens:
+        for target in target_tokens:
+            if _morphologically_linked(source.lemma_, target.lemma_):
+                return True
+    return False
+
+
+def _classify_deletion(span, bead, ctx) -> dict:
     tokens = _content_tokens(span.source_tokens)
     if not tokens:
-        return "punctuation", "punctuation-only"
+        return {"family": "punctuation", "subtype": "punctuation-only"}
     if ctx.voice_shift and _touches_passive(span.source_tokens):
-        return "voice", "passive-auxiliary-dropped"
+        return {"family": "voice", "subtype": "passive-auxiliary-dropped"}
     if _is_function_only(span.source_tokens):
-        return "realisation", "function-word-dropped"
-    deps = {t.dep_ for t in tokens}
-    pos = {t.pos_ for t in tokens}
+        return {"family": "realisation", "subtype": "function-word-dropped"}
+    deps = {token.dep_ for token in tokens}
+    pos = {token.pos_ for token in tokens}
 
     if pos <= {"DET", "PRON"}:
-        return "determiner", "determiner-dropped"
+        return {"family": "determiner", "subtype": "determiner-dropped"}
     if len(tokens) == 1 and tokens[0].pos_ == "ADV" and tokens[0].dep_ in _DEGREE_DEPS:
-        return ("intensifier", "degree-adverb-dropped") if tokens[0].head.pos_ in ("ADJ", "ADV") \
-            else ("stance", "sentence-adverb-dropped")
-    if any(t.dep_ == "relcl" for t in tokens) or tokens[0].tag_ in ("WDT", "WP"):
-        return "relative-clause", "relative-clause-dropped"
-    has_predicate = any(t.pos_ == "VERB" and t.dep_ in ("ROOT", "conj", "ccomp", "advcl", "xcomp")
-                        for t in tokens)
+        if tokens[0].head.pos_ in ("ADJ", "ADV"):
+            return {"family": "intensifier", "subtype": "degree-adverb-dropped"}
+        return {"family": "stance", "subtype": "sentence-adverb-dropped"}
+    if any(token.dep_ == "relcl" for token in tokens) or tokens[0].tag_ in ("WDT", "WP"):
+        return {"family": "relative-clause", "subtype": "relative-clause-dropped"}
+    has_predicate = any(token.pos_ == "VERB" and token.dep_ in _PREDICATE_DEPS
+                        for token in tokens)
     if has_predicate and len(tokens) >= 6:
-        return "clause", "clause-dropped"
+        return {"family": "clause", "subtype": "clause-dropped"}
     if has_predicate:
-        return "clause", "predicate-absorbed"
+        return {"family": "clause", "subtype": "predicate-absorbed"}
     if _figurative_frame(tokens):
-        return "figurative", "metaphorical-frame-dropped"
-    if tokens[0].pos_ == "ADP" or any(t.dep_ == "prep" for t in tokens):
-        return "adjunct", "prepositional-phrase-dropped"
+        return {"family": "figurative", "subtype": "metaphorical-frame-dropped"}
+    if tokens[0].pos_ == "ADP" or any(token.dep_ == "prep" for token in tokens):
+        return {"family": "adjunct", "subtype": "prepositional-phrase-dropped"}
     if pos <= {"ADJ", "ADV"} or deps <= {"amod", "advmod", "npadvmod"}:
-        return "modifier", "modifier-dropped"
+        return {"family": "modifier", "subtype": "modifier-dropped"}
     if len(tokens) == 1:
-        return "lexical", "word-dropped"
-    return "phrase", "phrase-dropped"
+        return {"family": "lexical", "subtype": "word-dropped"}
+    return {"family": "phrase", "subtype": "phrase-dropped"}
 
 
-def _structural_replacement(span, src, tgt, ctx) -> tuple[str, str] | None:
+def _structural_replacement(span, src, tgt, ctx) -> dict | None:
     """The transformations named by a structural relation between the two sides."""
-    for s in src:
-        if _is_nominalisation(s) and any(
-            t.pos_ in ("VERB", "AUX") and _morphologically_linked(s.lemma_, t.lemma_) for t in tgt
+    for source in src:
+        if _is_nominalisation(source) and any(
+            token.pos_ in ("VERB", "AUX") and _morphologically_linked(source.lemma_, token.lemma_)
+            for token in tgt
         ):
-            return "nominalisation", "nominal-to-verb"
+            return {"family": "nominalisation", "subtype": "nominal-to-verb"}
 
     if ctx.voice_shift and _touches_passive(span.source_tokens):
-        return "voice", "passive-to-active"
+        return {"family": "voice", "subtype": "passive-to-active"}
 
     if len(src) > 1 and len(tgt) == 1 and tgt[0].pos_ in ("VERB", "AUX"):
-        if any(s.pos_ == "NOUN" and _morphologically_linked(s.lemma_, tgt[0].lemma_) for s in src):
-            return "support-verb", "light-verb-to-lexical-verb"
-        if any(s.pos_ in ("VERB", "AUX") for s in src):
-            return "support-verb", "verb-phrase-to-verb"
+        if any(source.pos_ == "NOUN" and _morphologically_linked(source.lemma_, tgt[0].lemma_)
+               for source in src):
+            return {"family": "support-verb", "subtype": "light-verb-to-lexical-verb"}
+        if any(source.pos_ in ("VERB", "AUX") for source in src):
+            return {"family": "support-verb", "subtype": "verb-phrase-to-verb"}
 
-    if len(tgt) == 1 and tgt[0].pos_ == "ADV" and any(t.pos_ == "ADP" for t in span.source_tokens):
-        if any(s.pos_ in ("NOUN", "ADJ") and _morphologically_linked(s.lemma_, tgt[0].lemma_)
-               for s in src):
-            return "adjunct", "prepositional-phrase-to-adverb"
-        return "adjunct", "prepositional-phrase-to-deictic"
+    if len(tgt) == 1 and tgt[0].pos_ == "ADV" and any(token.pos_ == "ADP"
+                                                      for token in span.source_tokens):
+        if any(source.pos_ in ("NOUN", "ADJ") and _morphologically_linked(source.lemma_,
+                                                                          tgt[0].lemma_)
+               for source in src):
+            return {"family": "adjunct", "subtype": "prepositional-phrase-to-adverb"}
+        return {"family": "adjunct", "subtype": "prepositional-phrase-to-deictic"}
 
-    if any(t.pos_ == "ADP" and t.lemma_.lower() == "of" for t in span.source_tokens) and \
-            any(t.tag_ == "POS" for t in span.target_tokens):
-        return "adjunct", "of-phrase-to-genitive"
+    if any(token.pos_ == "ADP" and token.lemma_.lower() == "of" for token in span.source_tokens) \
+            and any(token.tag_ == "POS" for token in span.target_tokens):
+        return {"family": "adjunct", "subtype": "of-phrase-to-genitive"}
 
     if _figurative_frame(src) and not _figurative_frame(tgt):
-        return "figurative", "metaphor-to-direct-statement"
+        return {"family": "figurative", "subtype": "metaphor-to-direct-statement"}
     return None
 
 
-def _word_for_word(source, target) -> tuple[str, str]:
+def _word_for_word(source, target) -> dict:
     if source.lemma_.lower() == target.lemma_.lower():
-        return "morphology", "inflection-only"
+        return {"family": "morphology", "subtype": "inflection-only"}
     if source.pos_ in ("ADV", "SCONJ", "CCONJ") and target.pos_ in ("ADV", "SCONJ", "CCONJ"):
-        return "connective", "connective-swapped"
+        return {"family": "connective", "subtype": "connective-swapped"}
     if not (source.is_alpha and target.is_alpha):
-        return "phrase", "paraphrase-rewrite"
+        return {"family": "phrase", "subtype": "paraphrase-rewrite"}
     if _frequency(target.text) > _frequency(source.text) and \
             _syllables(target.text) <= _syllables(source.text):
-        return "lexical", "long-to-plain"
+        return {"family": "lexical", "subtype": "long-to-plain"}
     if _morphologically_linked(source.lemma_, target.lemma_):
-        return "lexical", "derivational-swap"
-    return "lexical", "synonym-swap"
+        return {"family": "lexical", "subtype": "derivational-swap"}
+    return {"family": "lexical", "subtype": "synonym-swap"}
 
 
-def _paraphrase_kind(src, tgt) -> tuple[str, str]:
-    src_lemmas = {t.lemma_.lower() for t in src}
-    tgt_lemmas = {t.lemma_.lower() for t in tgt}
+def _paraphrase_kind(src, tgt) -> dict:
+    src_lemmas = {token.lemma_.lower() for token in src}
+    tgt_lemmas = {token.lemma_.lower() for token in tgt}
     if src_lemmas and src_lemmas <= tgt_lemmas:
-        return "phrase", "phrase-reordered"
+        return {"family": "phrase", "subtype": "phrase-reordered"}
     if tgt_lemmas and tgt_lemmas <= src_lemmas:
-        return "phrase", "head-preserved-compression"
-    if any(_morphologically_linked(s.lemma_, t.lemma_) for s in src for t in tgt):
-        return "phrase", "recategorised-compression"
+        return {"family": "phrase", "subtype": "head-preserved-compression"}
+    if _any_pair_linked(src, tgt):
+        return {"family": "phrase", "subtype": "recategorised-compression"}
     if len(src) > len(tgt):
-        return "phrase", "paraphrase-compression"
-    return "phrase", "paraphrase-rewrite"
+        return {"family": "phrase", "subtype": "paraphrase-compression"}
+    return {"family": "phrase", "subtype": "paraphrase-rewrite"}
 
 
-def _classify_replacement(span, bead, ctx) -> tuple[str, str]:
+def _classify_replacement(span, bead, ctx) -> dict:
     src = _content_tokens(span.source_tokens)
     tgt = _content_tokens(span.target_tokens)
     if not src and not tgt:
-        return "punctuation", "punctuation-only"
+        return {"family": "punctuation", "subtype": "punctuation-only"}
     if not tgt:
         return _classify_deletion(span, bead, ctx)
     if not src:
         return _classify_insertion(span, bead, ctx)
     if _is_function_only(span.source_tokens) and _is_function_only(span.target_tokens):
-        return "realisation", "function-word-swapped"
+        return {"family": "realisation", "subtype": "function-word-swapped"}
     structural = _structural_replacement(span, src, tgt, ctx)
     if structural:
         return structural
@@ -306,34 +326,31 @@ def _classify_replacement(span, bead, ctx) -> tuple[str, str]:
     return _paraphrase_kind(src, tgt)
 
 
-def _classify_insertion(span, bead, ctx) -> tuple[str, str]:
+def _classify_insertion(span, bead, ctx) -> dict:
     tokens = _content_tokens(span.target_tokens)
     if not tokens:
-        return "punctuation", "punctuation-only"
+        return {"family": "punctuation", "subtype": "punctuation-only"}
     if _is_function_only(span.target_tokens):
-        if ctx.voice_shift and any(t.pos_ == "PRON" for t in span.target_tokens):
-            return "voice", "agent-restored"
-        return "realisation", "function-word-inserted"
-    if ctx.voice_shift and any(t.dep_ in ("nsubj", "nsubjpass") for t in tokens):
-        return "voice", "agent-restored"
+        if ctx.voice_shift and any(token.pos_ == "PRON" for token in span.target_tokens):
+            return {"family": "voice", "subtype": "agent-restored"}
+        return {"family": "realisation", "subtype": "function-word-inserted"}
+    if ctx.voice_shift and any(token.dep_ in ("nsubj", "nsubjpass") for token in tokens):
+        return {"family": "voice", "subtype": "agent-restored"}
     if len(tokens) == 1 and tokens[0].pos_ in ("SCONJ", "CCONJ", "ADV"):
-        return "connective", "connective-inserted"
-    if tgt_new := (frozenset(t.lemma_.lower() for t in tokens) - ctx.source_lemmas):
-        if len(tgt_new) >= 2:
-            return "phrase", "material-introduced"
-    return "phrase", "material-inserted"
+        return {"family": "connective", "subtype": "connective-inserted"}
+    introduced = {token.lemma_.lower() for token in tokens} - ctx.source_lemmas
+    if len(introduced) >= 2:
+        return {"family": "phrase", "subtype": "material-introduced"}
+    return {"family": "phrase", "subtype": "material-inserted"}
 
 
-def classify_span(span, bead, ctx) -> tuple[str, str]:
+def classify_span(span, bead, ctx) -> dict:
     """Family and subtype for one span edit, from the parse and its bead context."""
     if span.op == "delete":
         return _classify_deletion(span, bead, ctx)
     if span.op == "insert":
         return _classify_insertion(span, bead, ctx)
     return _classify_replacement(span, bead, ctx)
-
-
-_EXAMPLE_LIMIT = 12
 
 
 def _record(result: Tally, finding: Finding) -> None:
@@ -349,12 +366,15 @@ def _record(result: Tally, finding: Finding) -> None:
     result.findings.append(finding)
 
 
-def _content_loss(ctx: BeadContext) -> float:
-    """Share of the source's content lemmas with no surviving relative in the target."""
+def _content_loss(ctx) -> float:
+    """The share of a bead's content words the edit dropped without keeping a relative."""
     if not ctx.source_lemmas:
         return 0.0
-    lost = [word for word in ctx.source_lemmas - ctx.target_lemmas
-            if not any(_morphologically_linked(word, kept) for kept in ctx.target_lemmas)]
+    lost = []
+    for word in ctx.source_lemmas - ctx.target_lemmas:
+        kept_a_relative = any(_morphologically_linked(word, kept) for kept in ctx.target_lemmas)
+        if not kept_a_relative:
+            lost.append(word)
     return len(lost) / len(ctx.source_lemmas)
 
 
@@ -369,7 +389,8 @@ def _tally_bead(result: Tally, bead, sample) -> None:
     if bead.op in ("rewrite", "split", "merge"):
         result.content_loss[sample.band].append(_content_loss(ctx))
     for span in bead.spans:
-        family, subtype = classify_span(span, bead, ctx)
+        kind = classify_span(span, bead, ctx)
+        family, subtype = kind["family"], kind["subtype"]
         covered = editor_rules.covered_by_table(span.source, span.target)
         if covered:
             family, subtype = "filler", f"table:{covered}"

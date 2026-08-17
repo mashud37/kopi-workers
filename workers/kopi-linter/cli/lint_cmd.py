@@ -9,7 +9,7 @@ OUTPUT = Path("output")
 _READABLE = (".md", ".txt")
 
 
-def _resolve(name: str) -> Path:
+def _resolve(name: str) -> Path:  # lint-style: ignore FN004
     path = Path(name)
     if not path.exists() and not path.is_absolute():
         path = INPUT / name
@@ -20,16 +20,12 @@ def _resolve(name: str) -> Path:
     return path
 
 
-def _pick_file() -> Path | None:
+def _pick_file() -> Path | None:  # lint-style: ignore FN004
     candidates = sorted(p for p in INPUT.glob("*") if p.suffix.lower() in _READABLE)
     if not candidates:
         raise SystemExit(f"no .md or .txt files in {INPUT}/")
     choice = ui.menu("Document", [(p.name, f"{p.stat().st_size // 1024} KB") for p in candidates])
     return candidates[choice] if choice is not None else None
-
-
-def _paragraphs(text: str) -> list[str]:
-    return [block.strip() for block in text.split("\n\n") if block.strip()]
 
 
 def _write(path: Path, results: list, band_name: str) -> Path:
@@ -61,7 +57,8 @@ def run(name: str | None = None, band_name: str = "firm") -> None:
 
     from lint import bands
     band = bands.band(band_name)
-    paragraphs = _paragraphs(path.read_text(encoding="utf-8"))
+    text = path.read_text(encoding="utf-8")
+    paragraphs = [block.strip() for block in text.split("\n\n") if block.strip()]
     ui.ok(f"{path.name}: {len(paragraphs)} paragraphs, "
           f"{sum(len(p.split()) for p in paragraphs)} words, band {band.name}")
 
@@ -77,10 +74,13 @@ def run(name: str | None = None, band_name: str = "firm") -> None:
 
     from lint.run import lint_document
     bar = BatchProgress(len(paragraphs), "linting")
-    results = lint_document(paragraphs, nlp, band, on_progress=lambda i, n, p: bar.advance())
+    results = lint_document(paragraphs, nlp, band, on_progress=bar.on_item)
     bar.finish()
 
-    broken = {f"{name}: {type(err).__name__}" for r in results for name, err in r.failures}
+    broken = set()
+    for result in results:
+        for name, err in result.failures:
+            broken.add(f"{name}: {type(err).__name__}")
     for label in sorted(broken):
         ui.error(f"rule raised while linting: {label}")
 

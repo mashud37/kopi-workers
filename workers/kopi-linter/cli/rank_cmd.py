@@ -7,31 +7,6 @@ from .progress import BatchProgress, StepSpinner
 OUTPUT = Path("output")
 
 
-def _load_parser():
-    sp = StepSpinner("loading spaCy parser")
-    sp.start()
-    try:
-        import spacy
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
-    finally:
-        sp.done()
-
-
-def _table(rows: list, reference: float) -> list:
-    lines = [
-        "| Scorer | precision@k | lift over random | MAP |",
-        "|---|---:|---:|---:|",
-    ]
-    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
-        lift = result["p_at_k"] / reference if reference else 0.0
-        mark = "**" if lift >= 1.5 else ""
-        lines.append(f"| {mark}{name}{mark} | {result['p_at_k']:.3f} | {lift:.2f}x | "
-                     f"{result['map']:.3f} |")
-    return lines
-
-
 def _write(rows: list, first: dict, reference: float, limit: int | None,
            extra: list) -> Path:
     OUTPUT.mkdir(exist_ok=True)
@@ -52,31 +27,17 @@ def _write(rows: list, first: dict, reference: float, limit: int | None,
         "chances in exactly the paragraphs where hits are easy. Comparing against the corpus "
         "rate would credit every scorer with about 0.6x of lift it has not earned.",
         "",
+        "| Scorer | precision@k | lift over random | MAP |",
+        "|---|---:|---:|---:|",
     ]
-    lines += _table(rows, reference)
+    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
+        lift = result["p_at_k"] / reference if reference else 0.0
+        mark = "**" if lift >= 1.5 else ""
+        lines.append(f"| {mark}{name}{mark} | {result['p_at_k']:.3f} | {lift:.2f}x | "
+                     f"{result['map']:.3f} |")
     lines += extra
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
-
-
-def _score_orderings(groups: list) -> list:
-    from experiments import ranking
-
-    rows = []
-    names = list(ranking.SCORERS)
-    for i, name in enumerate(names, 1):
-        ui.info(f"[{i}/{len(names)}] {name}")
-        rows.append((name, ranking.score(groups, name)))
-    return rows
-
-
-def _report_orderings(rows: list, first: dict, reference: float) -> None:
-    ui.ok(f"{first['groups']} paragraphs, {first['candidates']} candidates, "
-          f"random baseline {reference:.3f} (corpus drop rate {first['base']:.3f})")
-    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
-        lift = result["p_at_k"] / reference if reference else 0.0
-        ui.info(f"{name:12} p@k {result['p_at_k']:.3f}  ({lift:.2f}x random)  "
-                f"MAP {result['map']:.3f}")
 
 
 def _allocation(groups: list) -> list:
@@ -122,10 +83,18 @@ def run(limit: int | None = None) -> None:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
     ui.ok(f"{len(samples)} gold paragraphs")
 
-    nlp = _load_parser()
+    sp = StepSpinner("loading spaCy parser")
+    sp.start()
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
+    finally:
+        sp.done()
+
     bar = BatchProgress(len(samples), "collecting drop candidates")
-    every = ranking.observations(samples, nlp, on_progress=lambda i, n, s: bar.advance(),
-                                 require_choice=False)
+    every = ranking.observations(samples, nlp, on_progress=bar.on_item, require_choice=False)
     bar.finish()
     # Ordering needs paragraphs where there was a choice; allocation needs all of
     # them, including the ones that dropped nothing. One parse pass, two questions.
@@ -135,10 +104,20 @@ def run(limit: int | None = None) -> None:
         raise SystemExit("no paragraph both dropped and kept a phrase, nothing to rank")
     ui.ok(f"{len(every)} paragraphs with candidates, {len(groups)} with a ranking choice")
 
-    rows = _score_orderings(groups)
+    rows = []
+    names = list(ranking.SCORERS)
+    for i, name in enumerate(names, 1):
+        ui.info(f"[{i}/{len(names)}] {name}")
+        rows.append((name, ranking.score(groups, name)))
+
     first = rows[0][1]
     reference = dict(rows)["random"]["p_at_k"]
-    _report_orderings(rows, first, reference)
+    ui.ok(f"{first['groups']} paragraphs, {first['candidates']} candidates, "
+          f"random baseline {reference:.3f} (corpus drop rate {first['base']:.3f})")
+    for name, result in sorted(rows, key=lambda r: -r[1]["p_at_k"]):
+        lift = result["p_at_k"] / reference if reference else 0.0
+        ui.info(f"{name:12} p@k {result['p_at_k']:.3f}  ({lift:.2f}x random)  "
+                f"MAP {result['map']:.3f}")
 
     ui.step("Allocation")
     extra = _allocation(every)

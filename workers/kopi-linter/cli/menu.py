@@ -1,7 +1,6 @@
-"""Interactive menu shown when manage.py runs with no arguments.
-
-Loops until the user closes it; every action returns here when it finishes or
-fails (cli.md section 2.1). Mirrors the subcommands one-to-one."""
+"""Interactive menu shown when manage.py runs with no arguments. Loops until
+the user closes it, returning here after every action finishes or fails, and
+mirrors the subcommands one-to-one."""
 from . import (
     eval_cmd,
     evidence_cmd,

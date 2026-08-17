@@ -1,11 +1,6 @@
-"""Bridge to kopi-editor's existing deterministic rule tables.
-
-Read-only, and used for one purpose: measuring how much of the gold edit corpus
-the rules already in production can account for. Everything a table already
-covers is a solved case; the point of this repo is the remainder.
-
-kopi-editor is a sibling repo, not an installed package, so its ``kopi`` package
-is put on the path here rather than imported normally.
+"""Load kopi-editor's production rule tables read-only to measure how much
+of the gold corpus they already cover. kopi-editor is a sibling repo, so its
+`kopi` package is added to sys.path.
 """
 import sys
 from functools import lru_cache

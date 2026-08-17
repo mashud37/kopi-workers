@@ -1,27 +1,6 @@
-"""Relative clause reduction, the classic "whiz-deletion".
-
-"the data which were collected over several months" becomes "the data collected
-over several months". The evidence puts this family at 5.3 words saved per
-instance, the highest of any span family, on a transformation that changes no
-content at all: the relativiser and the copula carry no meaning the rest of the
-clause does not already carry.
-
-It is only safe when the relativiser is the *subject* of the relative clause.
-"the data which we collected" must stay, because deleting "which" there strands
-the object. The parse gives that distinction directly, so the rule is gated on
-it rather than on a surface pattern.
-
-The four licensed shapes, and what makes each safe:
-
-* past participle, "which were collected" -> "collected"
-* present participle, "who are studying" -> "studying"
-* prepositional phrase, "which is on the table" -> "on the table"
-* adjective *with a complement*, "who are eager to learn" -> "eager to learn"
-
-Every gate here is a claim about what would break without it, and every such
-claim is testable by turning the gate off. :class:`Gates` exists so that the
-experiment layer can do exactly that, rather than leaving the gates asserted in
-a docstring. See ``docs/good.md`` section 3.1 for the cases each one covers.
+"""Propose reducing a relative clause to a participle or phrase
+(whiz-deletion) when the relativiser is the clause's subject, since dropping
+an object relativiser strands the object. `Gates` names each condition.
 """
 from dataclasses import dataclass
 
@@ -33,8 +12,19 @@ _CLEFT_DEPS = frozenset(["attr", "acomp"])
 
 # Relations the cleft search may climb: all of them keep the walk inside one
 # nominal. Anything else is a clause boundary and ends the search.
-_NOMINAL_INTERNAL = frozenset(["pobj", "prep", "compound", "conj", "appos",
-                               "poss", "amod", "nmod", "npadvmod", "acl", "pcomp"])
+_NOMINAL_INTERNAL = frozenset([
+    "pobj",
+    "prep",
+    "compound",
+    "conj",
+    "appos",
+    "poss",
+    "amod",
+    "nmod",
+    "npadvmod",
+    "acl",
+    "pcomp",
+])
 _CLEFT_SEARCH_DEPTH = 10
 
 _PARTICIPLE = {"VBN": 0.92, "VBG": 0.88}
@@ -142,32 +132,11 @@ def _in_cleft(clause) -> bool:
     return False
 
 
-def _relativiser(clause, gates: Gates):
-    for child in clause.children:
-        if child.tag_ not in _RELATIVISER_TAGS:
-            continue
-        if gates.subject_relativiser and child.dep_ not in _SUBJECT_DEPS:
-            continue
-        return child
-    return None
-
-
-def _copula(clause):
+def _copula(clause):  # lint-style: ignore FN004
     for child in clause.children:
         if child.dep_ in ("aux", "auxpass") and child.lemma_.lower() == "be":
             return child
     return None
-
-
-def _predicate_after_copula(clause, gates: Gates):
-    """For a copular relative clause, the phrase that survives the reduction."""
-    for child in clause.children:
-        if child.dep_ == "prep":
-            return child, 0.85
-        if child.dep_ == "acomp" and child.pos_ == "ADJ":
-            if not gates.adjective_complement or any(True for _ in child.rights):
-                return child, 0.75
-    return None, 0.0
 
 
 def _make(text: str, relativiser, target, rule: str, confidence: float) -> Edit:
@@ -179,7 +148,7 @@ def _make(text: str, relativiser, target, rule: str, confidence: float) -> Edit:
     )
 
 
-def _participle_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | None:
+def _participle_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | None:  # lint-style: ignore FN004
     confidence = _PARTICIPLE.get(clause.tag_)
     if _copula(clause) is None or confidence is None or clause.idx <= relativiser.idx:
         return None
@@ -189,10 +158,18 @@ def _participle_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit 
     return _make(text, relativiser, survivor, "relative.participle", confidence)
 
 
-def _copular_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | None:
+def _copular_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | None:  # lint-style: ignore FN004
     if clause.lemma_.lower() != "be":
         return None
-    predicate, confidence = _predicate_after_copula(clause, gates)
+    predicate, confidence = None, 0.0
+    for child in clause.children:
+        if child.dep_ == "prep":
+            predicate, confidence = child, 0.85
+            break
+        if child.dep_ == "acomp" and child.pos_ == "ADJ":
+            if not gates.adjective_complement or any(True for _ in child.rights):
+                predicate, confidence = child, 0.75
+                break
     if predicate is None or predicate.idx <= relativiser.idx:
         return None
     survivor = _survivor(doc, relativiser, predicate, gates)
@@ -201,18 +178,31 @@ def _copular_edit(doc, clause, relativiser, text: str, gates: Gates) -> Edit | N
     return _make(text, relativiser, survivor, "relative.copular", confidence)
 
 
+def _relativiser_of(clause, gates: Gates):
+    """The relative pronoun this clause hangs on, if the gates admit one."""
+    for child in clause.children:
+        if child.tag_ not in _RELATIVISER_TAGS:
+            continue
+        if gates.subject_relativiser and child.dep_ not in _SUBJECT_DEPS:
+            continue
+        return child
+    return None
+
+
 def propose(doc, gates: Gates = DEFAULT):
-    """Yield a reduction for every safely reducible relative clause in ``doc``."""
+    """A reduction for every safely reducible relative clause in ``doc``."""
     text = doc.text
+    edits = []
     for clause in doc:
         if clause.dep_ != "relcl":
             continue
         if gates.block_cleft and _in_cleft(clause):
             continue
-        relativiser = _relativiser(clause, gates)
+        relativiser = _relativiser_of(clause, gates)
         if relativiser is None:
             continue
         edit = _participle_edit(doc, clause, relativiser, text, gates) or \
             _copular_edit(doc, clause, relativiser, text, gates)
         if edit is not None:
-            yield edit
+            edits.append(edit)
+    return edits

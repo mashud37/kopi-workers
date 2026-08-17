@@ -1,21 +1,6 @@
-"""Which paragraphs get cut at all, before asking which phrase goes first.
-
-C12: the ranker orders phrases well and the pipeline still reaches a 6%
-attestation ceiling, because the budget is a median applied to *every* paragraph.
-The gold editor does not work that way. It cuts some paragraphs hard and leaves
-others untouched, so a uniform quota guarantees the linter edits paragraphs the
-editor never touched, and no improvement in ordering can repair that: ordering is
-only ever asked which phrase goes first, never whether any should go.
-
-So this asks the prior question. Given the phrases in a paragraph, is this a
-paragraph the editor cut? It is a binary decision with a free label, since the
-corpus says whether any phrase was dropped, and the features cost nothing because
-the ranker already computes them per candidate.
-
-Thresholds are swept rather than chosen. Picking a cutoff by eye and then
-reporting the score it produces is how a number gets talked into existing; the
-sweep reports the best achievable and the threshold that achieves it, so the
-ceiling of the whole approach is visible even when it is disappointing.
+"""Predict whether the gold editor cut a paragraph at all, since a uniform
+per-paragraph word budget otherwise forces edits onto paragraphs never
+touched. Reports the best threshold from a sweep.
 """
 from dataclasses import dataclass
 

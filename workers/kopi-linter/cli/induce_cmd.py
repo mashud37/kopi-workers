@@ -9,6 +9,7 @@ TABLES = {
     "adjunct": Path("rules/induced_adjuncts.py"),
 }
 FAMILIES = tuple(TABLES)
+_MINIMUM_SIGHTINGS = 4
 
 
 def _setup(label: str):
@@ -33,14 +34,14 @@ def _setup(label: str):
         raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
     finally:
         sp.done()
-    return samples, nlp
+    return {"samples": samples, "nlp": nlp}
 
 
 def _support_verbs(samples, nlp, minimum: int) -> Path:
     from evidence import induce
 
     bar = BatchProgress(len(samples), "surveying constructions")
-    result = induce.survey(samples, nlp, on_progress=lambda i, n, s: bar.advance())
+    result = induce.survey(samples, nlp, on_progress=bar.on_item)
     bar.finish()
 
     seen = sum(result["seen"].values())
@@ -56,15 +57,16 @@ def _adjuncts(samples, nlp, minimum: int) -> Path:
     from evidence import adjuncts
 
     bar = BatchProgress(len(samples), "surveying prepositional phrases")
-    result = adjuncts.survey(samples, nlp, on_progress=lambda i, n, s: bar.advance())
+    result = adjuncts.survey(samples, nlp, on_progress=bar.on_item)
     bar.finish()
 
-    seen, dropped = adjuncts.base_rate(result)
+    base = adjuncts.base_rate(result)
+    seen, dropped = base["seen"], base["dropped"]
     ui.ok(f"{seen} prepositional phrases, {dropped} dropped by the gold editor "
           f"({100.0 * dropped / seen if seen else 0:.1f}% base rate)")
 
     bar = BatchProgress(len(samples), "surveying governor attachment")
-    attach = adjuncts.attachment(samples, nlp, on_progress=lambda i, n, s: bar.advance())
+    attach = adjuncts.attachment(samples, nlp, on_progress=bar.on_item)
     bar.finish()
     ui.ok(f"{len(attach['governors'])} governors, {len(attach['pairs'])} governor-preposition "
           f"pairs, measured on the originals alone")
@@ -75,12 +77,12 @@ def _adjuncts(samples, nlp, minimum: int) -> Path:
     return TABLES["adjunct"]
 
 
-def run(minimum: int = 4, family: str = "support-verb") -> None:
+def run(minimum: int = _MINIMUM_SIGHTINGS, family: str = "support-verb") -> None:
     ui.step("Induce")
     ui.info("plan: load gold corpus, load parser, survey the corpus, write table")
     if family not in TABLES:
         raise SystemExit(f"unknown family '{family}', expected one of {', '.join(FAMILIES)}")
 
-    samples, nlp = _setup(family)
+    setup = _setup(family)
     builder = _adjuncts if family == "adjunct" else _support_verbs
-    print(builder(samples, nlp, minimum))
+    print(builder(setup["samples"], setup["nlp"], minimum))

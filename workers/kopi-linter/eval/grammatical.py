@@ -1,19 +1,6 @@
-"""Does the output still parse as English?
-
-The invariant guard checks citations, numbers and length, and all four of its
-checks passed on an output that had lost its main predicate. Truth preservation
-does not imply grammaticality, so it needs its own check.
-
-The check is differential, never absolute. Source prose legitimately contains
-fragments: block quotations, reference-list entries, headings, elliptical
-interview speech. Asking "is this well formed?" flags all of them. Asking "did
-this edit *introduce* a defect the original did not have?" is the question that
-distinguishes a broken rule from ordinary academic prose, and it is the only one
-answered here.
-
-Detectors are deliberately shallow and syntactic. A parse-based check inherits
-the parser's mistakes, so a defect count is evidence rather than proof, and the
-delta matters more than the absolute value.
+"""Check whether an edit introduced a grammatical defect the original text
+did not have, rather than whether the output is absolutely well formed.
+Detectors are shallow and syntactic.
 """
 from collections import Counter
 

@@ -1,25 +1,11 @@
-"""Align an original paragraph with its edited form, at two levels.
-
-Level 1, sentences. A copy-edit is monotone: an editor tightens, splits, merges
-and drops sentences but almost never reorders them. That makes the classic
-parallel-corpus alignment of Gale and Church (1993) directly applicable, with
-the beads relabelled for editing rather than translation: 1-1 rewrite, 1-n
-split, n-1 merge, 1-0 deletion, 0-1 insertion. A Needleman-Wunsch style DP over
-the monotone grid finds the cheapest bead sequence, so the *shape* of an edit
-(did a sentence go, or was it absorbed?) is recovered, not guessed.
-
-Level 2, spans. Inside a 1-1 or n-m bead, ``difflib.SequenceMatcher`` over
-lowercased tokens yields the minimal edit script. Each non-equal opcode becomes
-a :class:`SpanEdit`: what was there, what replaced it, and where it sat. Those
-spans are the raw material the taxonomy classifies.
-
-Similarity is IDF-weighted content-lemma containment, the same measure
-kopi-editor's redundancy scan uses, so alignment needs a parser but no
-embedding model and stays deterministic.
+"""Align an original paragraph with its edit at sentence level, a
+Gale-Church-style monotone bead alignment (rewrite, split, merge, deletion),
+then at span level within each bead via a token diff.
 """
 import difflib
 import math
 from dataclasses import dataclass, field
+from itertools import product
 
 _CONTENT_POS = frozenset(["NOUN", "PROPN", "VERB", "ADJ", "ADV", "NUM"])
 
@@ -27,15 +13,19 @@ _DELETE_COST = 1.0
 _INSERT_COST = 1.4
 _SPLIT_PENALTY = 0.15
 _MERGE_PENALTY = 0.15
-_MAX_FANOUT = 3
-# Bead shapes the aligner will consider: 1-1 rewrites, 1-n splits, n-1 merges.
-# n-m beads are excluded because a copy-edit that fuses and divides in one step is
-# not recoverable as a single transformation anyway.
-_FANOUTS = tuple(
-    (di, dj)
-    for di in range(1, _MAX_FANOUT + 1)
-    for dj in range(1, _MAX_FANOUT + 1)
-    if di == 1 or dj == 1
+_CONTEXT_TOKENS = 4
+_ABSORPTION_FLOOR = 0.25
+
+# Bead shapes the aligner will consider: 1-1 rewrites, 1-n splits, n-1 merges,
+# up to three sentences a side. n-m beads are excluded because a copy-edit that
+# fuses and divides in one step is not recoverable as a single transformation
+# anyway.
+_FANOUTS = (
+    (1, 1),
+    (1, 2),
+    (1, 3),
+    (2, 1),
+    (3, 1),
 )
 
 
@@ -77,15 +67,6 @@ def _content(span) -> set:
     return {t.lemma_.lower() for t in span if t.pos_ in _CONTENT_POS and not t.is_stop}
 
 
-def _build_idf(lemma_sets: list[set]) -> dict:
-    n = len(lemma_sets) or 1
-    df: dict = {}
-    for lemmas in lemma_sets:
-        for lemma in lemmas:
-            df[lemma] = df.get(lemma, 0) + 1
-    return {lemma: math.log((n + 1) / (count + 1)) + 1.0 for lemma, count in df.items()}
-
-
 def _mass(lemmas, idf: dict) -> float:
     """Total IDF weight of a lemma set, summed in sorted order.
 
@@ -106,19 +87,24 @@ def _similarity(a: set, b: set, idf: dict) -> float:
     return _mass(shared, idf) / denom if denom > 0 else 0.0
 
 
-def _bead_op(di: int, dj: int) -> str:
-    if di == 1 and dj == 1:
-        return "rewrite"
-    return "split" if dj > 1 else "merge"
+def _bead_cost(sides: dict, i: int, j: int, di: int, dj: int) -> float:
+    """Cost of joining ``di`` source sentences from ``i`` to ``dj`` target ones from ``j``."""
+    similarity = _similarity(
+        set().union(*sides["source"][i:i + di]),
+        set().union(*sides["target"][j:j + dj]),
+        sides["idf"],
+    )
+    return (1.0 - similarity) + _SPLIT_PENALTY * (dj - 1) + _MERGE_PENALTY * (di - 1)
 
 
-def _moves(cell: tuple, shape: tuple, cost_of) -> list:
+def _moves(cell: tuple, shape: tuple, sides: dict) -> list:
     """Every bead that may start at grid point ``cell``, as (di, dj, cost, op).
 
     Args:
         cell: ``(i, j, base_cost)``, the grid point and the cost of reaching it.
         shape: ``(n, m)``, the two sentence-list lengths.
-        cost_of: ``(i, j, di, dj) -> float`` bead cost.
+        sides: content lemmas per sentence under ``source`` and ``target``, and
+            the ``idf`` weights the similarity is measured with.
     """
     i, j, base = cell
     n, m = shape
@@ -127,33 +113,32 @@ def _moves(cell: tuple, shape: tuple, cost_of) -> list:
         out.append((1, 0, base + _DELETE_COST, "delete"))
     if j < m:
         out.append((0, 1, base + _INSERT_COST, "insert"))
-    out.extend(
-        (di, dj, base + cost_of(i, j, di, dj), _bead_op(di, dj))
-        for di, dj in _FANOUTS
-        if i + di <= n and j + dj <= m
-    )
+    for di, dj in _FANOUTS:
+        if i + di > n or j + dj > m:
+            continue
+        if di == 1 and dj == 1:
+            op = "rewrite"
+        elif dj > 1:
+            op = "split"
+        else:
+            op = "merge"
+        out.append((di, dj, base + _bead_cost(sides, i, j, di, dj), op))
     return out
 
 
-def _relax(best, back, cell, move) -> None:
-    i, j = cell
-    di, dj, cost, op = move
-    if cost < best[i + di][j + dj]:
-        best[i + di][j + dj] = cost
-        back[i + di][j + dj] = (i, j, op, di, dj)
-
-
-def _fill(n: int, m: int, cost_of) -> list:
+def _fill(n: int, m: int, sides: dict) -> list:
     """Backpointer grid for the cheapest monotone alignment."""
     best = [[math.inf] * (m + 1) for _ in range(n + 1)]
     back = [[None] * (m + 1) for _ in range(n + 1)]
     best[0][0] = 0.0
-    for i in range(n + 1):
-        for j in range(m + 1):
-            if best[i][j] == math.inf:
-                continue
-            for move in _moves((i, j, best[i][j]), (n, m), cost_of):
-                _relax(best, back, (i, j), move)
+    for i, j in product(range(n + 1), range(m + 1)):
+        if best[i][j] == math.inf:
+            continue
+        for move in _moves((i, j, best[i][j]), (n, m), sides):
+            di, dj, cost, op = move
+            if cost < best[i + di][j + dj]:
+                best[i + di][j + dj] = cost
+                back[i + di][j + dj] = (i, j, op, di, dj)
     return back
 
 
@@ -164,17 +149,13 @@ def _align_sentences(src_sents, tgt_sents, idf) -> list[Bead]:
     many-to-one and one-to-many beads so a genuine split is preferred over two
     unrelated matches but a spurious one is not invented.
     """
-    src_content = [_content(s) for s in src_sents]
-    tgt_content = [_content(t) for t in tgt_sents]
+    sides = {
+        "source": [_content(sentence) for sentence in src_sents],
+        "target": [_content(sentence) for sentence in tgt_sents],
+        "idf": idf,
+    }
     n, m = len(src_sents), len(tgt_sents)
-
-    def cost_of(i, j, di, dj):
-        similarity = _similarity(
-            set().union(*src_content[i:i + di]), set().union(*tgt_content[j:j + dj]), idf
-        )
-        return (1.0 - similarity) + _SPLIT_PENALTY * (dj - 1) + _MERGE_PENALTY * (di - 1)
-
-    back = _fill(n, m, cost_of)
+    back = _fill(n, m, sides)
     beads = []
     i, j = n, m
     while (i, j) != (0, 0) and back[i][j] is not None:
@@ -188,18 +169,22 @@ def _align_sentences(src_sents, tgt_sents, idf) -> list[Bead]:
         beads.append(Bead(op=op, source=src, target=tgt, similarity=similarity))
         i, j = pi, pj
     beads.reverse()
-    return [_mark_untouched(bead) for bead in beads]
+    for bead in beads:
+        if bead.op == "rewrite" and bead.similarity >= 0.999:
+            source = bead.source_text.strip()
+            if source and source == bead.target_text.strip():
+                bead.op = "keep"
+    return beads
 
 
-def _mark_untouched(bead: Bead) -> Bead:
-    if bead.op == "rewrite" and bead.similarity >= 0.999:
-        source = bead.source_text.strip()
-        if source and source == bead.target_text.strip():
-            bead.op = "keep"
-    return bead
-
-
-_CONTEXT_TOKENS = 4
+def _tokens_of(sentences) -> list:
+    """Every token across a run of sentences, in order, without the whitespace."""
+    tokens = []
+    for sentence in sentences:
+        for token in sentence:
+            if not token.is_space:
+                tokens.append(token)
+    return tokens
 
 
 def _span_edits(source_tokens, target_tokens) -> list[SpanEdit]:
@@ -222,9 +207,6 @@ def _span_edits(source_tokens, target_tokens) -> list[SpanEdit]:
             right_context=" ".join(src_words[i2:i2 + _CONTEXT_TOKENS]),
         ))
     return edits
-
-
-_ABSORPTION_FLOOR = 0.25
 
 
 def _split_out_deletions(beads: list[Bead]) -> list[Bead]:
@@ -279,12 +261,16 @@ def align(original: str, edited: str, nlp) -> list[Bead]:
     tgt_sents = [s for s in tgt_doc.sents if s.text.strip()]
     if not src_sents or not tgt_sents:
         return []
-    idf = _build_idf([_content(s) for s in src_sents] + [_content(t) for t in tgt_sents])
+    lemma_sets = [_content(s) for s in src_sents] + [_content(t) for t in tgt_sents]
+    n = len(lemma_sets) or 1
+    df: dict = {}
+    for lemmas in lemma_sets:
+        for lemma in lemmas:
+            df[lemma] = df.get(lemma, 0) + 1
+    idf = {lemma: math.log((n + 1) / (count + 1)) + 1.0 for lemma, count in df.items()}
     beads = _split_out_deletions(_align_sentences(src_sents, tgt_sents, idf))
     for bead in beads:
         if bead.op in ("keep", "delete", "insert"):
             continue
-        src_tokens = [t for s in bead.source for t in s if not t.is_space]
-        tgt_tokens = [t for s in bead.target for t in s if not t.is_space]
-        bead.spans = _span_edits(src_tokens, tgt_tokens)
+        bead.spans = _span_edits(_tokens_of(bead.source), _tokens_of(bead.target))
     return beads

@@ -1,14 +1,6 @@
-"""Invariants the linter may never break.
-
-A deterministic rewriter cannot invent text, so the usual question ("did the
-model drift?") does not arise and no similarity threshold is needed. What can
-still go wrong is narrower and checkable: an edit reaching inside a quotation,
-a citation or figure caught in a deleted span, or a paragraph cut past what the
-band licenses.
-
-Quotations are protected before selection, by refusing any proposal that
-overlaps quoted text. The rest are checked after application, so a rule that
-damages one of them loses its edit rather than the run.
+"""Check invariants a deterministic edit may never break: quotations
+(blocked before selection), citations, numbers, and the band's cut ceiling.
+A rule that fails one loses its edit, not the run.
 """
 import re
 

@@ -1,14 +1,6 @@
 """Render a family comparison as markdown."""
 
 
-def _verdict(report, baseline: float) -> str:
-    if not report.clean:
-        return f"**disqualified** ({len(report.case_failures)} case failures)"
-    if report.sari["sari"] <= baseline:
-        return "no gain over doing nothing"
-    return "admissible"
-
-
 def _summary_table(reports, baseline: float) -> list:
     lines = [
         "| Method | Cases | SARI | vs nothing | Fired | Ceiling | Changed | Words | Defects |",
@@ -23,14 +15,6 @@ def _summary_table(reports, baseline: float) -> list:
             f"{r.sari['sari'] - baseline:+.4f} | {r.fired} | {r.ceiling:.0%} | "
             f"{r.changed} | {r.words_removed} | {r.defect_paragraphs} |"
         )
-    return lines
-
-
-def _sari_table(reports) -> list:
-    lines = ["| Method | add | keep | delete |", "|---|---:|---:|---:|"]
-    for r in reports:
-        lines.append(f"| {r.name} | {r.sari['add']:.4f} | {r.sari['keep']:.4f} | "
-                     f"{r.sari['delete']:.4f} |")
     return lines
 
 
@@ -55,7 +39,11 @@ def _failures_section(reports) -> list:
 
 def _defects_section(reports) -> list:
     lines = ["## Grammatical defects introduced", ""]
-    seen = sorted({kind for r in reports for kind in r.defects})
+    defect_kinds = set()
+    for report in reports:
+        for kind in report.defects:
+            defect_kinds.add(kind)
+    seen = sorted(defect_kinds)
     if not seen:
         lines += ["None, by any method.", ""]
         return lines
@@ -84,10 +72,19 @@ def render(family: str, reports: list, baseline: float, samples: int,
     ]
     lines += _summary_table(reports, baseline)
     lines += ["", "## SARI components", ""]
-    lines += _sari_table(reports)
+    lines += ["| Method | add | keep | delete |", "|---|---:|---:|---:|"]
+    for r in reports:
+        lines.append(f"| {r.name} | {r.sari['add']:.4f} | {r.sari['keep']:.4f} | "
+                     f"{r.sari['delete']:.4f} |")
     lines += ["", "## Verdict", ""]
     for r in reports:
-        lines.append(f"- `{r.name}`: {_verdict(r, baseline)}. {r.note}")
+        if not r.clean:
+            verdict = f"**disqualified** ({len(r.case_failures)} case failures)"
+        elif r.sari["sari"] <= baseline:
+            verdict = "no gain over doing nothing"
+        else:
+            verdict = "admissible"
+        lines.append(f"- `{r.name}`: {verdict}. {r.note}")
     lines.append("")
     lines += _failures_section(reports)
     lines += _defects_section(reports)

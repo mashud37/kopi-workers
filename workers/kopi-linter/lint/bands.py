@@ -1,21 +1,6 @@
-"""Editing intensity, as a re-ranking of one rule set.
-
-The evidence (``docs/typology.md`` section 1.3) shows the four bands draw on the
-same transformation families in different proportions: nothing appears only in
-the aggressive band and nothing vanishes in clarity. So intensity is modelled
-here the way the data describes it, as per-family confidence thresholds over a
-single rule set, rather than as four separate rule sets.
-
-A band raises the bar rather than closing a door. In the clarity band a
-structural family needs near-certainty to fire; in the aggressive band the same
-family fires on ordinary evidence. Sentence dropping is the one exception, gated
-off entirely below firm, because a wrongly dropped sentence is the only
-unrecoverable error the linter can make.
-
-The thresholds are provisional. They are set from the measured band gradient,
-not from measured per-rule precision, which does not exist yet: once
-``eval/`` reports precision per rule the numbers here should be refitted rather
-than argued about.
+"""Model editing intensity as per-family confidence thresholds over one
+shared rule set, not four separate sets. Sentence dropping is gated off
+below the `firm` band.
 """
 from dataclasses import dataclass
 
@@ -27,28 +12,60 @@ _CEILING = {"clarity": 0.06, "light": 0.18, "firm": 0.35, "aggressive": 0.55}
 
 _THRESHOLDS = {
     "clarity": {
-        "relative-clause": 0.80, "support-verb": 0.90, "adjunct": 0.95,
-        "stance": 0.90, "lexical": 0.85, "connective": 0.85, "voice": 0.85,
-        "intensifier": 0.85, "nominalisation": 0.90, "modifier": 0.95,
-        "clause": _UNREACHABLE, "sentence": _UNREACHABLE,
+        "relative-clause": 0.80,
+        "support-verb": 0.90,
+        "adjunct": 0.95,
+        "stance": 0.90,
+        "lexical": 0.85,
+        "connective": 0.85,
+        "voice": 0.85,
+        "intensifier": 0.85,
+        "nominalisation": 0.90,
+        "modifier": 0.95,
+        "clause": _UNREACHABLE,
+        "sentence": _UNREACHABLE,
     },
     "light": {
-        "relative-clause": 0.75, "support-verb": 0.85, "adjunct": 0.90,
-        "stance": 0.85, "lexical": 0.75, "connective": 0.80, "voice": 0.80,
-        "intensifier": 0.75, "nominalisation": 0.85, "modifier": 0.90,
-        "clause": _UNREACHABLE, "sentence": _UNREACHABLE,
+        "relative-clause": 0.75,
+        "support-verb": 0.85,
+        "adjunct": 0.90,
+        "stance": 0.85,
+        "lexical": 0.75,
+        "connective": 0.80,
+        "voice": 0.80,
+        "intensifier": 0.75,
+        "nominalisation": 0.85,
+        "modifier": 0.90,
+        "clause": _UNREACHABLE,
+        "sentence": _UNREACHABLE,
     },
     "firm": {
-        "relative-clause": 0.65, "support-verb": 0.70, "adjunct": 0.75,
-        "stance": 0.75, "lexical": 0.70, "connective": 0.75, "voice": 0.70,
-        "intensifier": 0.65, "nominalisation": 0.75, "modifier": 0.80,
-        "clause": 0.85, "sentence": 0.90,
+        "relative-clause": 0.65,
+        "support-verb": 0.70,
+        "adjunct": 0.75,
+        "stance": 0.75,
+        "lexical": 0.70,
+        "connective": 0.75,
+        "voice": 0.70,
+        "intensifier": 0.65,
+        "nominalisation": 0.75,
+        "modifier": 0.80,
+        "clause": 0.85,
+        "sentence": 0.90,
     },
     "aggressive": {
-        "relative-clause": 0.55, "support-verb": 0.60, "adjunct": 0.60,
-        "stance": 0.65, "lexical": 0.60, "connective": 0.70, "voice": 0.65,
-        "intensifier": 0.55, "nominalisation": 0.65, "modifier": 0.65,
-        "clause": 0.70, "sentence": 0.80,
+        "relative-clause": 0.55,
+        "support-verb": 0.60,
+        "adjunct": 0.60,
+        "stance": 0.65,
+        "lexical": 0.60,
+        "connective": 0.70,
+        "voice": 0.65,
+        "intensifier": 0.55,
+        "nominalisation": 0.65,
+        "modifier": 0.65,
+        "clause": 0.70,
+        "sentence": 0.80,
     },
 }
 

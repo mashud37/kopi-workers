@@ -1,21 +1,6 @@
-"""Light-verb constructions collapsed into the verb they are hiding.
-
-"make use of the data" becomes "use the data"; "conduct an analysis of X"
-becomes "analyse X". The construction spreads one action across a semantically
-empty verb and a nominalisation, and academic prose is full of it: 1,206
-instances in the gold corpus, 2,600 words, and the share rises with every
-intensity band.
-
-The hard part is not detection, it is restraint. "take care to name nobody"
-matches the same surface shape and must not become "care to name nobody". The
-discriminator used here is structural rather than a list of blessed idioms: a
-genuine support-verb construction hands its real object onward through a
-preposition ("make use **of** X", "give consideration **to** X"), so the rule
-fires only when the nominalisation governs a prepositional object that can be
-promoted. "take care to ..." has no such object and is left alone.
-
-The derived verb comes from WordNet, which answers in American spelling, so
-every lemma goes out through :mod:`grammar.orthography`.
+"""Propose collapsing a light-verb construction (`make use of the data` to
+`use the data`) when the nominalisation governs a promotable object. The
+verb comes from WordNet via `grammar.orthography`.
 """
 from grammar.orthography import to_american, to_british
 from lint.edit import Edit
@@ -23,8 +8,22 @@ from lint.edit import Edit
 # Verbs that contribute almost no meaning of their own in this construction.
 # Genuinely a closed class, unlike the open-ended noun side.
 _LIGHT_VERBS = frozenset([
-    "make", "take", "give", "have", "do", "conduct", "perform", "provide",
-    "offer", "undertake", "carry", "engage", "reach", "hold", "place", "put",
+    "make",
+    "take",
+    "give",
+    "have",
+    "do",
+    "conduct",
+    "perform",
+    "provide",
+    "offer",
+    "undertake",
+    "carry",
+    "engage",
+    "reach",
+    "hold",
+    "place",
+    "put",
 ])
 
 _PROMOTING_PREPS = frozenset(["of", "to", "on", "for", "with", "into"])
@@ -56,7 +55,7 @@ def _derived_verb(noun_lemma: str) -> str | None:
     return to_british(sorted(candidates, key=lambda w: (abs(len(w) - len(american)), w))[0])
 
 
-def _inflect(lemma: str, tag: str) -> str:
+def _inflect(lemma: str, tag: str) -> str:  # lint-style: ignore FN004
     """Put the derived verb into the light verb's tense and person."""
     from lemminflect import getInflection
 
@@ -84,7 +83,7 @@ def _object_preposition(verb, noun):
     return None
 
 
-def _nominalisation_object(verb):
+def _nominalisation_object(verb):  # lint-style: ignore FN004
     for child in verb.children:
         if child.dep_ == "dobj" and child.pos_ == "NOUN":
             return child
@@ -129,8 +128,9 @@ def _proposal(verb, noun, preposition, text: str) -> Edit | None:
 
 
 def propose(doc):
-    """Yield a collapse for every licensed light-verb construction in ``doc``."""
+    """A collapse for every licensed light-verb construction in ``doc``."""
     text = doc.text
+    edits = []
     for verb in doc:
         if verb.pos_ not in ("VERB", "AUX") or verb.lemma_.lower() not in _LIGHT_VERBS:
             continue
@@ -139,4 +139,5 @@ def propose(doc):
             continue
         edit = _proposal(verb, noun, _object_preposition(verb, noun), text)
         if edit is not None:
-            yield edit
+            edits.append(edit)
+    return edits

@@ -1,20 +1,6 @@
-"""Measure the linter against Opus on the paragraphs Opus actually edited.
-
-Three numbers decide whether a rule earns its place, and all three are needed
-together:
-
-* **SARI** against Opus's edit, versus the do-nothing baseline. A linter that
-  cannot beat leaving the text alone has negative value, and because SARI
-  rewards correct keeping, doing nothing scores well above zero. That is the bar.
-* **Agreement**, per rule. For each edit the linter applied, did Opus make a
-  compatible change to the same words? This is the per-rule precision that says
-  which rules to promote into the cautious bands and which to hold back.
-* **Guard rejections**, per reason.
-
-Agreement is judged on content lemmas rather than strings, since Opus reaches
-the same transformation by many surface routes: an edit that removes words whose
-lemmas are also absent from Opus's version counts as attested, whatever wording
-Opus used around them.
+"""Score the linter against Opus on paragraphs Opus edited: SARI against the
+do-nothing baseline, per-rule agreement on content lemmas, and guard
+rejections by reason.
 """
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -24,6 +10,10 @@ from lint import bands
 from lint.run import lint_paragraph
 
 _STOP_TAGS = frozenset(["DET", "ADP", "PUNCT", "SPACE", "PART", "AUX", "PRON", "CCONJ", "SCONJ"])
+
+
+def _counters_by_key():
+    return defaultdict(Counter)
 
 
 @dataclass
@@ -39,7 +29,7 @@ class Scores:
     rule_attested: Counter = field(default_factory=Counter)
     rejections: Counter = field(default_factory=Counter)
     failures: Counter = field(default_factory=Counter)
-    by_band: dict = field(default_factory=lambda: defaultdict(Counter))
+    by_band: dict = field(default_factory=_counters_by_key)
     examples: list = field(default_factory=list)
 
 
@@ -133,8 +123,12 @@ def _score_one(sample, nlp, scores: Scores) -> None:
         if _attested(edit, sample.original, sample.edit, nlp):
             scores.rule_attested[edit.rule] += 1
         elif len(scores.examples) < 25:
-            scores.examples.append((edit.rule, edit.source(sample.original),
-                                    edit.replacement, sample.edit[:160]))
+            scores.examples.append((
+                edit.rule,
+                edit.source(sample.original),
+                edit.replacement,
+                sample.edit[:160],
+            ))
 
 
 def evaluate(samples, nlp, foils=None, on_progress=None) -> Scores:

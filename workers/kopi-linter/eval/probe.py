@@ -1,28 +1,6 @@
-"""Ask whether Opus performs a transformation, before anyone builds it.
-
-C13: linguistic validity does not predict attestation. Reducing "which revolve
-around time" to "revolving around time" is textbook whiz-deletion, is described
-in every grammar of English, and Opus rejects it 33 to 1. Building it would have
-added 647 instances of reach at roughly 1% accuracy, which by the closure
-identity is very nearly pure damage, and in any coverage-based measure it would
-have looked like the biggest advance the project had made.
-
-So the probe runs first. Point any candidate generator at the gold originals,
-apply what it proposes, and ask what the gold actually did there:
-
-* **attested**  the edited wording appears in the gold
-* **declined**  the original wording appears in the gold, untouched
-* **rewritten or dropped**  neither, so this candidate cannot settle anything
-
-The ratio to read is attested against declined. "Rewritten or dropped" is the
-majority class everywhere, because Opus is usually doing something larger to the
-sentence, and counting it either way would answer a different question.
-
-**Anchor on the left.** The first version of this test did not, and it is wrong
-without it: the reduced form is usually a *suffix* of the original, so a gold
-that kept "that is socially organised" contains "socially organised" and scores
-as attested for a reduction it never made. Prefixing a few words of untouched
-context makes the two readings mutually exclusive, which is the whole point.
+"""Run any candidate generator against the gold originals, classifying each
+proposal as attested, declined, or rewritten/dropped by what Opus did there.
+Anchors on the untouched left context.
 """
 from collections import Counter
 from dataclasses import dataclass, field
@@ -36,7 +14,7 @@ _MINIMUM = 4
 class Probe:
     """What the gold editor did with the candidates a generator proposed."""
     verdicts: Counter = field(default_factory=Counter)
-    examples: dict = field(default_factory=lambda: {})
+    examples: dict = field(default_factory=dict)
 
     @property
     def decidable(self) -> int:

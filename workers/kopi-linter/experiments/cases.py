@@ -1,13 +1,6 @@
-"""The negative and positive cases every method must face.
-
-These are ``docs/good.md`` section 3 as data. Each one is a real failure observed
-in this repo or a near neighbour of one, and the point of holding them here
-rather than in a test file is that they run against *every* candidate method for
-a family, not just the one that happens to be registered.
-
-A case that no method has ever failed is worth keeping. A criterion is only
-useful if some input violates it, so cases stay after the defect they describe is
-fixed, to prove the fix is still in force.
+"""Hold positive and negative test cases (`docs/good.md` section 3) that
+every candidate method for a family runs against, not just the registered
+one. Cases stay after their defect is fixed.
 """
 from dataclasses import dataclass
 

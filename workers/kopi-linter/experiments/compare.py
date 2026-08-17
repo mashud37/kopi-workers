@@ -1,19 +1,6 @@
-"""Run every method for a family against the same cases and the same corpus.
-
-The unit of evaluation is the family, not the method. Running one method and
-reporting its numbers says nothing about whether a different approach would have
-done better, which is the only question that matters while the design is open.
-
-Each method is scored on four things, and they are reported together because
-each one alone is misleading:
-
-* **cases**, from ``experiments/cases.py``: the licence conditions it must
-  respect. A method that fails a case is disqualified whatever its corpus score,
-  because the case describes text it damages.
-* **corpus SARI** against the gold, and against the do-nothing baseline.
-* **attestation ceiling**: of the edits it made, how many did the gold also make.
-  A ceiling, never precision, for the reason set out in ``eval.harness``.
-* **grammaticality**: defects it introduced that the original did not have.
+"""Run every registered method for a transformation family against the same
+cases and corpus, scoring each on case pass/fail, corpus SARI, attestation
+ceiling against Opus, and introduced grammatical defects.
 """
 from collections import Counter
 from dataclasses import dataclass, field
@@ -61,7 +48,7 @@ def _touched(case, spans: list) -> bool:
     return any(wanted in " ".join(s.split()).lower() for s in spans)
 
 
-def _fired(method, case, nlp) -> tuple[bool, str]:
+def _fired(method, case, nlp) -> dict:
     """Whether the method acts on this case, and what it did.
 
     Threshold families are judged on what they *propose*, because for them a
@@ -71,16 +58,17 @@ def _fired(method, case, nlp) -> tuple[bool, str]:
     cut goes. Judging a ranked family on its proposals asks it to be a threshold
     family and fails it for not being one.
     """
-    proposals = list(method.propose(nlp(case.text)))
+    proposals = method.propose(nlp(case.text))
     if not any(e.ranked for e in proposals):
         acted = [e.source(case.text) for e in proposals]
-        return _touched(case, acted), (proposals[0].note if proposals else "proposed nothing")
+        note = proposals[0].note if proposals else "proposed nothing"
+        return {"fired": _touched(case, acted), "what": note}
     result = lint_paragraph(case.text, nlp, bands.band(_CASE_BAND),
                             rules=((method.name, method.propose),))
     acted = [e.source(case.text) for e in result.applied]
     what = f"applied {result.applied[0].note}" if result.applied else (
         result.reason or "applied nothing")
-    return _touched(case, acted), what
+    return {"fired": _touched(case, acted), "what": what}
 
 
 def _swallowed(method, case, nlp) -> str:
@@ -99,37 +87,26 @@ def _swallowed(method, case, nlp) -> str:
     return ""
 
 
-def run_cases(method, nlp) -> tuple[int, list]:
+def run_cases(method, nlp) -> dict:
     """Check one method against every case registered for its family."""
     failures = []
     relevant = case_bank.for_family(method.family)
     for case in relevant:
-        fired, what = _fired(method, case, nlp)
-        if (case.expect == "refuse") == fired:
-            failures.append((case, what))
+        outcome = _fired(method, case, nlp)
+        if (case.expect == "refuse") == outcome["fired"]:
+            failures.append((case, outcome["what"]))
             continue
         swallowed = _swallowed(method, case, nlp)
         if swallowed:
             failures.append((case, swallowed))
-    return len(relevant), failures
-
-
-def _tally(report: MethodReport, sample, result, nlp) -> None:
-    report.changed += int(result.changed)
-    report.words_removed += max(0, result.words_saved)
-    for edit in result.applied:
-        report.fired += 1
-        report.attested += int(_attested(edit, sample.original, sample.edit, nlp))
-    net = introduced(sample.original, result.edited, nlp)
-    if net:
-        report.defect_paragraphs += 1
-        report.defects.update(net)
+    return {"run": len(relevant), "failures": failures}
 
 
 def run_corpus(method, samples, nlp, on_progress=None) -> MethodReport:
     """Score one method over the gold corpus, in isolation from every other."""
     report = MethodReport(name=method.name, note=method.note, baseline=method.baseline)
-    report.cases_run, report.case_failures = run_cases(method, nlp)
+    cases = run_cases(method, nlp)
+    report.cases_run, report.case_failures = cases["run"], cases["failures"]
     rules = ((method.name, method.propose),)
     triples = []
     for i, sample in enumerate(samples, 1):
@@ -137,7 +114,15 @@ def run_corpus(method, samples, nlp, on_progress=None) -> MethodReport:
             on_progress(i, len(samples), method.name)
         band = bands.band(sample.band) if sample.band in bands.BANDS else bands.band("firm")
         result = lint_paragraph(sample.original, nlp, band, rules=rules)
-        _tally(report, sample, result, nlp)
+        report.changed += int(result.changed)
+        report.words_removed += max(0, result.words_saved)
+        for edit in result.applied:
+            report.fired += 1
+            report.attested += int(_attested(edit, sample.original, sample.edit, nlp))
+        net = introduced(sample.original, result.edited, nlp)
+        if net:
+            report.defect_paragraphs += 1
+            report.defects.update(net)
         triples.append((sample.original, result.edited, sample.edit))
     report.sari = corpus_sari(triples)
     return report

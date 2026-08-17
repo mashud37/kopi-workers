@@ -1,51 +1,6 @@
-"""Closure: one number for how far the linter has come toward Opus.
-
-Every other number in this repo answers a local question, and the project has
-been losing the plot between them. This one answers the whole question, in per
-cent, and it is the number to quote:
-
-    **How much of the distance from the original text to Opus's edit have we
-    closed?**
-
-Take the word-level edit distance ``d`` (Levenshtein over whitespace tokens,
-unit cost for insert, delete and substitute, which is the word error rate of
-speech recognition put to a different use). ``d(original, gold)`` is all the
-work Opus did. ``d(output, gold)`` is the work still outstanding after the
-linter has run. So
-
-    closure = 1 - d(output, gold) / d(original, gold)
-
-Pooled across the corpus, never averaged per paragraph, for the same reason
-corpus SARI is pooled: paragraphs Opus left alone have a zero denominator and
-any convention chosen for them decides the verdict.
-
-Why this and not SARI as the headline:
-
-* **Doing nothing scores exactly 0.** Not 0.2439. SARI pays for correct
-  *keeping*, so a linter that touches 7% of paragraphs reads as though it were
-  halfway to Opus while it has moved 1% of the words. Closure cannot be earned
-  by restraint, because restraint changes no distance.
-* **Damage scores below 0.** An edit Opus did not make moves the text away from
-  the gold, so the distance grows and closure goes negative. The band-as-budget
-  wrecking ball of C11 still scored 0.41 on SARI, which looks respectable; on
-  closure a system that cuts wrongly is visibly worse than one that sleeps.
-* **100% means reproducing the gold**, so the number has a real ceiling rather
-  than an asymptote nobody can place.
-
-The decomposition falls out of the algebra rather than being invented. Writing
-``work = d(original, output)`` for the work attempted and ``gain = d(original,
-gold) - d(output, gold)`` for the distance actually closed:
-
-    reach    = work / d(original, gold)      how much of Opus's work we attempted
-    accuracy = (1 + gain / work) / 2         how much of what we attempted landed
-    closure  = reach * (2 * accuracy - 1)
-
-Both are bounded by the triangle inequality, so accuracy sits in [0, 1] with no
-clamping. The identity is worth reading twice, because it sets the strategy:
-**at 50% accuracy closure is zero no matter how much is attempted**, and above
-that every point of reach is worth ``2a - 1`` of it. Partial credit works out
-correctly on its own: deleting three words where the gold deleted two of them
-gives work 3, gain 1, and so two correct and one wrong.
+"""Compute closure: the percent of the word-level edit distance from
+original to Opus's gold that the output has closed, pooled across the
+corpus. Decomposes into reach times accuracy.
 """
 from dataclasses import dataclass
 

@@ -3,31 +3,20 @@ from . import ui
 from .progress import BatchProgress, StepSpinner
 
 
-def _load(limit: int | None):
+def _load(limit: int | None) -> dict:
+    """The gold Opus edits to score, and the served-Qwen edits to score them against."""
     from evidence.load import load_samples
 
     sp = StepSpinner("loading gold corpus")
     sp.start()
     try:
         gold = load_samples(roles={"opus"})
-        foils = {(s.key, s.band): s for s in load_samples(roles={"qwen"})}
+        foils = {(sample.key, sample.band): sample for sample in load_samples(roles={"qwen"})}
     finally:
         sp.done()
     if not gold:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
-    return (gold[:limit] if limit else gold), foils
-
-
-def _parser():
-    sp = StepSpinner("loading spaCy parser")
-    sp.start()
-    try:
-        import spacy
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
-    finally:
-        sp.done()
+    return {"samples": gold[:limit] if limit else gold, "foils": foils}
 
 
 def _report_closure(scores) -> None:
@@ -72,12 +61,6 @@ def _report_headline(scores, harness) -> None:
         ui.info(f"that closes {delta / headroom:.1%} of the gap to the served Qwen")
 
 
-def _report_activity(scores) -> None:
-    print(f"  paragraphs       {scores.samples}, changed {scores.changed} "
-          f"({100.0 * scores.changed / scores.samples if scores.samples else 0:.1f}%)")
-    print(f"  words removed    linter {scores.words_saved}, Opus {scores.words_saved_gold}")
-
-
 def _report_rules(scores) -> None:
     if scores.failures:
         for label, count in scores.failures.most_common():
@@ -101,18 +84,30 @@ def run(limit: int | None = None, show: bool = False) -> None:
     ui.step("Evaluate")
     ui.info("plan: load gold corpus, load parser, lint each paragraph, score against Opus")
 
-    samples, foils = _load(limit)
-    ui.ok(f"{len(samples)} gold paragraphs over {len({s.doc for s in samples})} documents")
-    nlp = _parser()
+    loaded = _load(limit)
+    samples, foils = loaded["samples"], loaded["foils"]
+    documents = {sample.doc for sample in samples}
+    ui.ok(f"{len(samples)} gold paragraphs over {len(documents)} documents")
+    sp = StepSpinner("loading spaCy parser")
+    sp.start()
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
+    finally:
+        sp.done()
 
     from eval import harness
     bar = BatchProgress(len(samples), "linting + scoring")
-    scores = harness.evaluate(samples, nlp, foils, on_progress=lambda i, n, s: bar.advance())
+    scores = harness.evaluate(samples, nlp, foils, on_progress=bar.on_item)
     bar.finish()
 
     _report_closure(scores)
     _report_headline(scores, harness)
-    _report_activity(scores)
+    print(f"  paragraphs       {scores.samples}, changed {scores.changed} "
+          f"({100.0 * scores.changed / scores.samples if scores.samples else 0:.1f}%)")
+    print(f"  words removed    linter {scores.words_saved}, Opus {scores.words_saved_gold}")
     _report_rules(scores)
 
     if show and scores.examples:

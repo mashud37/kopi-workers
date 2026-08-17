@@ -1,8 +1,6 @@
-"""Spinner and batch progress bar, carried over from kopi-editor's `kopi/progress.py`.
-
-``StepSpinner`` fronts a blocking step so the terminal is never dead; the bar
-reports a countable batch. Both are no-ops off a TTY and ASCII-safe on legacy
-Windows consoles.
+"""`StepSpinner` fronts a blocking step so the terminal is never dead;
+`BatchProgress` reports a countable batch. Both are no-ops off a TTY and
+ASCII-safe on older Windows consoles.
 """
 import sys
 import threading
@@ -73,6 +71,15 @@ class BatchProgress:
             self._done += step
             if self._tty:
                 self._render()
+
+    def on_item(self, index: int, total: int, item) -> None:
+        """Take the `on_progress(index, total, item)` call the analysis layers make.
+
+        The bar counts its own way through the batch, so the three arguments are
+        read and dropped; the method exists to be passed by name where a caller
+        would otherwise write a lambda that throws them away.
+        """
+        self.advance()
 
     def _render(self) -> None:
         span = self._total or 1

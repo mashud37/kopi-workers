@@ -1,9 +1,5 @@
-"""Terminal UI helpers — colored output, symbols, and prompts.
-
-Mirrors the house style of the GCloud Jobs Manager CLI: a bold header rule,
-`step` markers for phases, and ✓ / ⚠ / · / ✗ status lines, plus ask / ask_choice
-/ confirm prompts. Colour and unicode degrade gracefully when stdout is not a TTY
-or NO_COLOR is set.
+"""Terminal UI helpers: header rule, step markers, status lines, and prompts.
+Colour and unicode degrade when stdout is not a TTY or NO_COLOR is set.
 """
 import os
 import sys

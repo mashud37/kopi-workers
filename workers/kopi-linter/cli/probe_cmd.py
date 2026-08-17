@@ -7,25 +7,6 @@ from .progress import BatchProgress, StepSpinner
 OUTPUT = Path("output")
 
 
-def _load_parser():
-    sp = StepSpinner("loading spaCy parser")
-    sp.start()
-    try:
-        import spacy
-        return spacy.load("en_core_web_sm")
-    except OSError:
-        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
-    finally:
-        sp.done()
-
-
-def _choose(names: list) -> str:
-    chosen = ui.menu("Which candidate generator?", names)
-    if chosen is None:
-        raise SystemExit("nothing to probe")
-    return chosen
-
-
 def _write(name: str, probe, limit: int | None) -> Path:
     OUTPUT.mkdir(exist_ok=True)
     stem = name.replace("/", "_") + (f"_first{limit}" if limit else "")
@@ -62,7 +43,11 @@ def run(name: str | None = None, limit: int | None = None) -> None:
     ui.info("plan: pick a generator, load corpus, load parser, propose, compare against the gold")
 
     methods = {m.name: m for m in METHODS}
-    name = name or _choose(sorted(methods))
+    if not name:
+        chosen = ui.menu("Which candidate generator?", sorted(methods))
+        if chosen is None:
+            raise SystemExit("nothing to probe")
+        name = chosen
     if name not in methods:
         raise SystemExit(f"unknown generator {name!r}, one of: {', '.join(sorted(methods))}")
 
@@ -77,12 +62,19 @@ def run(name: str | None = None, limit: int | None = None) -> None:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
     ui.ok(f"{len(samples)} gold paragraphs")
 
-    nlp = _load_parser()
+    sp = StepSpinner("loading spaCy parser")
+    sp.start()
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        raise SystemExit("spaCy model missing, run: python -m spacy download en_core_web_sm")
+    finally:
+        sp.done()
     from eval import probe as probe_mod
 
     bar = BatchProgress(len(samples), f"probing {name}")
-    probe = probe_mod.run(samples, methods[name].propose, nlp,
-                          on_progress=lambda i, n, s: bar.advance())
+    probe = probe_mod.run(samples, methods[name].propose, nlp, on_progress=bar.on_item)
     bar.finish()
 
     for call, count in probe.verdicts.most_common():

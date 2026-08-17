@@ -1,9 +1,6 @@
-"""The pipeline: parse, propose, select, apply, realise, guard.
-
-Six stages, in that order, with the property that each is independently
-testable and none of them can be reordered without the result changing meaning.
-Rules only propose; nothing is applied until the whole proposal set has been
-seen, so the output does not depend on which rule ran first.
+"""Run the six-stage pipeline (parse, propose, select, apply, realise,
+guard) over a paragraph or document. Nothing applies until every proposal is
+seen, so the output never depends on rule order.
 """
 from dataclasses import dataclass, field
 
@@ -30,17 +27,6 @@ class LintResult:
         return self.edited.strip() != self.original.strip()
 
 
-def _triage(proposals: list, text: str, band) -> tuple[list, list]:
-    """Split proposals into those still in play and those already ruled out."""
-    protected = guard.quoted_spans(text)
-    rejected = [(e, "inside a quotation") for e in proposals
-                if guard.touches_quote(e, protected)]
-    eligible = [e for e in proposals if not guard.touches_quote(e, protected)]
-    rejected += [(e, f"below the {band.name} threshold for {e.family}")
-                 for e in eligible if not band.admits(e)]
-    return eligible, rejected
-
-
 def lint_paragraph(text: str, nlp, band, rules=None) -> LintResult:
     """Lint one paragraph at the given intensity band.
 
@@ -60,8 +46,14 @@ def lint_paragraph(text: str, nlp, band, rules=None) -> LintResult:
     from grammar.realise import repair
 
     doc = nlp(text)
-    proposals, failures = registry.propose_all(doc, rules)
-    eligible, rejected = _triage(proposals, text, band)
+    offered = registry.propose_all(doc, rules)
+    proposals, failures = offered["edits"], offered["failures"]
+    protected = guard.quoted_spans(text)
+    rejected = [(e, "inside a quotation") for e in proposals
+                if guard.touches_quote(e, protected)]
+    eligible = [e for e in proposals if not guard.touches_quote(e, protected)]
+    rejected += [(e, f"below the {band.name} threshold for {e.family}")
+                 for e in eligible if not band.admits(e)]
     chosen = select.select(eligible, text, band)
     rejected += [(e, "lost to an overlapping edit or the word budget")
                  for e in eligible if band.admits(e) and e not in chosen]

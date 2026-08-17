@@ -1,27 +1,6 @@
-"""SARI, the standard text-simplification metric (Xu et al., 2016).
-
-BLEU and similarity scores are the wrong instrument for this task: both reward
-leaving the text alone, which is exactly the failure mode a linter falls into.
-SARI scores the three operations separately against a reference edit, so keeping
-what should be kept, deleting what should be deleted, and adding what should be
-added each earn credit on their own.
-
-  SARI = mean over n-gram orders of (F1_add, F1_keep, precision_delete)
-
-Deletion is scored by precision only, as in the original: there are usually
-several defensible ways to shorten a sentence, so a system is not penalised for
-failing to delete what the reference deleted, only for deleting what it kept.
-
-**Report the corpus figure, not the mean of per-paragraph figures.** When a
-system leaves a paragraph untouched it attempts no deletions, and the
-per-paragraph score then needs a value for an empty denominator. There is no
-neutral choice: scoring it 0 hands any system that edits a large free margin
-over doing nothing, and scoring it 1 makes doing nothing nearly unbeatable. On
-this corpus the two conventions disagree by enough to flip the verdict on both
-the linter and the served Qwen, so neither can be used to decide anything.
-Pooling the counts across the test set removes the question, because the pooled
-denominators are never empty. :func:`sari` is kept for inspecting one paragraph;
-:func:`corpus_sari` is the number that decides.
+"""Compute SARI (Xu et al., 2016): keep, delete-precision, and add scored
+separately against a reference edit. `corpus_sari` pools counts across
+paragraphs so an empty-denominator convention cannot decide the verdict.
 """
 from collections import Counter
 
@@ -59,10 +38,10 @@ class _Pool:
         self.del_hit += sum((deleted & should_delete).values())
         self.del_tried += sum(deleted.values())
 
-    def score(self) -> tuple[float, float, float]:
+    def score(self) -> dict:
         add = _f1(_safe(self.add_hit, self.add_tried), _safe(self.add_hit, self.add_wanted))
         keep = _f1(_safe(self.keep_hit, self.keep_tried), _safe(self.keep_hit, self.keep_wanted))
-        return add, keep, _safe(self.del_hit, self.del_tried)
+        return {"add": add, "keep": keep, "delete": _safe(self.del_hit, self.del_tried)}
 
 
 def _safe(hit: int, total: int) -> float:
@@ -84,9 +63,9 @@ def corpus_sari(triples) -> dict:
         for n in range(1, _MAX_ORDER + 1):
             pools[n - 1].observe(_ngrams(s_tokens, n), _ngrams(o_tokens, n), _ngrams(r_tokens, n))
     scored = [pool.score() for pool in pools]
-    add = sum(s[0] for s in scored) / len(scored)
-    keep = sum(s[1] for s in scored) / len(scored)
-    delete = sum(s[2] for s in scored) / len(scored)
+    add = sum(pool["add"] for pool in scored) / len(scored)
+    keep = sum(pool["keep"] for pool in scored) / len(scored)
+    delete = sum(pool["delete"] for pool in scored) / len(scored)
     return {"sari": (add + keep + delete) / 3.0, "add": add, "keep": keep, "delete": delete}
 
 
