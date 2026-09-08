@@ -7,13 +7,13 @@ from .progress import BatchProgress, StepSpinner
 OUTPUT = Path("output")
 
 
-def _corpus(limit: int | None):
+def _corpus(limit: int | None, split: str):
     from evidence.load import load_samples
 
     sp = StepSpinner("loading gold corpus")
     sp.start()
     try:
-        samples = load_samples(roles={"opus"})
+        samples = load_samples(roles={"opus"}, split=split)
     finally:
         sp.done()
     samples = samples[:limit] if limit else samples
@@ -37,7 +37,7 @@ def _score_each(methods, samples, nlp) -> list:
     return reports
 
 
-def run(family: str | None = None, limit: int | None = None) -> None:
+def run(family: str | None = None, limit: int | None = None, split: str = "all") -> None:
     from experiments import compare, registry, report
 
     ui.step("Experiment")
@@ -54,8 +54,11 @@ def run(family: str | None = None, limit: int | None = None) -> None:
     if not methods:
         raise SystemExit(f"no methods registered for family: {family}")
 
-    samples = _corpus(limit)
-    ui.ok(f"{len(methods)} methods, {len(samples)} gold paragraphs")
+    samples = _corpus(limit, split)
+    ui.ok(f"{len(methods)} methods, {len(samples)} gold paragraphs, {split} split")
+    if split == "all":
+        ui.warn("methods reading an induced table were fitted on the train documents; "
+                "use --split test for a score none of them has seen")
     sp = StepSpinner("loading spaCy parser")
     sp.start()
     try:
@@ -78,9 +81,10 @@ def run(family: str | None = None, limit: int | None = None) -> None:
     ui.step("Writing comparison")
     baseline = compare.baseline_sari(samples)["sari"]
     OUTPUT.mkdir(exist_ok=True)
-    stem = f"experiment_{family}" + (f"_first{limit}" if limit else "")
+    stem = f"experiment_{family}_{split}" + (f"_first{limit}" if limit else "")
     path = OUTPUT / f"{stem}.md"
-    path.write_text(report.render(family, reports, baseline, len(samples), realisation),
+    corpus = {"samples": len(samples), "split": split}
+    path.write_text(report.render(family, reports, baseline, corpus, realisation),
                     encoding="utf-8")
     ui.ok(f"do-nothing baseline SARI {baseline:.4f}")
     print(path)

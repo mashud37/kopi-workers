@@ -21,7 +21,7 @@ kopi-learner distils Opus into **weights**. kopi-linter distils the same teacher
 That is the whole idea, and it changes what "deterministic" has to mean. Every previous
 attempt in this workspace hand-authored rules and then discovered that hand-authored rules
 capture almost nothing (0.3% of the corpus, see [typology.md](typology.md)). The corpus of
-1,523 Opus edits is not just an evaluation set. It is a **rule source**. Syntax-based
+1,490 Opus edits is not just an evaluation set. It is a **rule source**. Syntax-based
 statistical machine translation solved the equivalent problem in the 2000s: given aligned
 tree pairs, extract the transformation grammar automatically. Nobody has pointed that
 machinery at monolingual copy-editing with a frontier model as the teacher, because since
@@ -101,6 +101,35 @@ depends on rule application order is a latent bug, and no style linter checks fo
 Detect critical pairs (two rules whose left-hand sides overlap), and either order them
 explicitly or add the joining rule. Cheap insurance that makes "deterministic" true rather
 than aspirational.
+
+### 1.7 Edit-as-tagging [S, measured ceiling]
+
+The line of work that solved this exact shape, and the one this catalogue was missing.
+LaserTagger (Malmi, Krause, Rothe, Mirylenka and Severyn, 2019) induces a closed vocabulary of
+edit operations from a parallel corpus and then reduces text editing to tagging each source
+token `KEEP`, `DELETE`, or one of those plus an added phrase. Seq2Edits (Stahlberg and Kumar,
+2020) predicts an edit sequence instead of a token sequence; EdiT5 (Mallinson and colleagues,
+2022) splits tagging from insertion to keep inference cheap; GECToR (Omelianchuk and colleagues,
+2020) adds *g-transformations*, generated rather than tabled changes for verb form, noun number
+and case, and refines iteratively.
+
+Their construction is this project's own thesis with the contextual half learned rather than
+hand-gated: induce an inspectable edit vocabulary from the corpus, then decide per token where
+to apply it. What it buys is exactly what C9 says is missing. A drop-rate table answers a
+question about a *class* of phrases; a tagger answers about *this* token in *this* sentence. It
+cannot invent content, because it can only write what its vocabulary holds, so G8 holds by
+construction and the changelog stays a list of named operations. The per-token probability
+threshold is the band dial, replacing the hand-set numbers in `lint/bands._THRESHOLDS`.
+
+The ceiling is measured rather than hoped for (**C15**). A vocabulary of **970 phrases**, every
+stretch written twice or more in the training documents, plus generated inflection, reproduces
+Opus exactly on 64.6% of rewriting spans and closes 52.6% of the rewriting gap with perfect tag
+choice. It holds on held-out documents, 65.1% against 67.0%. What it cannot reach is one family:
+`phrase` is 84.7% of the residual, and `phrase` with `voice` is 92.5% of it.
+
+Falsified if a fitted tagger over held-out documents cannot beat the delete anchor's 28.8%
+rewriting closure, which would say the ceiling is unreachable in practice and the gap is all in
+the tag decision rather than in the vocabulary.
 
 ---
 
@@ -224,7 +253,7 @@ agent on the surface.
   "the analysis of X by Y" as "Y analysed X", and no amount of WordNet gives it. Freely
   available, unfashionable, and exactly right.
 - **Corpus-mined argument mapping** [X]. Where NOMLEX is silent, induce the mapping from the
-  Opus corpus itself: align nominal arguments to verbal arguments across the 1,523 pairs.
+  Opus corpus itself: align nominal arguments to verbal arguments across the 1,490 pairs.
 
 ### 4.3 Support-verb and light-verb constructions
 
@@ -360,7 +389,7 @@ Three honest responses, in preference order:
 1. **Measure it before conceding it.** The 13% figure is a count of *instances*, not of
    *value*. The ablation in section 5 will say how much SARI those instances actually carry.
    It may be much less than their frequency suggests.
-2. **Mine it.** A phrase table from 1,523 edits is small, but the corpus can grow: every
+2. **Mine it.** A phrase table from 1,490 edits is small, but the corpus can grow: every
    future kopi-editor run adds pairs at zero cost, and kopi-learner's `generate` route can
    expand it deliberately. The coverage curve over corpus size is itself the experiment.
 3. **Route it.** A deterministic linter that handles the other seven eighths and flags the

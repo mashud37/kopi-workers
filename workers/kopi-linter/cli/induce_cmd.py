@@ -9,6 +9,7 @@ TABLES = {
     "adjunct": Path("rules/induced_adjuncts.py"),
 }
 FAMILIES = tuple(TABLES)
+TRAIN_ON = "train"
 _MINIMUM_SIGHTINGS = 4
 
 
@@ -18,12 +19,15 @@ def _setup(label: str):
     sp = StepSpinner("loading gold corpus")
     sp.start()
     try:
-        samples = load_samples(roles={"opus"})
+        samples = load_samples(roles={"opus"}, split=TRAIN_ON)
     finally:
         sp.done()
     if not samples:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
-    ui.ok(f"{len(samples)} gold paragraphs, inducing {label}")
+    documents = {sample.doc for sample in samples}
+    ui.ok(f"{len(samples)} gold paragraphs over {len(documents)} documents, inducing {label}")
+    ui.info(f"fitted on the {TRAIN_ON} split only, so evaluate can score on documents "
+            f"this table has never seen")
 
     sp = StepSpinner("loading spaCy parser")
     sp.start()

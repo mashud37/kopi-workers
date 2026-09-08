@@ -5,32 +5,35 @@ a GPU service or an API bill for every draft, and kopi-editor's deterministic ro
 reaches the safe mechanical fixes: fixed filler phrases, cliché swaps, grammar. kopi-linter
 exists to find out how far the rest can be taken deterministically, on one machine, with
 nothing leaving it. Its wager is that the editorial judgement in question is not
-unreachable, only undocumented: kopi-learner already holds 1,523 paragraphs edited by Opus
+unreachable, only undocumented: kopi-learner already holds 1,490 paragraphs edited by Opus
 across four intensity bands, so what a good editor does to academic prose is a measurable
 object rather than a matter of opinion. The repo starts from that measurement. The evidence
 layer aligns every gold edit with its original, classifies each difference by its
 linguistic type, and reports what a rule set would actually have to do; the transformation
 layers are then built and justified against that report, not against intuition.
 
-It holds no secrets and makes no network calls, because a linter that never sends a
-paragraph anywhere is the point rather than a feature.
+It holds no secrets and nothing leaves the machine, because a linter that never sends a
+paragraph anywhere is the point rather than a feature. The one optional backend that speaks
+a socket speaks it to a model server on localhost.
 
 ## Status
 
 Early, and deliberately measured rather than advertised. The evidence layer, the linting
 engine and the experiment harness all run. One transformation family is live
 (relative-clause reduction); a second (`adjunct`) has three competing licence models under
-comparison and none of them is registered yet.
+comparison and none of them is registered yet. The execution tier is probed but not built:
+`manage.py execute` has measured what a local backend could write at a known site, and
+nothing yet writes one during a lint.
 
 Progress is tracked as a single per cent, **closure**, defined in
-[docs/good.md](docs/good.md) section 0 and standing at 0.2%. The work follows a fixed loop,
+[docs/good.md](docs/good.md) section 0 and standing at 0.4%. The work follows a fixed loop,
 analyse then plan then build then evaluate then analyse again, set out in
 [docs/method.md](docs/method.md). Six documents carry the state:
 
 | Document | Question it answers |
 |---|---|
 | [docs/plan.md](docs/plan.md) | where this is going, what each phase is worth, and how it fails |
-| [docs/typology.md](docs/typology.md) | what a plain-language linter has to do, measured from 1,523 gold edits |
+| [docs/typology.md](docs/typology.md) | what a plain-language linter has to do, measured from 1,490 gold edits |
 | [docs/approaches.md](docs/approaches.md) | which techniques might do it |
 | [docs/constraints.md](docs/constraints.md) | what building it revealed, and what each limit blocks |
 | [docs/good.md](docs/good.md) | what a correct edit is, and how anything is scored |
@@ -73,6 +76,7 @@ lint/                   edit, registry, select, bands, guard, run: the engine
 rules/                  one module per transformation family, plus induced tables
 grammar/                orthography (British/American), realise (surface repair)
 eval/                   sari, harness, grammatical: the gate every rule has to pass
+execute/                template, tagger, decoder: backends that write a replacement span
 experiments/            registry, cases, compare, report: method-versus-method comparison
 cli/                    argparse dispatch, menu, install, ui, progress
 docs/                   typology, approaches, constraints, good, method
@@ -104,8 +108,9 @@ also a direct subcommand.
 |---|---|
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
 | Ask whether Opus performs a transformation at all | `manage.py probe <generator> [-n N]` |
-| Compare every method for one family | `manage.py experiment <family> [-n N]` |
-| Compare scoring functions for which phrase to drop first | `manage.py rank [-n N]` |
+| Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--reproduce]` |
+| Compare every method for one family | `manage.py experiment <family> [-n N] [--split {all\|train\|test}]` |
+| Compare scoring functions for which phrase to drop first | `manage.py rank [-n N] [--split {all\|train\|test}]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |
 | Mine the gold edit corpus into a transformation report | `manage.py evidence [--role {opus\|qwen\|all}] [-n N]` |
 | Rebuild rule tables from the gold corpus | `manage.py induce [--family {support-verb\|adjunct}] [--minimum N]` |
@@ -120,6 +125,14 @@ grammar of English, and Opus declines it 169 times to 1. Building it would have 
 instances of reach at an accuracy that *subtracts* closure, while looking like the project's
 biggest advance in any coverage-based measure.
 
+`execute` asks the other half of the question. It hands a backend one span Opus changed,
+four words of context each side, and the name of the change made there, and asks for the
+replacement. The site is a gift and the wording is not, which separates *can a local
+executor perform this transformation* from *can it decide where*. `keep` and `delete` are
+carried as anchors in every table, so a backend that has learned nothing shows up as zero
+rather than as a plausible number. `--reproduce` runs two passes over the same spans and
+checks they produce the same bytes, with a sampling decoder as the control that has to fail.
+
 `experiment` is the one to reach for once a family survives the probe: it runs every
 registered method for a family against the same licence cases and the same corpus, and
 writes a comparison. A method with no alternative to be compared against has been measured,
@@ -128,7 +141,19 @@ not evaluated.
 `--role opus` measures the gold standard, `--role qwen` measures the cheap served model on
 the same paragraphs, and the difference between the two reports is the editorial judgement
 the linter has to supply. `-n` truncates the run for a quick pass; a full pass over the
-1,523 gold edits takes about two minutes.
+1,490 gold edits takes about two and a half minutes.
+
+## The split
+
+Every fifth document by name is held out: 20 documents and 1,257 paragraphs to train on, 5
+documents and 233 to test on. The split is by **document** and never by paragraph, because
+paragraphs from one document share an author, a topic and a vocabulary, so splitting inside
+a document puts near-copies of the training data into the test set.
+
+`induce` and `probe` read the train split only, so a decision fitted to the corpus never
+spends the held-out documents. `evaluate` runs over everything and reports both sides.
+`experiment` and `rank` default to `all` and take `--split test` for a score no induced table
+has seen, because at present the held-out side carries too few edits to separate two methods.
 
 ## How the evidence layer works
 
@@ -193,13 +218,13 @@ output-side grammaticality checking turned out not to be reachable.
 
 One number tracks progress: **closure**, the per cent of the word-level distance from the
 original text to Opus's edit that has been closed. Doing nothing scores 0, reproducing
-Opus scores 100%, and an edit Opus did not make scores below 0. Over all 1,523 gold
+Opus scores 100%, and an edit Opus did not make scores below 0. Over all 1,490 gold
 paragraphs, against Opus's edit of the same paragraph at the same band:
 
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **0.3%** | 0.7% | 76.1% |
+| **kopi-linter** | **0.4%** | 0.7% | 76.6% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
 `reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
@@ -207,35 +232,57 @@ paragraphs, against Opus's edit of the same paragraph at the same band:
 is attempted. The linter's licence mechanism works and is applied to almost nothing;
 reach is the whole problem. See [docs/plan.md](docs/plan.md) for what each family is worth.
 
+Split out, the held-out documents read 0.15% closure at 68.3% accuracy against the train
+split's 0.39% and 77.3%. **That gap is not a result.** It rests on 14 edits and 30 word
+operations, which is far too few to separate 68% from 77%, and the finding is the sample
+size rather than the number: at this reach the held-out side cannot referee a method
+(`docs/constraints.md` C14).
+
 > Closure measures agreement with Opus, not quality. Qwen at -9.5% has not written worse
 > English, it has written different English, and it is quoted here as a reference point
 > rather than a verdict. Reconstructing Opus is this project's objective, not Qwen's.
+
+### What a local backend could write
+
+`manage.py execute` scores the same metric at span level, over the 13,316 spans where Opus
+rewrote rather than deleted. Deleting the span outright is the anchor, because deletion is
+the only move the engine can currently make:
+
+| Backend | Rewriting closure | Rewriting exact |
+|---|---:|---:|
+| delete the span (anchor) | 28.8% | 0.0% |
+| plain code | 0.2% | 0.5% |
+| a 970-phrase induced vocabulary, perfect tag choice | 52.6% | 64.6% |
+
+The third row reads the gold and is a ceiling rather than a score. It says that a closed
+vocabulary induced from the training documents, and nothing larger, could write most of what
+Opus writes, and that it holds on documents it was not induced from (65.1% against 67.0%,
+over 2,916 held-out spans). What it cannot reach is concentrated in one family: `phrase`
+alone is 84.7% of the residual. Details in [docs/constraints.md](docs/constraints.md) C15.
 
 Corpus SARI is kept as a diagnostic, because its three components separate in a way the
 composite does not:
 
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
-| do nothing | 0.2439 | 0.0000 | 0.7316 | 0.0000 |
-| kopi-linter | 0.5208 | 0.0018 | 0.7324 | 0.8280 |
+| do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
+| kopi-linter | 0.5218 | 0.0019 | 0.7307 | 0.8329 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
 That table says the linter beats a 32B model, which is why it is not the headline. The
-score is delete precision earned on 154 changed paragraphs out of 1,523 and 349 words moved
-against Opus's 23,047, and precision over few deletions is easy. The `add` column, 0.0018
+score is delete precision earned on 153 changed paragraphs out of 1,490 and 347 words moved
+against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0019
 against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
 every rule it has deletes.
 
-The two metrics have already disagreed once, usefully. The relative-clause extension of
-2026-07-26 moved closure up (0.2% to 0.3%) and SARI **down** (0.5250 to 0.5208), because
-SARI's delete component is precision-only by design and penalises doing more work at
-slightly lower precision even when that work is net-correct. For "how close are we to
-Opus", closure is right by construction.
+The two metrics disagree, usefully. Extending the relative-clause rule raised closure and
+lowered SARI, because SARI's delete component is precision-only by design and penalises
+doing more work at slightly lower precision even when that work is net-correct. For "how
+close are we to Opus", closure is right by construction.
 
-**What is nonetheless real.** Scoping the repair layer to edit joins (constraints C6) moved
-SARI from 0.4580 to 0.5250 and delete precision from 0.6408 to 0.8415, purely by making the
-linter stop touching text no rule had asked to change. Doing less was worth more than any
-rule so far.
+**What is nonetheless real.** Scoping the repair layer to edit joins (constraints C6) is
+worth more than any rule so far, purely by making the linter stop touching text no rule had
+asked to change. Doing less bought more than doing more.
 
 **What the harness has already decided.** `support-verb` was withdrawn after firing twice
 and disagreeing twice. The relative-clause gates were ablated: the it-cleft gate is worth

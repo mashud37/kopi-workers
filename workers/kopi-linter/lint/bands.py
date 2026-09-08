@@ -72,14 +72,14 @@ _THRESHOLDS = {
 _DEFAULT_THRESHOLD = {"clarity": 0.95, "light": 0.90, "firm": 0.80, "aggressive": 0.70}
 
 # What the gold editor actually removes, as a share of the paragraph's words.
-# Median over the corpus, measured per band: 454, 101, 528 and 440 paragraphs.
+# Median over the corpus, measured per band: 454, 68, 528 and 440 paragraphs.
 #
 # These are targets and `_CEILING` is the hard stop, and the two were being
 # conflated. A ranked family spends a budget rather than clearing a threshold, so
 # handing it the ceiling asks for a cut two to five times deeper than the editor
 # makes: at firm the ceiling is 35% against a measured median of 14.2%. Only
 # clarity was ever close, at 6% against 5.7%.
-_TARGET = {"clarity": 0.057, "light": 0.034, "firm": 0.142, "aggressive": 0.191}
+_TARGET = {"clarity": 0.057, "light": 0.018, "firm": 0.142, "aggressive": 0.191}
 
 BANDS = tuple(_THRESHOLDS)
 

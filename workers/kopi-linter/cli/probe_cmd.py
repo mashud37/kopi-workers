@@ -6,6 +6,10 @@ from .progress import BatchProgress, StepSpinner
 
 OUTPUT = Path("output")
 
+# The probe decides what gets built, which is a decision fitted to the corpus,
+# so it reads the same split induction does and leaves the test documents unspent.
+PROBE_ON = "train"
+
 
 def _write(name: str, probe, limit: int | None) -> Path:
     OUTPUT.mkdir(exist_ok=True)
@@ -13,6 +17,8 @@ def _write(name: str, probe, limit: int | None) -> Path:
     path = OUTPUT / f"probe_{stem}.md"
     lines = [
         f"# Attestation probe: `{name}`",
+        "",
+        f"Measured on the **{PROBE_ON}** split, so the held-out documents stay unspent.",
         "",
         "Does the gold editor perform this transformation, before anything is built to do it?",
         "The ratio that decides is **attested against declined**. `rewritten or dropped` is the",
@@ -54,13 +60,13 @@ def run(name: str | None = None, limit: int | None = None) -> None:
     sp = StepSpinner("loading gold corpus")
     sp.start()
     try:
-        samples = load_samples(roles={"opus"})
+        samples = load_samples(roles={"opus"}, split=PROBE_ON)
     finally:
         sp.done()
     samples = samples[:limit] if limit else samples
     if not samples:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
-    ui.ok(f"{len(samples)} gold paragraphs")
+    ui.ok(f"{len(samples)} gold paragraphs, {PROBE_ON} split")
 
     sp = StepSpinner("loading spaCy parser")
     sp.start()

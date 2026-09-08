@@ -12,6 +12,9 @@ OUT = LEARNER / "data" / "out"
 
 GOLD_ROLES = frozenset(["opus"])
 BANDS = ("clarity", "light", "firm", "aggressive")
+SPLITS = ("all", "train", "test")
+
+_HELD_OUT_EVERY = 5
 
 
 @dataclass(frozen=True)
@@ -63,20 +66,21 @@ def _row_to_sample(row: dict) -> Sample | None:
     )
 
 
-def load_samples(roles=None, bands=None) -> list[Sample]:
-    """Every edit record in the corpus, deduplicated on (key, role, band).
+def _read_corpus() -> list[Sample]:
+    """Every edit record on disk, deduplicated on (key, role, band).
 
-    ``data/pairs`` holds the raw mined rows and ``data/out/test.jsonl`` the
-    held-out split in the same shape; the SFT/DPO jsonl files are the same
-    content already rendered into chat templates, so they are skipped to avoid
-    counting an edit twice.
+    ``data/pairs`` holds the raw mined rows and ``data/out/test.jsonl`` repeats
+    a subset of them in the same shape; the SFT/DPO jsonl files are that content
+    already rendered into chat templates, so they are skipped to avoid counting
+    an edit twice.
 
-    Args:
-        roles: keep only these editor roles (default: all).
-        bands: keep only these intensity bands (default: all).
+    The fingerprint is the paragraph, the editor and the band, and nothing else.
+    Including the edit text as well let a paragraph re-edited by the same model
+    at the same band enter twice, which double-weighted 33 of the gold slots and
+    made the corpus read as 1,523 paragraphs when it holds 1,490.
 
     Returns:
-        Samples in corpus order, first occurrence wins on duplicates.
+        Samples in corpus order, first occurrence winning on duplicates.
     """
     seen = set()
     samples = []
@@ -91,11 +95,7 @@ def load_samples(roles=None, bands=None) -> list[Sample]:
             sample = _row_to_sample(json.loads(line))
             if sample is None:
                 continue
-            if roles and sample.role not in roles:
-                continue
-            if bands and sample.band not in bands:
-                continue
-            fingerprint = (sample.key, sample.role, sample.band, sample.edit[:80])
+            fingerprint = (sample.key, sample.role, sample.band)
             if fingerprint in seen:
                 continue
             seen.add(fingerprint)
@@ -103,7 +103,47 @@ def load_samples(roles=None, bands=None) -> list[Sample]:
     return samples
 
 
-def contrastive_pairs(gold: str = "opus", foil: str = "qwen") -> list[tuple[Sample, Sample]]:
+def load_samples(roles=None, bands=None, split: str = "all") -> list[Sample]:
+    """The corpus, filtered to the editors, bands and split a caller asked for.
+
+    Args:
+        roles: keep only these editor roles (default: all).
+        bands: keep only these intensity bands (default: all).
+        split: ``train``, ``test`` or ``all``. Anything fitted to the corpus is
+            fitted on ``train`` and scored on ``test``, or its score is read off
+            its own training data.
+
+    Returns:
+        Samples in corpus order, first occurrence winning on duplicates.
+
+    The split holds out every fifth document by name, and it is a split by
+    **document** rather than by paragraph. Paragraphs from one document share an
+    author, a topic and a vocabulary, so splitting inside a document puts
+    near-copies of the training data into the test set and the leak survives the
+    split. Which documents are held out does not depend on the filters, so every
+    caller sees the same test set.
+    """
+    if split not in SPLITS:
+        raise SystemExit(f"unknown split '{split}', expected one of {', '.join(SPLITS)}")
+    corpus = _read_corpus()
+    documents = sorted({sample.doc for sample in corpus})
+    held_out = set(documents[::_HELD_OUT_EVERY])
+    samples = []
+    for sample in corpus:
+        if roles and sample.role not in roles:
+            continue
+        if bands and sample.band not in bands:
+            continue
+        if split == "train" and sample.doc in held_out:
+            continue
+        if split == "test" and sample.doc not in held_out:
+            continue
+        samples.append(sample)
+    return samples
+
+
+def contrastive_pairs(gold: str = "opus", foil: str = "qwen",
+                      split: str = "all") -> list[tuple[Sample, Sample]]:
     """Same paragraph, same band, edited by both models.
 
     The contrast is the sharpest available signal for what a local linter must
@@ -112,7 +152,7 @@ def contrastive_pairs(gold: str = "opus", foil: str = "qwen") -> list[tuple[Samp
     every deterministic attempt so far has failed to capture.
     """
     index = {}
-    for sample in load_samples():
+    for sample in load_samples(split=split):
         index.setdefault((sample.key, sample.band), {})[sample.role] = sample
     pairs = []
     for models in index.values():

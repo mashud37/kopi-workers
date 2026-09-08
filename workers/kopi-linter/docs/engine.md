@@ -17,21 +17,21 @@ Status vocabulary, used strictly:
 
 | Component | Technique | Status | Measured at |
 |---|---|---|---|
-| `align.py` | Gale and Church (1993) bead alignment, run monolingually; beads relabelled 1-1 rewrite / 1-n split / n-1 merge / 1-0 cut | running | 1,523 paragraphs, 22,631 transformations |
+| `align.py` | Gale and Church (1993) bead alignment, run monolingually; beads relabelled 1-1 rewrite / 1-n split / n-1 merge / 1-0 cut | running | 1,490 paragraphs, 22,279 transformations |
 | `align.py` | Needleman-Wunsch DP over the monotone grid, fanout capped at 3 | running | exact given the cost model |
 | `align.py` | IDF-weighted content-lemma containment as the bead cost, replacing the character-length prior that is meaningless monolingually | running | cost model is a choice, not validated |
 | `align.py` | `_split_out_deletions`: promotes a source sentence to a deletion when its content lemmas fail to survive, which Gale and Church cannot express | running | reclassified 23% of merge sources on a 400-edit probe |
 | `align.py` | Sorted-order float summation to defeat Python hash randomisation flipping DP ties | running | identical output over 3 processes |
 | `taxonomy.py` | Ordered cascade: dependency relations, WordNet derivational morphology, `wordfreq`, concreteness | running | no held-out accuracy figure |
 | `taxonomy.py` | MIP (Pragglejaz) operationalised as a WordNet `physical_entity` concreteness test for dead metaphor | running | unvalidated |
-| `editor_rules.py` | Coverage bridge to kopi-editor's 165 production rules | running | 44 of 22,631 transformations (0.2%) |
+| `editor_rules.py` | Coverage bridge to kopi-editor's 165 production rules | running | 44 of 22,279 transformations (0.2%) |
 | `induce.py` | Rule confidence induced from the gold's own behaviour rather than asserted | running | light-verb base rate 20.2%, 1,006 observations |
 
 ## 2. Engine (`lint/`)
 
 | Component | Technique | Status | Measured at |
 |---|---|---|---|
-| `run.py` | Six stages: parse, propose, select, apply, realise, guard | running | 1,523 paragraphs |
+| `run.py` | Six stages: parse, propose, select, apply, realise, guard | running | 1,490 paragraphs |
 | `registry.py` | Rules propose only; nothing applies until every proposal is seen, so output is independent of rule order | running | property holds by construction |
 | `registry.py` | Failures surfaced, never swallowed | running | added after a broken rule looked identical to a quiet one |
 | `select.py` | Weighted interval scheduling, exact DP with `bisect` predecessors, over conflicting proposals | running | exact; untested against a greedy baseline |
@@ -47,9 +47,9 @@ Status vocabulary, used strictly:
 | `support-verb` collapse | withdrawn | 2 | disagreed twice; 20% base rate did not support firing |
 | `adjunct` PP-drop, structural licence | built, rejected | 647 | **2%** ceiling; over-fires, see constraints C9 |
 | `adjunct` PP-drop, induced licence (3 variants) | built, rejected | 3 | cannot reach any band threshold, see C9 |
-| `voice` restoration | paper | | 1,176 / 3,032; the family that would open the SARI `add` column |
+| `voice` restoration | paper | | 1,156 / 2,988; the family that would open the SARI `add` column |
 | `nominalisation` to verb | paper | | |
-| `sentence` merge and cut | paper | | 457 instances / 8,255 words, the largest by word budget |
+| `sentence` merge and cut | paper | | 454 instances / 8,212 words, the largest by word budget |
 | lexical substitution | paper | | |
 | connective repair | paper | | |
 
@@ -76,22 +76,48 @@ Status vocabulary, used strictly:
 | `experiments/compare.py` | Method-versus-method comparison for one family, cases plus corpus | running |
 | `experiments/ranking.py` | Ranking evaluation (precision at oracle k, MAP) against a shuffle baseline, decoupled from the pipeline | running |
 
-## 6. Headline numbers, with their caveats
+## 6. Local execution tier (`execute/`)
 
-Corpus SARI over 1,523 gold paragraphs:
+Producers for `Edit.replacement`, which C1 found nothing ever fills. Measured at gold sites
+only: the probe hands over the span and asks for the wording, so none of these has yet been
+asked to decide where to fire.
+
+| Component | Technique | Status | Measured at |
+|---|---|---|---|
+| `oracle.py` | One task per gold span edit, scored as span-level closure against Opus's own target | running | 20,243 spans over 1,490 paragraphs |
+| `oracle.py` | `keep` and `delete` carried as anchors in every table, so a degenerate measure shows itself | running | caught the near-match defect, C15 |
+| `template.py` | Plain code: drop the span, or respell it | running | **0.2%** of the rewriting gap; refused |
+| `tagger.py` | Closed edit vocabulary induced from the training documents, plus generated inflection | running | ceiling **52.6%** rewriting closure, 970 phrases |
+| `decoder.py` | Small instruct model on local Ollama, greedy at fixed seed | built, unverified | **unmeasured**: no Ollama on this machine |
+| `backends.py` | One dict registry; a backend is `prepare` plus `execute`, no classes | running | |
+| `cli/execute_cmd.py` | `--reproduce`: two passes, byte-identical, with a sampling control that must fail | built, unverified | control needs Ollama; free backends match |
+
+The tagger row reads the gold and is a ceiling, never a system score. It answers one question:
+if every tag choice were correct, how much of what Opus wrote could a closed vocabulary spell?
+
+## 7. Headline numbers, with their caveats
+
+Corpus SARI over 1,490 gold paragraphs:
 
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
-| do nothing | 0.2439 | 0.0000 | 0.7316 | 0.0000 |
-| kopi-linter | 0.5250 | 0.0012 | 0.7322 | 0.8415 |
+| do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
+| kopi-linter | 0.5218 | 0.0019 | 0.7307 | 0.8329 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
-Read with section 5.4 of `good.md`: the linter changes **108 of 1,523 paragraphs (7.1%)** and
-moves **229 words against Opus's 23,047**. It passes a 32B model on the composite while doing
+Read with section 5.4 of `good.md`: the linter changes **153 of 1,490 paragraphs (10.3%)** and
+moves **347 words against Opus's 22,816**. It passes a 32B model on the composite while doing
 about one percent of the work, which is the clearest possible argument for never reporting the
 composite alone.
 
-The previous figures on this line were 0.4580 and 0.6408 delete. The gain came entirely from
-scoping the repair layer (constraints C6), not from a rule.
+Closure by split, which is the number that says whether any of this generalises:
+
+| Split | Paragraphs | Edits applied | Closure | Accuracy |
+|---|---:|---:|---:|---:|
+| train | 1,257 | 149 | 0.39% | 77.3% |
+| test (held out) | 233 | 14 | 0.15% | 68.3% |
+
+The held-out row rests on 14 edits and cannot separate 68% from 77%. It is reported because
+it has to be, and it is not yet evidence of anything (`constraints.md` C14).
 
 The `add` column is the whole remaining gap and none of the families that would fill it exist.

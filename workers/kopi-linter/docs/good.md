@@ -27,7 +27,7 @@ verdict. Implemented in `eval/closure.py`, reported first by `manage.py evaluate
 
 **Why this rather than SARI as the headline.**
 
-- **Doing nothing scores exactly 0**, not 0.2439. SARI pays for correct *keeping*, so a linter that
+- **Doing nothing scores exactly 0**, not 0.2433. SARI pays for correct *keeping*, so a linter that
   touches 7% of paragraphs collects most of its score for the 93% it never looked at, and reads as
   halfway to Opus while having moved 1% of the words.
 - **Damage scores below 0.** An edit Opus did not make moves the text away from the gold. The
@@ -186,7 +186,7 @@ dependency, no sentence without a root predicate. This is what would have caught
 it is currently missing.
 
 **5.4 Coverage.** Paragraphs changed, edits per paragraph, words moved against the words Opus
-moved. The linter's current 12.4% and 298 words against 23,047 is the real headline, and it is
+moved. The linter's current 10.3% and 347 words against 22,816 is the real headline, and it is
 not visible in SARI at all.
 
 **5.5 Damage rate.** Of the paragraphs changed, how many contain an edit that violates G1 to G3?
@@ -206,6 +206,12 @@ To join `lint/registry.py`:
 Point 5 is what `experiments/` exists to make cheap. Until several approaches to a family can be
 run and scored in one command, "we tried X" means "we shipped X".
 
+**A backend that writes a replacement clears a different bar**, because it is scored at a site
+somebody else chose. It must beat the `delete` anchor's span closure on the family it claims,
+since dropping the span is free and already implemented, and it must be byte-reproducible under
+section 8. Both are reported by `manage.py execute`; neither says anything about whether the
+backend can decide where to fire, which is the licence question and is measured separately.
+
 ## 7. Rules for the evaluator itself
 
 - **A check that cannot return false is a bug.** For every check, state the input that fails it,
@@ -213,4 +219,31 @@ run and scored in one command, "we tried X" means "we shipped X".
 - **Never adjust a metric because it disagreed with the system under test.** Change it only on an
   independently stated defect, and record the change and its effect on every previously reported
   number.
+- **Carry the do-nothing anchor inside every table, not in a footnote.** It is what makes the
+  previous two rules operate on their own. The span-level probe was specified with a near-match
+  measure, landing within one word of the gold; the `keep` anchor scored **39.1%** on it in the
+  first run, because a one-word replacement is one word from its own source. The measure was
+  dropped before any backend was judged on it, and no previously reported number used it.
 - **Report the panel, not the best cell of it.**
+
+## 8. The determinism contract
+
+The README promises two things: nothing leaves the machine, and the same input gives the same
+output. Neither requires the absence of a neural network, and treating them as if they did is
+what capped this project at hand-written rules. A fixed-weight model decoded greedily satisfies
+both. What it needs is a check.
+
+- Model artefacts are pinned and verified by `manage.py install`, which reports and provisions
+  nothing, as it already does for the spaCy model.
+- A decoder runs at temperature 0, `top_k` 1, a fixed seed, a capped prediction length and a
+  fixed context window. An encoder runs in eval mode at a pinned thread count, and any threshold
+  is taken on a rounded score, because BLAS reduction order genuinely varies with thread count.
+- What is asserted is the identity of the **output text**, not of the logits. The first is the
+  property that matters and the second cannot be guaranteed.
+- `manage.py execute --reproduce` runs two passes over the same spans and compares a SHA-256 of
+  every replacement. It ships with the input that makes it fail: a decoder with sampling on,
+  which must differ across runs or the check proves nothing.
+
+Unproven as of C15: the control needs a local model server and there is none on this machine, so
+the failing half of the check has not been exercised. The thread-count axis arrives with the
+first encoder and not before, because nothing in the tier currently multiplies a matrix.

@@ -5,6 +5,7 @@ import sys
 from cli import (
     eval_cmd,
     evidence_cmd,
+    execute_cmd,
     experiment_cmd,
     induce_cmd,
     install,
@@ -14,6 +15,8 @@ from cli import (
     ui,
 )
 from cli import menu as menu_mod
+from evidence import load
+from execute import backends
 from lint import bands
 
 
@@ -31,11 +34,21 @@ def _measurement_parsers(sub) -> None:
     )
     experiment.add_argument("family", nargs="?", help="family to compare (default: ask)")
     experiment.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+    experiment.add_argument("--split", default="all", choices=load.SPLITS, help="which documents to score on (default: all)")
 
     ranker = sub.add_parser(
         "rank", help="Compare scoring functions for which phrase to drop first"
     )
     ranker.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+    ranker.add_argument("--split", default="all", choices=load.SPLITS, help="which documents to score on (default: all)")
+
+    executor = sub.add_parser(
+        "execute", help="Probe whether a local backend can perform the gold edits"
+    )
+    executor.add_argument("--backend", choices=backends.NAMES, help="one backend (default: the free ones)")
+    executor.add_argument("--family", help="score only this transformation family")
+    executor.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+    executor.add_argument("--reproduce", action="store_true", help="check two runs write the same bytes")
 
     prober = sub.add_parser(
         "probe", help="Ask whether Opus performs a transformation, before building it"
@@ -83,9 +96,12 @@ def main():
     if args.command == "evaluate":
         return eval_cmd.run(limit=args.limit, show=args.show)
     if args.command == "experiment":
-        return experiment_cmd.run(family=args.family, limit=args.limit)
+        return experiment_cmd.run(family=args.family, limit=args.limit, split=args.split)
     if args.command == "rank":
-        return rank_cmd.run(limit=args.limit)
+        return rank_cmd.run(limit=args.limit, split=args.split)
+    if args.command == "execute":
+        return execute_cmd.run(mode="reproduce" if args.reproduce else "oracle",
+                               backend=args.backend, family=args.family, limit=args.limit)
     if args.command == "probe":
         return probe_cmd.run(name=args.method, limit=args.limit)
     if args.command == "induce":

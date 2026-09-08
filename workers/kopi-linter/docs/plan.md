@@ -11,17 +11,17 @@ gold is 100%, and damage is negative. It is the only number this plan is written
 
 ## 1. Where we are
 
-Measured over all 1,523 gold paragraphs (`manage.py evaluate`):
+Measured over all 1,490 gold paragraphs (`manage.py evaluate`):
 
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do-nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **0.3%** | 0.7% | 76.1% |
+| **kopi-linter** | **0.4%** | 0.7% | 76.6% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
-184 of 52,749 word-edits closed, 352 attempted.
+186 of 52,043 word-edits closed, 350 attempted.
 
-**We are 0.3% of the way to Opus.** Corpus SARI says 0.5208 against a do-nothing 0.2439 and reads
+**We are 0.4% of the way to Opus.** Corpus SARI says 0.5218 against a do-nothing 0.2433 and reads
 like halfway. SARI pays for correct keeping, so a linter that touches 10% of paragraphs collects
 most of its score for the 90% it left alone.
 
@@ -41,7 +41,7 @@ Closure decomposes exactly:
     closure = reach x (2 x accuracy - 1)
 
 At 50% accuracy closure is zero however much is attempted, which is the wrecking-ball result of
-C11 restated as arithmetic. At today's 76.1%, **every point of reach is worth 0.52 points of
+C11 restated as arithmetic. At today's 76.6%, **every point of reach is worth 0.53 points of
 closure**. Hold accuracy above roughly 75% and buy reach; below 62% a point of reach is worth
 under a quarter of a point, which is where a family stops being worth shipping.
 
@@ -54,28 +54,28 @@ hide that for a long time.
 
 Corrected 2026-07-26 (C1). Word movement is split by whether the target span is empty, per
 finding, rather than by classifying whole families. Closure is denominated in **edit operations**,
-of which the corpus holds 52,749; deleting a word costs one, so a family's reach ceiling is its
-dropped words over 52,749. The linter's own run confirms the conversion, spending 352 operations
-to remove 349 words.
+of which the corpus holds 52,043; deleting a word costs one, so a family's reach ceiling is its
+dropped words over 52,043. The linter's own run confirms the conversion, spending 350 operations
+to remove 347 words.
 
-| Family | dropped | rewritten | reach if fully covered | closure at 76% | words per decision |
+| Family | dropped | rewritten | reach if fully covered | closure at 76.6% | words per decision |
 |---|---:|---:|---:|---:|---:|
-| `sentence` | 8,255 | 0 | 15.6% | 8.1 | 18.1 |
-| `adjunct` | 5,640 | 734 | 10.7% | 5.6 | 3.3 |
-| `clause` | 3,000 | 208 | 5.7% | 3.0 | 4.1 |
-| `realisation` | 2,052 | 234 | 3.9% | 2.0 | 1.3 |
-| `voice` | 1,895 | 1,137 | 3.6% | 1.9 | 4.1 |
-| `phrase` | 1,215 | 5,961 | 2.3% | 1.2 | 2.9 |
-| `relative-clause` | 1,001 | 42 | 1.9% | 1.0 | 5.4 |
-| `stance` | 860 | 23 | 1.6% | 0.8 | 1.4 |
-| `lexical` | 821 | 41 | 1.6% | 0.8 | 1.1 |
-| `modifier` | 580 | 28 | 1.1% | 0.6 | 1.3 |
-| **all deletion** | **25,930** | | **49.2%** | **25.6** | |
-| **all rewriting** | | **11,692** | **22.2%** | **11.5** | |
+| `sentence` | 8,212 | 0 | 15.8% | 8.4 | 18.1 |
+| `adjunct` | 5,572 | 729 | 10.7% | 5.7 | 3.3 |
+| `clause` | 2,957 | 208 | 5.7% | 3.0 | 4.1 |
+| `realisation` | 2,032 | 228 | 3.9% | 2.1 | 1.3 |
+| `voice` | 1,863 | 1,125 | 3.6% | 1.9 | 4.1 |
+| `phrase` | 1,192 | 5,889 | 2.3% | 1.2 | 2.9 |
+| `relative-clause` | 996 | 42 | 1.9% | 1.0 | 5.5 |
+| `stance` | 846 | 23 | 1.6% | 0.9 | 1.4 |
+| `lexical` | 814 | 41 | 1.6% | 0.8 | 1.1 |
+| `modifier` | 572 | 25 | 1.1% | 0.6 | 1.3 |
+| **all deletion** | **25,662** | | **49.3%** | **26.2** | |
+| **all rewriting** | | **11,571** | **22.2%** | **11.8** | |
 
 Three things follow, and all three changed the plan.
 
-**Deletion reaches 49.2 points, not 26.** `clause` at 94% deletion and `voice` at 62% were both
+**Deletion reaches 49.3 points, not 26.** `clause` at 93% deletion and `voice` at 62% were both
 counted as generation families and are mostly Opus cutting. Only `phrase`, `support-verb` and
 `nominalisation` genuinely need words written. The generation spine is further deferrable than
 `constraints.md` claimed.
@@ -85,8 +85,8 @@ in accuracy, so a precision-limited engine should prefer families that move the 
 risk taken. `sentence` moves 18.1 words per decision against `adjunct`'s 3.3, a 5.5x difference,
 and `adjunct` is the family this project has spent most of its cycles on.
 
-**The table cannot sum to 100%.** Deletion and rewriting together account for 71.4% of the
-measured edit distance. The remaining 28.6% is reordering and insertion that the evidence layer
+**The table cannot sum to 100%.** Deletion and rewriting together account for 71.5% of the
+measured edit distance. The remaining 28.5% is reordering and insertion that the evidence layer
 does not classify into families at all, and no family-by-family plan reaches it.
 
 ## 4. Phases
@@ -118,9 +118,22 @@ recorded as unreachable.
 neither has been probed. Attestation probe first, per C13.
 Target **2% to 4%**, taking the running total to roughly 10% to 17%.
 
-**Phase 5, the generation spine.** 22.2% of the gap needs words written rather than chosen. Build
-and test in isolation on gold triples before any family depends on it.
-At 65% accuracy it buys 6.7 points, at 80% it buys 13.3.
+**Phase 5, the generation spine.** *Split in two by C15, which measured it before building it.*
+The oracle-execution probe hands a backend a span Opus changed and asks for the wording, so the
+question "can a local executor perform this" is answered apart from "can it decide where".
+
+- **Phase 5a, the edit tagger.** A closed vocabulary of 970 phrases induced from the training
+  documents, plus generated inflection, has a ceiling of **52.6%** of the rewriting gap and
+  holds on held-out documents. CPU-feasible, cannot write outside its own tag set, and its
+  per-token threshold is the band dial. Fails if a fitted tagger cannot beat the delete anchor's
+  28.8%, which would put the whole gap in the tag decision rather than the vocabulary.
+- **Phase 5b, a constrained decoder for `phrase` and `voice` only.** 92.5% of what the tagger
+  ceiling cannot reach sits in those two families; `phrase` alone is 84.7%. Does not start until
+  5a has a real score rather than a ceiling, because eight rewriting spans in ten are not
+  paraphrase and a model spent on them is a model spent on the easy part.
+
+Plain code is finished here: the `template` backend closes **0.2%** of the rewriting gap against
+28.8% for deleting the span blind, which is C1 restated at span level with the ceiling attached.
 
 **Terminal estimate: 30% to 50% closure**, dominated by whether generation accuracy clears 70%
 and whether deletion accuracy holds near 80% as coverage grows. Basis: the family table above
@@ -147,7 +160,12 @@ Ordered. Each item states what it should move, so it can fail.
    one paragraph at a time.
 6. **Phase 2, sentence dropping.**
 7. **C12a**, the high-precision restraint gate, folded into Phase 3 where it belongs.
-8. **Phase 4 probes**, then **Phase 5** if the probes justify it.
+8. **Phase 4 probes.**
+9. ~~**Oracle-execution probe**~~ (C15). Built: `manage.py execute`. Ran ahead of the queue
+   because it is the cheapest falsification of the whole generation tier and it refuses a
+   backend for an afternoon's work. It refused one and it justified another.
+10. **Phase 5a, the edit tagger**, now the best-evidenced item on this list.
+11. **Phase 5b, the decoder**, scoped to `phrase` and `voice`, last.
 
 ## 6. How this plan fails
 
@@ -163,7 +181,7 @@ Stated in advance so it is recognisable when it happens.
   evidence table names the construction involved, not the transformation applied. C13 is the
   general form of that error and the attestation probe is the general fix. Expect at least one
   more queued family to die the way the lexical-verb reduction did.
-- **The unclassified 28.6% turns out to be where the work is.** Nothing in this plan addresses
+- **The unclassified 28.5% turns out to be where the work is.** Nothing in this plan addresses
   reordering and insertion, and no measurement has yet asked what is in there.
 
 ## 7. Standing rules

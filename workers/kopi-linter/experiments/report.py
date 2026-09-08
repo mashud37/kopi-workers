@@ -56,14 +56,26 @@ def _defects_section(reports) -> list:
     return lines
 
 
-def render(family: str, reports: list, baseline: float, samples: int,
+def render(family: str, reports: list, baseline: float, corpus: dict,
            realisation_failures: list) -> str:
-    """Full markdown comparison for one family."""
+    """Full markdown comparison for one family.
+
+    Args:
+        family: the transformation family every method here attacks.
+        reports: one :class:`experiments.compare.MethodReport` per method.
+        baseline: do-nothing corpus SARI, the bar every method must clear.
+        corpus: ``{"samples": n, "split": name}``. The split is named in the
+            output because a method reading an induced table was fitted on the
+            train documents, so its score on ``all`` is partly its own training
+            score.
+        realisation_failures: surface-repair cases that failed, which belong to
+            no method.
+    """
     lines = [
         f"# Method comparison: {family}",
         "",
-        f"{len(reports)} methods over {samples} gold paragraphs. "
-        f"Do-nothing baseline SARI {baseline:.4f}.",
+        f"{len(reports)} methods over {corpus['samples']} gold paragraphs, "
+        f"**{corpus['split']}** split. Do-nothing baseline SARI {baseline:.4f}.",
         "",
         "Cases are licence conditions from `docs/good.md`. A method that fails one is "
         "disqualified whatever its corpus score, because the case describes text it damages. "

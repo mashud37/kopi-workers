@@ -60,8 +60,13 @@ def run():
         if not samples:
             ui.warn("edit corpus present but holds no Opus edits")
         else:
+            train = load_samples(roles={"opus"}, split="train")
+            test = load_samples(roles={"opus"}, split="test")
             ui.ok(f"edit corpus: {len(samples)} gold Opus edits over "
                   f"{len({s.doc for s in samples})} documents")
+            ui.info(f"split by document: {len(train)} train over "
+                    f"{len({s.doc for s in train})}, {len(test)} test over "
+                    f"{len({s.doc for s in test})}")
 
     for folder in ("input", "output", "data"):
         Path(folder).mkdir(exist_ok=True)

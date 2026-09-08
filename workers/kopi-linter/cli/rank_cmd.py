@@ -7,16 +7,17 @@ from .progress import BatchProgress, StepSpinner
 OUTPUT = Path("output")
 
 
-def _write(rows: list, first: dict, reference: float, limit: int | None,
+def _write(rows: list, first: dict, reference: float, corpus: dict,
            extra: list) -> Path:
     OUTPUT.mkdir(exist_ok=True)
-    stem = "ranking_adjunct" + (f"_first{limit}" if limit else "")
+    limit, split = corpus["limit"], corpus["split"]
+    stem = f"ranking_adjunct_{split}" + (f"_first{limit}" if limit else "")
     path = OUTPUT / f"{stem}.md"
     lines = [
         "# Ranking comparison: which phrase goes first",
         "",
         f"{first['groups']} paragraphs that dropped at least one phrase and kept at least "
-        f"one, {first['candidates']} candidate phrases.",
+        f"one, {first['candidates']} candidate phrases, **{split}** split.",
         "",
         "`k` is the number the gold editor actually dropped, so a scorer is judged purely on "
         "ordering and never on knowing how deep to cut.",
@@ -64,7 +65,7 @@ def _allocation(groups: list) -> list:
     return lines
 
 
-def run(limit: int | None = None) -> None:
+def run(limit: int | None = None, split: str = "all") -> None:
     from evidence.load import load_samples
     from experiments import ranking
 
@@ -75,13 +76,13 @@ def run(limit: int | None = None) -> None:
     sp = StepSpinner("loading gold corpus")
     sp.start()
     try:
-        samples = load_samples(roles={"opus"})
+        samples = load_samples(roles={"opus"}, split=split)
     finally:
         sp.done()
     samples = samples[:limit] if limit else samples
     if not samples:
         raise SystemExit("no Opus edits found in the kopi-learner corpus")
-    ui.ok(f"{len(samples)} gold paragraphs")
+    ui.ok(f"{len(samples)} gold paragraphs, {split} split")
 
     sp = StepSpinner("loading spaCy parser")
     sp.start()
@@ -121,4 +122,4 @@ def run(limit: int | None = None) -> None:
 
     ui.step("Allocation")
     extra = _allocation(every)
-    print(_write(rows, first, reference, limit, extra))
+    print(_write(rows, first, reference, {"limit": limit, "split": split}, extra))

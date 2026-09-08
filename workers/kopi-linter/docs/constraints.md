@@ -7,7 +7,9 @@ it against real prose.** They are not restatements of the typology. Each one is 
 approach itself, established by a measurement, and each blocks something specific.
 
 Measured 2026-07-26 on 18 real body paragraphs (reference lists excluded), and on the full
-1,523-paragraph gold corpus where stated.
+gold corpus where stated. Corpus figures written before **C14** refer to a corpus that
+double-counted 33 paragraphs and read as 1,523 slots; it holds 1,490, and C14 restates every
+headline that changed. The counts left in place below are what those runs actually saw.
 
 | | Original | Opus | Qwen | Linter |
 |---|---:|---:|---:|---:|
@@ -37,21 +39,21 @@ several families I had written off as generation are overwhelmingly deletion:
 
 | Family | Dropped | Rewritten | Deletion share | Drop decisions | Words per decision |
 |---|---:|---:|---:|---:|---:|
-| `sentence` | 8,255 | 0 | 100% | 457 | 18.1 |
-| `adjunct` | 5,640 | 734 | 88% | 1,722 | 3.3 |
-| `clause` | 3,000 | 208 | 94% | 724 | 4.1 |
-| `realisation` | 2,052 | 234 | 90% | 1,573 | 1.3 |
-| `voice` | 1,895 | 1,137 | 62% | 462 | 4.1 |
-| `phrase` | 1,215 | 5,961 | 17% | 426 | 2.9 |
-| `relative-clause` | 1,001 | 42 | 96% | 184 | 5.4 |
-| `stance` | 860 | 23 | 97% | 612 | 1.4 |
-| `lexical` | 821 | 41 | 95% | 778 | 1.1 |
-| `modifier` | 580 | 28 | 95% | 440 | 1.3 |
-| `support-verb` | 0 | 2,600 | 0% | 0 | |
-| `nominalisation` | 0 | 333 | 0% | 0 | |
-| **Total** | **25,930** | **11,692** | **68.9%** | | |
+| `sentence` | 8,212 | 0 | 100% | 454 | 18.1 |
+| `adjunct` | 5,572 | 729 | 88% | 1,699 | 3.3 |
+| `clause` | 2,957 | 208 | 93% | 713 | 4.1 |
+| `realisation` | 2,032 | 228 | 90% | 1,556 | 1.3 |
+| `voice` | 1,863 | 1,125 | 62% | 453 | 4.1 |
+| `phrase` | 1,192 | 5,889 | 17% | 417 | 2.9 |
+| `relative-clause` | 996 | 42 | 96% | 182 | 5.5 |
+| `stance` | 846 | 23 | 97% | 602 | 1.4 |
+| `lexical` | 814 | 41 | 95% | 771 | 1.1 |
+| `modifier` | 572 | 25 | 96% | 434 | 1.3 |
+| `support-verb` | 0 | 2,580 | 0% | 0 | |
+| `nominalisation` | 0 | 330 | 0% | 0 | |
+| **Total** | **25,662** | **11,571** | **68.9%** | | |
 
-`clause` at 94% and `voice` at 62% are the corrections that matter: both were counted as
+`clause` at 93% and `voice` at 62% are the corrections that matter: both were counted as
 generation families and both are mostly Opus cutting rather than rewriting. Only `phrase`,
 `support-verb` and `nominalisation` genuinely require words to be written.
 
@@ -75,11 +77,11 @@ engineering problems.
 1. *Feasibility floor.* Build the deletion ceiling into the harness as a reference line, so any
    deletion family's contribution is reported against what deletion can ever achieve. **Convert
    the units carefully.** 68.9% is a share of *words moved*; closure is denominated in *edit
-   operations*, of which the corpus holds 52,749. Deleting a word costs one operation, so the
-   25,930 droppable words are 49.2% of the gap, and that is the reach ceiling for a
-   deletion-only engine: **49.2 closure points at perfect accuracy, 25.6 at today's 76%, 39.4 at
-   90%.** The linter's own run confirms the conversion, having spent 352 operations to remove
-   349 words.
+   operations*, of which the corpus holds 52,043. Deleting a word costs one operation, so the
+   25,662 droppable words are 49.3% of the gap, and that is the reach ceiling for a
+   deletion-only engine: **49.3 closure points at perfect accuracy, 26.2 at today's 76.6%, 39.4
+   at 90%.** The linter's own run confirms the conversion, having spent 350 operations to remove
+   347 words.
 2. *Generation spine, tested in isolation.* Given a gold (source lemma, target lemma, slot)
    triple mined from the `derivational-swap` and `morphology` families, how often does the
    realiser produce Opus's exact surface form? A spine that scores below about 95% here will
@@ -654,6 +656,217 @@ and tells you nothing.
 
 ---
 
+## C14. The corpus was 1,490 slots, not 1,523, and none of it was held out
+
+**Evidence.** `evidence/load.load_samples` documented deduplication on
+`(key, role, band)` and implemented it on `(key, role, band, edit[:80])`. Counted over the
+files themselves:
+
+| | rows |
+|---|---:|
+| raw rows across `data/pairs/*.jsonl` and `data/out/test.jsonl` | 3,533 |
+| distinct `(key, role, band)` | 3,173 |
+| distinct as the code actually keyed them | 3,227 |
+| **gold slots, documented key** | **1,490** |
+| **gold rows, as loaded** | **1,523** |
+
+33 paragraphs were re-edited at the same band and entered twice, carrying double weight in
+every family count and in the pooled closure denominator. This document already contained
+the right number and nobody noticed: C5's own table sums to 1,333 + 89 + 68 = **1,490**.
+
+Separately, all 235 rows of kopi-learner's held-out `data/out/test.jsonl` are already present
+in `data/pairs`, so pooling the two dissolved the split rather than extending it. `induce`
+fitted the drop-rate tables in `rules/induced_*.py` on the whole corpus and `evaluate` scored
+on the same corpus, which is why `adjunct/frame`'s 67% ceiling was read off its own training
+data.
+
+**Why it is a constraint.** Nothing fitted to this corpus could be measured, and the failure
+was invisible because the only fitted things so far were rejected anyway. It becomes fatal
+the moment a classifier or a tagger exists.
+
+**Resolved.** The fingerprint matches its docstring. `load_samples(split=...)` holds out
+every fifth document by name: 20 documents and 1,257 slots to train, 5 documents and 233
+slots to test. The split is by **document** and never by paragraph, because paragraphs from
+one document share an author, a topic and a vocabulary, and splitting inside a document puts
+near-copies of the training data into the test set. No paragraph text is shared between two
+document names, checked directly, so the split separates what it claims to.
+
+`induce` and `probe` now read `train` only, so a build decision never spends the held-out
+documents. `evaluate` runs over everything and reports both sides.
+
+**Restated numbers**, all previously quoted against the double-counted corpus:
+
+| | before | after |
+|---|---:|---:|
+| gold paragraphs | 1,523 | **1,490** |
+| sentence beads | 7,355 | 7,225 |
+| span transformations | 22,631 | 22,279 |
+| words moved | 37,622 | 37,233 |
+| edit operations (closure denominator) | 52,749 | 52,043 |
+| words Opus removes | 23,047 | 22,816 |
+| closure | 0.3% | **0.4%** |
+| accuracy | 76.1% | 76.6% |
+| corpus SARI, linter | 0.5208 | 0.5218 |
+| corpus SARI, do-nothing | 0.2439 | 0.2433 |
+
+Every conclusion in this document survives the correction. The family shares move in the
+third significant figure and none of the orderings change, which is worth stating because it
+would have been just as easy for them not to.
+
+**One calibration constant was genuinely wrong, and only this correction exposed it.** All 33
+duplicates sat in the `light` band, which therefore held 101 paragraphs where it holds 68, a
+third of it counted twice. Re-measuring the median cut per band:
+
+| Band | Paragraphs | Median cut, before | after |
+|---|---:|---:|---:|
+| clarity | 454 | 0.057 | 0.057 |
+| **light** | **68** | **0.034** | **0.018** |
+| firm | 528 | 0.142 | 0.142 |
+| aggressive | 440 | 0.191 | 0.191 |
+
+`lint/bands._TARGET["light"]` was set to 0.034, so a ranked family at the light band was
+asked to cut about twice as deep as the gold editor does. Three bands were unaffected and
+the one that was is the smallest, which is why nothing downstream had caught it. Corrected
+to 0.018. This is the C11a error a second time and from a different cause: a budget is only
+as good as the measurement behind it.
+
+**The one new result, and it is a null.** Closure now reports each side of the split:
+
+| Split | Paragraphs | Edits applied | Gap | Work | Closure | Accuracy |
+|---|---:|---:|---:|---:|---:|---:|
+| train | 1,257 | 149 | 44,592 | 320 | 0.39% | 77.3% |
+| test (held out) | 233 | 14 | 7,451 | 30 | 0.15% | 68.3% |
+
+The nine-point accuracy drop is **not reportable**. It rests on 14 edits and 30 word
+operations, and at that size a true rate of 77% produces a reading of 68% routinely. The
+finding is the sample size itself: **at current reach the held-out split cannot referee
+anything.** A rule firing on 6% of paragraphs leaves too few held-out edits to separate two
+methods, so a single train/test split is the right structure for reporting and the wrong one
+for comparison.
+
+**Strategy.** Keep the split for reporting. For method comparison use k-fold over the 25
+documents, which costs one extra corpus pass per fold and puts every paragraph in a held-out
+position exactly once. Until that exists, no learned method should be admitted on a held-out
+number, because there is not enough held-out signal to admit it with.
+
+---
+
+## C15. A closed edit vocabulary writes most of what Opus writes; plain code writes none of it
+
+**Evidence.** `manage.py execute` hands a backend one span the gold editor changed, four words
+of context each side, and the name of the change made there, and asks for the replacement. The
+site is a gift and the wording is not, which separates *can a local executor perform this
+transformation* from *can it decide where*. Nothing in the repo had asked those two questions
+apart before. 20,243 spans from 1,490 paragraphs: 13,316 rewriting (replace or insert) and
+6,927 deletions.
+
+Span closure is the master metric read at span level, so the two anchors are the two things the
+engine can already do:
+
+| Backend | Answered | Exact | Span closure | Rewriting closure | Rewriting exact |
+|---|---:|---:|---:|---:|---:|
+| `keep`, the zero of the scale | 100% | 0.0% | 0.0% | 0.0% | 0.0% |
+| `delete`, drop the span | 100% | 34.2% | 50.1% | 28.8% | 0.0% |
+| `template`, plain code | 35% | 34.6% | 30.0% | **0.2%** | 0.5% |
+| `tagger-ceiling`, a closed vocabulary | 100% | 76.7% | 66.8% | **52.6%** | 64.6% |
+
+Two readings, and they point opposite ways.
+
+**Plain code is done.** The `template` backend drops a span and respells one, which is
+everything a rule layer can justify without knowing what an editor would have written. On the
+rewriting spans it closes **0.2%**, against 28.8% for deleting the span blind. C1 said the
+engine can only delete; this is the same finding at span level and with the ceiling attached,
+and it settles that no further work on hand-written realisation is worth doing.
+
+**A tiny induced vocabulary is not.** `tagger-ceiling` holds **970 phrases**, every stretch of
+words written twice or more in the training documents, plus the inflection changes a tagger
+generates rather than looks up. With perfect tag choice that vocabulary reproduces Opus exactly
+on 64.6% of rewriting spans and closes 52.6% of the rewriting gap. It reads the gold and is a
+ceiling, not a system score, but it is the ceiling that decides whether Phase 3 is worth
+building, and it is nearly twice the delete anchor.
+
+**It transfers.** The vocabulary is counted on training documents only and scored on both sides:
+
+| Backend | Train closure | Held-out closure | Held-out spans |
+|---|---:|---:|---:|
+| `delete` | 50.0% | 50.8% | 2,916 |
+| `tagger-ceiling` | 67.0% | 65.1% | 2,916 |
+
+A two-point gap on **2,916 held-out spans**, which is the first held-out measurement in this
+project with enough behind it to mean anything. C14's held-out closure rests on 14 edits; this
+rests on two thousand nine hundred. Span-level measurement is what makes the corpus big enough
+to referee, and that is a structural finding, not an incidental one.
+
+**The residual is one family.** Per family, over rewriting spans only:
+
+| Family | Spans | Share of gap | `delete` | `tagger-ceiling` | Share of residual |
+|---|---:|---:|---:|---:|---:|
+| phrase | 5,537 | 62.1% | 23.9% | **35.4%** | **84.7%** |
+| support-verb | 1,194 | 9.6% | 67.3% | 91.9% | 1.6% |
+| voice | 703 | 7.5% | 37.4% | 50.5% | 7.8% |
+| realisation | 2,240 | 6.6% | 8.6% | 93.7% | 0.9% |
+| lexical | 2,063 | 5.4% | 1.9% | 82.0% | 2.0% |
+| adjunct | 234 | 2.5% | 73.0% | 93.9% | 0.3% |
+| connective | 719 | 2.2% | 11.1% | 90.1% | 0.5% |
+| nominalisation | 173 | 1.7% | 48.5% | 55.1% | 1.6% |
+| morphology | 309 | 0.8% | 0.6% | 96.8% | 0.1% |
+
+Everything a closed vocabulary can be expected to hold, it holds: connectives at 90.1% against
+11.1% for deleting them, morphology at 96.8% against 0.6%, lexical swaps at 82.0% against 1.9%.
+These are the families where deletion is not merely worse but useless, and they are exactly the
+families a tag vocabulary is shaped for.
+
+**84.7% of everything a perfect tagger cannot reach is `phrase`**, and `phrase` plus `voice` is
+92.5% of it. That is the head-changing paraphrase core `typology.md` has been naming since the
+first pass, now sized against a method rather than against nothing. It is the argument for a
+decoder and the argument against reaching for one before the tagger exists: eight rewriting
+spans in ten are not paraphrase.
+
+**A metric this probe had to fix in flight.** The bar was named beforehand as 40% exact-or-near
+match, near meaning within one word of Opus. Doing nothing scores **39.1%** on it, because a
+one-word replacement is by definition one word from its own source. That is a metric nobody can
+fail, which is the defect this project has shipped before, and it was caught by the `keep`
+anchor rather than by inspection. Near match is dropped. The 40% is applied to exact match, and
+a second gate is added that a do-nothing also cannot pass: a rewriting backend has to close more
+of the span gap than blindly deleting the span does.
+
+**Two numbers that must not be confused.** Span-level gap sums 57,220 operations against the
+paragraph-level closure denominator of 52,043. They differ because span distances are summed per
+segment and do not cancel across a paragraph. Span closure orders methods for one transformation;
+paragraph closure is still the number the project is scored on.
+
+**Not measured.** The `decoder` backend is written and unexercised: no Ollama is installed on
+this machine, so it reports unavailable and refuses every task. Its row is therefore absent
+rather than zero, and the paraphrase residual has an argued size and no measured executor.
+
+**Why it is a constraint.** The generation spine was deferred through this whole document on the
+grounds that deletion still had room. That was right about the ordering and wrong about the
+difficulty: the part of generation that is a closed vocabulary is 970 entries and reaches half
+the rewriting gap, and the part that needs a model is one family. Those are different projects
+and were being treated as one.
+
+**Strategy.** Build the tagger next, not the decoder. It is CPU-feasible, it cannot write
+outside an inspectable vocabulary so G8 holds by construction, and its per-token threshold is
+the band dial that replaces the hand-set numbers in `lint/bands._THRESHOLDS`. The decoder is
+scoped to `phrase` and `voice` and does not start until the tagger's real (not oracle) score
+exists, because the residual is only worth a model if the tagger has already taken the rest.
+
+**Experiments.**
+1. ~~*Oracle-execution probe before building any of it.*~~ Built: `manage.py execute`, with
+   `keep` and `delete` as anchors and `--reproduce` for the determinism check.
+2. *Measure the decoder.* Install Ollama, pull one small instruct model, run
+   `manage.py execute --backend decoder --family phrase -n 200`. The question is narrow: on the
+   one family a vocabulary cannot hold, does a 4B model at a gold site beat 35.4%?
+3. *Sweep the vocabulary threshold.* 970 phrases is one setting of "written at least twice".
+   The curve from 1 to 10 sightings says how much of the ceiling is memorisation of the training
+   documents and how much is a genuinely closed set, and the held-out column already says the
+   answer is mostly the latter.
+4. *Split the `phrase` residual.* 84.7% of the residual in one bucket is a classification
+   failure as much as a linguistic fact. `phrase` currently absorbs reordering, compression and
+   full rewrite alike, and the three have different executors.
+
+---
+
 ## Ordering
 
 Derived from the constraints rather than from the family sizes, which is the change from
@@ -696,19 +909,30 @@ Derived from the constraints rather than from the family sizes, which is the cha
 
 **Next.**
 
-10. **C12a**, wire the high-precision gate as a restraint rule and re-measure the attestation
+10. ~~**C14**, the corpus correction and a held-out split.~~ Resolved. The corpus is 1,490
+    slots and not 1,523, `induce` and `probe` read the train split only, and `evaluate`
+    reports both sides. The held-out side carries too few edits to referee a method, so
+    comparison needs k-fold over documents before any learned method is admitted.
+11. ~~**C15**, the oracle-execution probe, before anything is built to generate.~~ Resolved.
+    Plain code closes 0.2% of the rewriting gap; a 970-phrase vocabulary induced from the
+    training documents closes 52.6% of it and holds on 2,916 held-out spans. Item 16 below is
+    no longer one thing.
+12. **C12a**, wire the high-precision gate as a restraint rule and re-measure the attestation
     ceiling. Cheap, and the result is already in hand.
-11. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
+13. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
     bounding it, and now blocking: closure rewards agreement with one editor, so a rule that is
     right about Opus and wrong about English raises it. Triage with "attested by neither" first.
-12. **`sentence` dropping**, promoted past `adjunct` by C1's corrected table. 8,255 words, 100%
+14. **`sentence` dropping**, promoted past `adjunct` by C1's corrected table. 8,212 words, 100%
     deletion, and 18.1 words per decision against `adjunct`'s 3.3. For a precision-limited engine
     the right family is the one that moves the most words per licence risk taken. Needs C12b.
-13. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
+15. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
     choose which paragraphs absorb it. The first thing in this project that cannot be decided one
     paragraph at a time, and `typology.md` D6 now confirmed rather than assumed.
-14. **C1**, the generation spine, tested in isolation before any family depends on it. Further
-    deferrable than this document used to claim, since deletion reaches 68.9% and not 46%.
+16. **The edit tagger**, which is what C1's "generation spine" turned out to mostly be: a closed
+    induced vocabulary applied contextually, CPU-feasible, unable to write outside its own tag
+    set. Tested in isolation on gold spans first, which C15 has now done for its ceiling.
+17. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
+    cannot hold. Last, and only once the tagger has a real score rather than a ceiling.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
 edits arbitrated.

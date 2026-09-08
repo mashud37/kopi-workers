@@ -3,8 +3,8 @@
 What a deterministic plain-language linter for academic prose actually has to do, derived
 from measurement rather than intuition.
 
-**Source.** 1,523 paragraphs edited by Opus across 25 documents and four intensity bands,
-mined from kopi-learner. Aligned into 7,355 sentence beads and 22,631 span-level
+**Source.** 1,490 paragraphs edited by Opus across 25 documents and four intensity bands,
+mined from kopi-learner. Aligned into 7,225 sentence beads and 22,279 span-level
 transformations by `evidence/`. Regenerate with `python manage.py evidence --role opus`;
 the full report is `output/evidence_opus.md`.
 
@@ -18,12 +18,12 @@ task accurately and are not a general account of English prose.
 ### 1.1 The existing rule set is not a partial solution
 
 kopi-editor ships 165 deterministic rules: 103 filler phrases, 19 clichés, 19 word
-substitutions, 24 padding-tail patterns. Across 22,631 gold transformations they account
+substitutions, 24 padding-tail patterns. Across 22,279 gold transformations they account
 for **44**.
 
 | | |
 |---|---:|
-| Transformations Opus made | 22,631 |
+| Transformations Opus made | 22,279 |
 | Reachable by the current rule tables | 44 |
 | Coverage | **0.2%** |
 
@@ -39,26 +39,26 @@ structural work first, and the two orderings barely agree.
 
 | Family | Instances | Share | Words moved | Words per instance |
 |---|---:|---:|---:|---:|
-| `sentence` (dropping) | 457 | 2.0% | **8,255** | 18.1 |
-| `phrase` (paraphrase) | 6,026 | 26.6% | 7,176 | 1.2 |
-| `adjunct` | 1,958 | 8.7% | 6,374 | 3.3 |
-| `clause` | 781 | 3.5% | 3,208 | 4.1 |
-| `voice` | 1,176 | 5.2% | 3,032 | 2.6 |
-| `support-verb` | 1,206 | 5.3% | 2,600 | 2.2 |
-| `realisation` | 3,843 | 17.0% | 2,286 | 0.6 |
-| `relative-clause` | 196 | 0.9% | 1,043 | 5.3 |
-| `stance` | 628 | 2.8% | 883 | 1.4 |
-| `lexical` | 2,870 | 12.7% | 862 | 0.3 |
-| `modifier` | 456 | 2.0% | 608 | 1.3 |
-| `punctuation` | 1,627 | 7.2% | 369 | 0.2 |
+| `sentence` (dropping) | 454 | 2.0% | **8,212** | 18.1 |
+| `phrase` (paraphrase) | 5,932 | 26.6% | 7,081 | 1.2 |
+| `adjunct` | 1,933 | 8.7% | 6,301 | 3.3 |
+| `clause` | 770 | 3.5% | 3,165 | 4.1 |
+| `voice` | 1,156 | 5.2% | 2,988 | 2.6 |
+| `support-verb` | 1,194 | 5.4% | 2,580 | 2.2 |
+| `realisation` | 3,796 | 17.0% | 2,260 | 0.6 |
+| `relative-clause` | 194 | 0.9% | 1,038 | 5.4 |
+| `stance` | 618 | 2.8% | 869 | 1.4 |
+| `lexical` | 2,819 | 12.7% | 855 | 0.3 |
+| `modifier` | 448 | 2.0% | 597 | 1.3 |
+| `punctuation` | 1,582 | 7.1% | 364 | 0.2 |
 | `figurative` | 70 | 0.3% | 336 | 4.8 |
-| `nominalisation` | 176 | 0.8% | 333 | 1.9 |
-| `connective` | 729 | 3.2% | 98 | 0.1 |
+| `nominalisation` | 173 | 0.8% | 330 | 1.9 |
+| `connective` | 717 | 3.2% | 98 | 0.1 |
 | `filler` | 44 | 0.2% | 86 | 2.0 |
 | `intensifier` | 70 | 0.3% | 71 | 1.0 |
-| `morphology` | 318 | 1.4% | 2 | 0.0 |
+| `morphology` | 309 | 1.4% | 2 | 0.0 |
 
-Total words moved across all families: 37,622.
+Total words moved across all families: 37,233.
 
 This settles a design question that would otherwise be argued about. kopi-editor's product
 contract is a **word budget** ("remove about 1,000 words"), so the linter must be built
@@ -72,15 +72,15 @@ Every band draws on the same repertoire. What moves is the mix.
 
 | Family | clarity | light | firm | aggressive | Direction |
 |---|---:|---:|---:|---:|---|
-| `adjunct` | 7.1% | 5.6% | 8.9% | 9.6% | rises |
-| `support-verb` | 4.3% | 3.0% | 5.3% | 6.2% | rises |
-| `clause` | 2.8% | 2.8% | 3.5% | 3.8% | rises |
-| `modifier` | 1.4% | 1.6% | 2.0% | 2.4% | rises |
+| `adjunct` | 7.1% | 4.5% | 8.9% | 9.6% | rises |
+| `support-verb` | 4.3% | 2.7% | 5.3% | 6.2% | rises |
+| `clause` | 2.8% | 2.5% | 3.5% | 3.8% | rises |
+| `modifier` | 1.4% | 1.2% | 2.0% | 2.4% | rises |
 | `sentence` | 1.7% | 0.8% | 2.1% | 2.3% | rises |
-| `lexical` | 14.2% | 18.1% | 12.4% | 11.6% | falls |
-| `voice` | 6.3% | 6.7% | 5.1% | 4.6% | falls |
-| `connective` | 4.0% | 4.2% | 3.3% | 2.6% | falls |
-| `stance` | 3.2% | 3.5% | 2.5% | 2.8% | falls |
+| `lexical` | 14.2% | 20.6% | 12.4% | 11.6% | falls |
+| `voice` | 6.3% | 7.5% | 5.1% | 4.6% | falls |
+| `connective` | 4.0% | 4.7% | 3.3% | 2.6% | falls |
+| `stance` | 3.2% | 3.9% | 2.5% | 2.8% | falls |
 
 No family appears only in the aggressive band and none disappears in clarity. That means
 intensity is a **re-ranking of one constraint set**, not four rule sets, which is a strong
@@ -117,7 +117,7 @@ Span families, Qwen's share relative to Opus's:
 Read together: Qwen reaches for the blunt instruments (drop the sentence, split the
 sentence, paraphrase freely) and neglects the careful ones (repair the function words,
 manage the connectives, recover the agent, unpack the nominalisation). It edits more, 26,092
-transformations against 22,631, and edits worse.
+transformations against 22,279, and edits worse.
 
 This is the most encouraging result in the analysis, because the deficit is not where a
 rule-based system is weak. **Restraint, repair and flow management are precisely what
@@ -130,15 +130,15 @@ up after yourself".
 
 ## 2. Sentence-level operations
 
-What happens to a sentence as a whole, over 7,355 aligned beads.
+What happens to a sentence as a whole, over 7,225 aligned beads.
 
 | Operation | Count | Share | Meaning |
 |---|---:|---:|---|
-| `rewrite` | 5,251 | 71.4% | rewritten in place |
-| `keep` | 923 | 12.5% | returned untouched |
-| `merge` | 530 | 7.2% | absorbed into a neighbour |
-| `delete` | 457 | 6.2% | cut outright |
-| `split` | 194 | 2.6% | became several sentences |
+| `rewrite` | 5,141 | 71.2% | rewritten in place |
+| `keep` | 909 | 12.6% | returned untouched |
+| `merge` | 527 | 7.3% | absorbed into a neighbour |
+| `delete` | 454 | 6.3% | cut outright |
+| `split` | 194 | 2.7% | became several sentences |
 
 **L1. Restraint.** One sentence in eight comes back untouched. Deciding *not* to edit is a
 first-class operation and the one a linter is structurally worst at, since a rule that
@@ -155,7 +155,7 @@ Merge subtypes worth separate rules: coordinate merge; relative-clause absorptio
 participial absorption ("They spoke on X" becoming ", showing X"); appositive absorption
 ("in the form of a randomly chosen name" becoming ", a randomly chosen name").
 
-**L3. Deletion.** 457 sentences dropped, moving 8,255 words, the single largest source of
+**L3. Deletion.** 454 sentences dropped, moving 8,212 words, the single largest source of
 reduction in the corpus. Band-gated and the highest-risk operation in the system.
 
 > This figure was wrong on the first pass. A monotone aligner cannot distinguish "two
@@ -173,7 +173,7 @@ reduction in the corpus. Band-gated and the highest-risk operation in the system
 Ordered by words moved, since that is what the product contract measures.
 
 ### 3.1 `sentence`: dropping a whole sentence
-457 instances, 8,255 words, 18.1 words each. Band-gated: 1.7% of clarity activity, 2.3% of
+454 instances, 8,212 words, 18.1 words each. Band-gated: 1.7% of clarity activity, 2.3% of
 aggressive. Requires a redundancy or nuclearity judgement plus a guarantee that no
 proposition is lost. kopi-editor already has the redundancy half (IDF-weighted overlap and
 MMR selection); it has nothing for the "marginal but not repeated" case.
@@ -329,7 +329,7 @@ Carried over from kopi-editor's guard, plus what the evidence adds.
 | Band | Median content loss | Sentences |
 |---|---:|---:|
 | clarity | 8.3% | 1,769 |
-| light | 7.1% | 309 |
+| light | 6.7% | 196 |
 | firm | 14.3% | 2,087 |
 | aggressive | 18.2% | 1,810 |
 
@@ -349,7 +349,7 @@ threshold.
 1. **`realisation` is a layer, not a rule.** 17% of transformations, forced by the others.
    Nothing else can be built safely first.
 2. **Structural families carry the word budget.** `sentence`, `adjunct`, `clause`, `voice`,
-   `support-verb`, `relative-clause`: 5,774 instances, 24,512 words, 65% of everything moved.
+   `support-verb`, `relative-clause`: 5,701 instances, 24,284 words, 65% of everything moved.
 3. **Lexical work is a separate product.** High frequency, low word impact, blocked on
    term-of-art protection rather than on candidate generation.
 4. **Restraint needs its own mechanism.** 12.6% of sentences are correctly left alone and
