@@ -46,26 +46,27 @@ def _parser():
         sp.done()
 
 
-def _run_backends(names: list, everything: list, scored: list) -> dict:
+def _run_backends(names: list, work: dict) -> dict:
     """Prepare and score each backend in turn, cheapest first.
 
     Args:
         names: backend names in report order.
-        everything: every oracle task, which is what a backend fits its state on.
-        scored: the tasks to score, narrowed by a family filter when one was given.
+        work: ``{"everything", "scored", "transport"}``. A backend fits its state
+            on every task and is scored on the narrowed set.
 
     Returns:
         ``{"results": {name: score}, "vocabulary": int}``.
     """
     from execute import backends, oracle
 
+    everything, scored = work["everything"], work["scored"]
     results, vocabulary = {}, 0
     for name in names:
         entry = backends.BACKENDS[name]
         sp = StepSpinner(f"preparing {name}")
         sp.start()
         try:
-            state = entry["prepare"]({"tasks": everything})
+            state = entry["prepare"]({"tasks": everything, "transport": work["transport"]})
         finally:
             sp.done()
         if state.get("available") is False:
@@ -149,8 +150,22 @@ def _chosen(backend: str | None) -> list:
     return [backend]
 
 
-def run(mode: str = "oracle", backend: str | None = None,
-        family: str | None = None, limit: int | None = None) -> None:
+def _agreed_to_spend(names: list, transport: str, spans: int) -> bool:
+    """Ask before firing thousands of calls at a service that bills by the second.
+
+    The served vLLM scales to zero, so a run wakes a GPU instance and holds it up
+    for the whole pass. That is the one action here with a bill attached, and it
+    is the user's to authorise rather than a default.
+    """
+    if "decoder" not in names or transport != "served":
+        return True
+    ui.warn(f"{spans} calls to the served model, which wakes a GPU instance for the run")
+    ui.info("use --transport local for a model on this machine, or -n to shorten the pass")
+    return ui.confirm("Run against the served endpoint?", default_yes=False)
+
+
+def run(mode: str = "oracle", backend: str | None = None, family: str | None = None,
+        limit: int | None = None, transport: str = "served") -> None:
     from execute import oracle
 
     ui.step("Execute")
@@ -177,8 +192,11 @@ def run(mode: str = "oracle", backend: str | None = None,
         raise SystemExit(f"no oracle tasks in family {family!r}")
     if mode == "reproduce":
         return _reproduce(everything, scored[:_REPRODUCE_TASKS], names)
+    if not _agreed_to_spend(names, transport, len(scored)):
+        raise SystemExit("nothing run")
 
-    ran = _run_backends(names, everything, scored)
+    work = {"everything": everything, "scored": scored, "transport": transport}
+    ran = _run_backends(names, work)
     corpus = {
         "tasks": len(scored),
         "paragraphs": len(samples),

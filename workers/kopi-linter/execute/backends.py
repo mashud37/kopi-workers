@@ -2,7 +2,7 @@
 span and its context into a replacement, or refuses. The oracle probe scores
 them side by side.
 """
-from execute import decoder, tagger, template
+from execute import ceiling, decoder, template
 
 
 def _no_state(context: dict) -> dict:  # lint-style: ignore FN004
@@ -43,8 +43,8 @@ BACKENDS = {
         "what": "plain code: drop the span, or respell it",
     },
     "tagger-ceiling": {
-        "prepare": tagger.prepare,
-        "execute": tagger.execute,
+        "prepare": ceiling.prepare,
+        "execute": ceiling.execute,
         "anchor": False,
         "reads_gold": True,
         "free": True,
@@ -56,7 +56,7 @@ BACKENDS = {
         "anchor": False,
         "reads_gold": False,
         "free": False,
-        "what": f"a small model on local Ollama ({decoder.MODEL}), decoded greedily",
+        "what": "a small instruct model, served or local, decoded greedily",
     },
 }
 

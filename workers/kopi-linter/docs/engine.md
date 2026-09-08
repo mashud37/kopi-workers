@@ -87,15 +87,29 @@ asked to decide where to fire.
 | `oracle.py` | One task per gold span edit, scored as span-level closure against Opus's own target | running | 20,243 spans over 1,490 paragraphs |
 | `oracle.py` | `keep` and `delete` carried as anchors in every table, so a degenerate measure shows itself | running | caught the near-match defect, C15 |
 | `template.py` | Plain code: drop the span, or respell it | running | **0.2%** of the rewriting gap; refused |
-| `tagger.py` | Closed edit vocabulary induced from the training documents, plus generated inflection | running | ceiling **52.6%** rewriting closure, 970 phrases |
-| `decoder.py` | Small instruct model on local Ollama, greedy at fixed seed | built, unverified | **unmeasured**: no Ollama on this machine |
+| `ceiling.py` | Closed edit vocabulary induced from the training documents, plus generated inflection | running | ceiling **52.6%** rewriting closure, 970 phrases |
+| `decoder.py` | Small instruct model, greedy at fixed seed, over the served vLLM or a local Ollama | built, unverified | **unmeasured**: no endpoint configured, no Ollama here |
 | `backends.py` | One dict registry; a backend is `prepare` plus `execute`, no classes | running | |
 | `cli/execute_cmd.py` | `--reproduce`: two passes, byte-identical, with a sampling control that must fail | built, unverified | control needs Ollama; free backends match |
 
-The tagger row reads the gold and is a ceiling, never a system score. It answers one question:
+The `ceiling.py` row reads the gold and is a ceiling, never a system score. It answers one question:
 if every tag choice were correct, how much of what Opus wrote could a closed vocabulary spell?
 
-## 7. Headline numbers, with their caveats
+## 7. Edit tagging (`tagging/`)
+
+The licence and the execution asked as one question, per token.
+
+| Component | Technique | Status | Measured at |
+|---|---|---|---|
+| `vocabulary.py` | LaserTagger-shape tags: keep or delete each source word, plus a phrase written before it | running | 205,800 words, 0 paragraphs unalignable |
+| `vocabulary.py` | Phrase vocabulary induced from training documents, coverage curve against held-out need | running | 975 phrases cover 62.6%; 27 cover 25.2% |
+| `features.py` | 17 parse and frequency features per word, no embeddings | running | 6,136 columns after one-hot |
+| `fit.py` | Logistic regression over keep-or-delete, scored on held-out documents | running | **61.0%** precision at 0.60, against 25.2% guessing |
+| `fit.py` | Projected closure per threshold, so the operating point is chosen in the project's own metric | running | best 2.7%, an upper bound |
+| | Phrase head | **missing**; only the keep-or-delete half is fitted |
+| | Tags wired into `lint/registry.py` | **missing**; nothing yet proposes an edit from a tag |
+
+## 8. Headline numbers, with their caveats
 
 Corpus SARI over 1,490 gold paragraphs:
 

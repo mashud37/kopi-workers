@@ -867,6 +867,90 @@ exists, because the residual is only worth a model if the tagger has already tak
 
 ---
 
+## C16. The licence is learnable per token, and the wall was the feature set
+
+**Evidence.** `manage.py tag` reads the corpus as an edit-tagging problem. Every source word gets
+one tag: keep it or delete it, plus an optional phrase to write before it. That one scheme
+expresses deletion, sentence dropping, lexical swap, connective repair and sentence merge, which
+is why it is worth measuring before anything is fitted to it. **205,800 words tagged over 1,490
+paragraphs, 0 paragraphs unalignable.**
+
+| Tag | Share, train | Share, held out |
+|---|---:|---:|
+| `KEEP` | 73.5% | 74.7% |
+| `DELETE` | 26.5% | 25.2% |
+| carries a phrase | 7.2% | 6.3% |
+
+**Deletion is a quarter of every paragraph, not a rare event.** The problem this project has
+called intractable is a 74/26 binary classification with 174,231 training examples. Nothing in
+C9 to C12 said that, because none of them looked at a token.
+
+**A plain logistic regression breaks the wall.** 17 parse and frequency features, 6,136 columns
+after one-hot encoding, fitted on the training documents and scored on 31,464 held-out words.
+No embeddings, no tuning. This is the learned linear baseline `approaches.md` 2.5 has called
+standard since the first pass and nobody had built:
+
+| Threshold | Words fired on | Precision | Recall | Projected closure |
+|---:|---:|---:|---:|---:|
+| 0.50 | 2,594 | 52.4% | 17.1% | 1.7% |
+| **0.60** | **920** | **61.0%** | **7.1%** | **2.7%** |
+| 0.70 | 332 | 67.5% | 2.8% | 1.6% |
+| 0.80 | 80 | 85.0% | 0.9% | 0.8% |
+| 0.90 | 25 | 100.0% | 0.3% | 0.3% |
+
+Guessing delete for every word scores **25.2%**. So 0.60 is a **2.4x lift** and 0.80 is **3.4x**,
+against C10's hand-crafted ranking at 1.88x and C12's best gate at 1.24x. And unlike either of
+those it yields a *probability*, which is what C9 said a per-category rate could never be and
+what the band system has always needed.
+
+**The best operating point is 0.60, at a projected 2.7% closure.** The measured held-out closure
+today is 0.3%, so this is roughly **nine times the current reach at better accuracy**, from a
+model that took one afternoon and no GPU. Projected, not measured: it counts one deleted word as
+one word operation and ignores the repair a deletion forces and the guard that can reject a
+paragraph. Both only cost, so 2.7% is an upper bound.
+
+**The 0.90 and 0.95 rows are not reportable.** They rest on 25 words and 7 words, and 100%
+precision on 25 tokens is C14's lesson arriving a second time. The trustworthy range is 0.50 to
+0.70, where hundreds to thousands of tokens sit behind each figure.
+
+**The phrase vocabulary is genuinely closed, and flat.** Fitted on the training documents,
+measured against what the held-out documents need:
+
+| Written at least | Vocabulary | Held-out phrases covered |
+|---:|---:|---:|
+| 1x | 5,050 | 68.9% |
+| 2x | 975 | 62.6% |
+| 5x | 308 | 52.9% |
+| 25x | 55 | 34.6% |
+| 50x | 27 | 25.2% |
+
+27 phrases reach a quarter of it and 5,050 reach two thirds, so the tail is long, thin, and not
+worth buying. The 975-phrase figure independently reproduces C15's span-level 970, which is a
+useful cross-check on two different derivations of the same set.
+
+**Why it is a constraint.** C9 concluded that "the decision is contextual and every mechanism
+tried has been type-level", and that was right. What it could not say, because nothing had been
+fitted, is whether the contextual decision was *hard* or merely *unattempted*. It was
+unattempted. Every negative result from C9 to C12 is a fact about a hand-crafted feature set,
+which is exactly what this document warned might be true and could not check.
+
+**Strategy.** Wire the token classifier into the engine as a rule that proposes deletions at a
+band-set threshold, and measure real closure rather than projected. The threshold is the band
+dial, so `lint/bands._THRESHOLDS` stops being hand-set numbers. Only then add the phrase head,
+and only then an encoder.
+
+**Experiments.**
+1. ~~*Tag the corpus and fit the baseline.*~~ Built: `manage.py tag`.
+2. *Ablate the length features.* `position` and `sentence_length` are in the feature set, and
+   C12 found that the best hand-swept feature was "length in disguise". If the lift survives
+   their removal it is syntactic; if it does not, this is C12 again wearing a coat.
+3. *Wire it in and measure real closure.* The 2.7% is an upper bound and the gap between it and
+   the measured number is the cost of realisation and the guard, which nothing has yet priced.
+4. *Then the encoder.* The plan staged CPU-frozen embeddings after the linear baseline precisely
+   so this comparison would exist. It now does, and the baseline is the thing to beat.
+
+---
+
 ## Ordering
 
 Derived from the constraints rather than from the family sizes, which is the change from
@@ -928,10 +1012,14 @@ Derived from the constraints rather than from the family sizes, which is the cha
 15. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
     choose which paragraphs absorb it. The first thing in this project that cannot be decided one
     paragraph at a time, and `typology.md` D6 now confirmed rather than assumed.
-16. **The edit tagger**, which is what C1's "generation spine" turned out to mostly be: a closed
-    induced vocabulary applied contextually, CPU-feasible, unable to write outside its own tag
-    set. Tested in isolation on gold spans first, which C15 has now done for its ceiling.
-17. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
+16. ~~**The edit tagger**, measured before it is wired.~~ Resolved as **C16**: 26.3% of source
+    words are deletions, and a logistic regression over parse features reaches 61.0% precision
+    at a projected 2.7% closure, against 25.2% for guessing. The wall C9 to C12 hit was the
+    feature set.
+17. **Wire the token classifier in and measure real closure**, with the threshold as the band
+    dial. The 2.7% is an upper bound and the shortfall is what realisation and the guard cost.
+18. **The phrase head**, then a frozen encoder, in that order, each against the C16 baseline.
+19. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
     cannot hold. Last, and only once the tagger has a real score rather than a ceiling.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not

@@ -12,11 +12,12 @@ from cli import (
     lint_cmd,
     probe_cmd,
     rank_cmd,
+    tag_cmd,
     ui,
 )
 from cli import menu as menu_mod
 from evidence import load
-from execute import backends
+from execute import backends, decoder
 from lint import bands
 
 
@@ -48,7 +49,13 @@ def _measurement_parsers(sub) -> None:
     executor.add_argument("--backend", choices=backends.NAMES, help="one backend (default: the free ones)")
     executor.add_argument("--family", help="score only this transformation family")
     executor.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+    executor.add_argument("--transport", default=decoder.DEFAULT_TRANSPORT, choices=decoder.TRANSPORTS, help="where the decoder runs (default: served)")
     executor.add_argument("--reproduce", action="store_true", help="check two runs write the same bytes")
+
+    tagger = sub.add_parser(
+        "tag", help="Read the gold corpus as an edit-tagging problem"
+    )
+    tagger.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
 
     prober = sub.add_parser(
         "probe", help="Ask whether Opus performs a transformation, before building it"
@@ -101,7 +108,10 @@ def main():
         return rank_cmd.run(limit=args.limit, split=args.split)
     if args.command == "execute":
         return execute_cmd.run(mode="reproduce" if args.reproduce else "oracle",
-                               backend=args.backend, family=args.family, limit=args.limit)
+                               backend=args.backend, family=args.family, limit=args.limit,
+                               transport=args.transport)
+    if args.command == "tag":
+        return tag_cmd.run(limit=args.limit)
     if args.command == "probe":
         return probe_cmd.run(name=args.method, limit=args.limit)
     if args.command == "induce":

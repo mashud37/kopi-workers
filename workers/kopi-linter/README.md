@@ -12,9 +12,11 @@ layer aligns every gold edit with its original, classifies each difference by it
 linguistic type, and reports what a rule set would actually have to do; the transformation
 layers are then built and justified against that report, not against intuition.
 
-It holds no secrets and nothing leaves the machine, because a linter that never sends a
-paragraph anywhere is the point rather than a feature. The one optional backend that speaks
-a socket speaks it to a model server on localhost.
+Everything that decides *what to change* runs on the machine in front of you, with no
+network call and no API key, because a linter that never sends a paragraph to a stranger is
+the point rather than a feature. One optional backend writes replacement wording with a
+small model, and it can speak either to a model server you have deployed yourself or to one
+running on localhost. Nothing here talks to a third party.
 
 ## Status
 
@@ -22,8 +24,9 @@ Early, and deliberately measured rather than advertised. The evidence layer, the
 engine and the experiment harness all run. One transformation family is live
 (relative-clause reduction); a second (`adjunct`) has three competing licence models under
 comparison and none of them is registered yet. The execution tier is probed but not built:
-`manage.py execute` has measured what a local backend could write at a known site, and
-nothing yet writes one during a lint.
+`manage.py execute` has measured what a backend could write at a known site, and nothing yet
+writes one during a lint. The tagging layer is measured but not wired: `manage.py tag` fits a
+keep-or-delete decision per word, and no rule reads it.
 
 Progress is tracked as a single per cent, **closure**, defined in
 [docs/good.md](docs/good.md) section 0 and standing at 0.4%. The work follows a fixed loop,
@@ -76,7 +79,8 @@ lint/                   edit, registry, select, bands, guard, run: the engine
 rules/                  one module per transformation family, plus induced tables
 grammar/                orthography (British/American), realise (surface repair)
 eval/                   sari, harness, grammatical: the gate every rule has to pass
-execute/                template, tagger, decoder: backends that write a replacement span
+execute/                template, ceiling, decoder: backends that write a replacement span
+tagging/                vocabulary, features, fit: keep-or-delete decided per word
 experiments/            registry, cases, compare, report: method-versus-method comparison
 cli/                    argparse dispatch, menu, install, ui, progress
 docs/                   typology, approaches, constraints, good, method
@@ -108,7 +112,8 @@ also a direct subcommand.
 |---|---|
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
 | Ask whether Opus performs a transformation at all | `manage.py probe <generator> [-n N]` |
-| Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--reproduce]` |
+| Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--transport {served\|local}] [--reproduce]` |
+| Read the corpus as an edit-tagging problem | `manage.py tag [-n N]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N] [--split {all\|train\|test}]` |
 | Compare scoring functions for which phrase to drop first | `manage.py rank [-n N] [--split {all\|train\|test}]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |

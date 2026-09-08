@@ -3,3 +3,4 @@ wordfreq
 nltk
 textstat
 lemminflect
+PyYAML
