@@ -3,6 +3,7 @@ import argparse
 import sys
 
 from cli import (
+    damage_cmd,
     eval_cmd,
     evidence_cmd,
     execute_cmd,
@@ -56,6 +57,11 @@ def _measurement_parsers(sub) -> None:
         "tag", help="Fit the keep-or-delete decision the linter uses"
     )
     tagger.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    damage = sub.add_parser(
+        "damage", help="Build the hand-judging sheet and report the damage rate"
+    )
+    damage.add_argument("-n", "--limit", type=int, default=damage_cmd.SIZE, help="how many changed paragraphs to judge")
 
     prober = sub.add_parser(
         "probe", help="Ask whether Opus performs a transformation, before building it"
@@ -112,6 +118,8 @@ def main():
                                transport=args.transport)
     if args.command == "tag":
         return tag_cmd.run(limit=args.limit)
+    if args.command == "damage":
+        return damage_cmd.run(size=args.limit)
     if args.command == "probe":
         return probe_cmd.run(name=args.method, limit=args.limit)
     if args.command == "induce":

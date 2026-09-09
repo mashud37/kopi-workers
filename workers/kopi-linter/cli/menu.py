@@ -2,6 +2,7 @@
 the user closes it, returning here after every action finishes or fails, and
 mirrors the subcommands one-to-one."""
 from . import (
+    damage_cmd,
     eval_cmd,
     evidence_cmd,
     execute_cmd,
@@ -20,6 +21,7 @@ _ACTIONS = [
     ("probe", "Ask whether Opus performs a transformation, before building it", probe_cmd.run),
     ("execute", "Probe whether a local backend can perform the gold edits", execute_cmd.run),
     ("tag", "Fit the keep-or-delete decision the linter uses", tag_cmd.run),
+    ("damage", "Build the hand-judging sheet and report the damage rate", damage_cmd.run),
     ("experiment", "Compare every method for one transformation family", experiment_cmd.run),
     ("rank", "Compare scoring functions for which phrase to drop first", rank_cmd.run),
     ("evaluate", "Score the linter against Opus on the gold corpus", eval_cmd.run),

@@ -6,6 +6,12 @@ from pathlib import Path
 
 from . import ui
 
+# Every gate in the rule layer reads `dep_`, `tag_` and `pos_`, so the parser
+# model is part of the result and not part of the environment: a bump moves every
+# number in the docs without touching a line of code.
+_MODEL = "en_core_web_sm"
+_MODEL_VERSION = "3.7.1"
+
 _PACKAGES = [
     ("spacy", "parser"),
     ("wordfreq", "word frequency, for long-to-plain ranking"),
@@ -19,11 +25,14 @@ _PACKAGES = [
 def _check_spacy_model() -> bool:
     try:
         import spacy
-        spacy.load("en_core_web_sm")
+        found = spacy.load(_MODEL).meta["version"]
     except Exception:
-        ui.warn("spaCy model en_core_web_sm missing")
+        ui.warn(f"spaCy model {_MODEL} missing")
         return False
-    ui.ok("spaCy model en_core_web_sm")
+    if found != _MODEL_VERSION:
+        ui.warn(f"spaCy model {_MODEL} is {found}, the pinned version is {_MODEL_VERSION}")
+        return False
+    ui.ok(f"spaCy model {_MODEL} {found}")
     return True
 
 
@@ -76,7 +85,8 @@ def run():
     if missing:
         ui.info("fix: pip install -r requirements.txt")
     if not model_ok:
-        ui.info("fix: python -m spacy download en_core_web_sm")
+        ui.info(f"fix: pip install https://github.com/explosion/spacy-models/releases/"
+                f"download/{_MODEL}-{_MODEL_VERSION}/{_MODEL}-{_MODEL_VERSION}-py3-none-any.whl")
     if not wordnet_ok:
         ui.info("fix: python -c \"import nltk; nltk.download('wordnet')\"")
     if not missing and model_ok and wordnet_ok:

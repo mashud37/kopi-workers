@@ -20,21 +20,22 @@ Measured over all 1,490 gold paragraphs (`manage.py evaluate`):
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do-nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **1.7%** | 4.6% | 68.1% |
+| **kopi-linter** | **1.3%** | 2.7% | 73.2% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
-859 of 52,043 word-edits closed, 2,374 attempted. Held out: **1.5%** against 1.7% on train.
+652 of 52,043 word-edits closed, 1,404 attempted. Held out: **1.1%** against 1.3% on train.
 
-**We are 1.7% of the way to Opus.** Corpus SARI says 0.5428 against a do-nothing 0.2433 and reads
-like halfway. SARI pays for correct keeping, so a linter that touches a third of paragraphs
-collects most of its score for the two thirds it left alone.
+**We are 1.3% of the way to Opus, and that is lower than it was.** Step 9 read 100 changed
+paragraphs by hand and found damage in 48 of them, against the five defects the automatic check
+reported. The priors that answered it cost 0.4 points of closure and removed four fifths of the
+damage, which is the trade `good.md` section 6 point 4 says to take and the first time this
+project has had the number on both sides of it. Nine per cent of changed paragraphs now carry an
+edit a reader would object to.
 
-**Reach is still the problem, and accuracy has started to pay for it.** Just under seven edits in
-ten land on something Opus also changed, against seven and a half before the band thresholds were
-set from the model's operating table. That bought reach from 2.3% to 4.6% and closure from 1.0% to
-1.7%, which is the trade closure is designed to price and it came out positive. It is also the
-first increment here to spend accuracy rather than earn it, and step 9 is what referees whether
-the spend was real.
+**Accuracy is the highest it has been and reach is the lowest since step 6.** Just under three
+quarters of edits land on something Opus also changed. Reach is 2.7% because the engine now
+refuses far more than it did, and because a written phrase moves fewer words than a deletion.
+Nothing in steps 9 to 11 was a reach mechanism; steps 13 and 14 are where reach comes back.
 
 **Qwen is below the break-even line**, changing more than Opus did at under 50% accuracy, so its
 output sits further from Opus's version than the untouched original. One honest caveat: closure
@@ -103,10 +104,7 @@ buy, and states the result that kills it. A step that misses its number is a fin
 
 ```mermaid
 flowchart TD
-    D["steps 1 to 8, done<br/>closure 1.7%, held out 1.5%"] --> S9["9 the hand-checked damage set"]
-    S9 --> S10["10 make selection safe"]
-    S10 --> S11["11 the phrase head"]
-    S11 --> S12["12 a frozen encoder for syntax"]
+    D["steps 1 to 11, done<br/>closure 1.3%, held out 1.1%, 9% of changed paragraphs damaged"] --> S12["12 a frozen encoder for syntax"]
     S12 --> S13["13 document-level allocation"]
     S13 --> S14["14 sentence dropping"]
     S14 --> S15["15 clause and voice deletion"]
@@ -114,7 +112,7 @@ flowchart TD
     classDef done fill:#e6f4ea,stroke:#34a853,color:#1a1a1a;
     classDef open fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a;
     class D done;
-    class S9,S10,S11,S12,S13,S14,S15,S16 open;
+    class S12,S13,S14,S15,S16 open;
 ```
 
 **1. Build the measurement layer first.** *Done.* Bead alignment, the span taxonomy, the
@@ -163,27 +161,30 @@ precision. Closure 1.0% to **1.7%**, held out 1.0% to **1.5%**, reach 2.3% to 4.
 72.1% to 68.1%. Reading the sample output at the new point found a defect that predates the
 change, which is where the sixth shape prior came from.
 
-**9. The hand-checked damage set.** About 100 paragraphs judged against G1 to G3 by hand.
-**Blocking for everything after it**, because closure rewards agreement with one editor and a rule
-that is right about Opus and wrong about English raises it. The three precision readings for the
-shipped rule are 86% (ceiling), 76.1% (closure) and 41% (probe); they measure different things and
-only a hand check says which is nearest to damage. Triage by the "attested by neither" class.
-Fails if hand judgement cannot be made repeatably, in which case quality has no measure and
-nothing that writes words may ship.
+**9. The hand-checked damage set.** *Done, C21, and it was the most expensive result here.* 100
+changed held-out paragraphs and 184 edits judged one at a time against G1 to G3, kept in
+`damage/verdicts.jsonl` and recomputed by `manage.py damage`. **48 of 100 paragraphs were
+damaged** where the automatic check saw five, and agreeing with Opus protected nothing: 50 of the
+140 edits both editors appeared to support were damage. Four fifths of it was three structural
+shapes, so six priors became five stronger ones, held-out closure fell 1.32% to 0.89%, and the
+rate fell to 12%. One half of the step is unanswered: there was one judge, so repeatability is
+still a claim.
 
-**10. Make selection safe before a third producer ships.** Three defects, all latent while one
-learned family is registered and all live the moment another is: selection lets an unlicensed
-ranked guess outweigh a licensed edit, `_trim` drops edits that were not causing the breach, and
-`requirements.txt` pins nothing while every gate reads `dep_`, `tag_` and `pos_` from an unpinned
-parser model. Register the fix for each as an ablation.
-Target: no closure movement, and a pinned run that reproduces today's headline byte for byte.
+**10. Make selection safe before a third producer ships.** *Done, C22.* Licensed edits are
+scheduled on their own and ranked guesses fill what is left, `_trim` drops the edit that relieves
+the breach most cheaply and never one that relieves nothing, and both the requirements and the
+parser model are pinned with `install` failing on a mismatch. It met its target exactly: all 233
+held-out paragraphs come back byte for byte identical, so the fix is free today and the defect
+was real for the day a ranked family registers.
 
-**11. The phrase head.** The other half of the tag: 7.1% of source words carry a phrase against
-26.3% that are deletions, and step 5 showed the vocabulary needed is closed, 975 phrases covering
-62.6% of what held-out documents ask for. This is the first thing here that writes words, and the
-first SARI `add` column above zero.
-Target **2% to 4%**. Fails if writing a phrase cannot hold the accuracy the deletion half reached,
-in which case deletion is the whole of what this approach buys.
+**11. The phrase head.** *Done, C23, and it missed its target by a factor of twenty.* A closed
+table of 348 spans, induced from the training documents, writes what Opus wrote on 81.4% of the
+held-out spans it fires on, and the rule uses it where the deletion model already licensed the
+span. Held-out closure 0.89% to **0.98%**, accuracy 69.5% to 73.9%, and SARI `add` 0.0018 to
+0.0074, the first time that column has been anything. The target of 2% to 4% assumed writing
+would open new sites; it cannot, because the licence is still the deletion model's, so reach
+*fell* from 2.27% to 2.05%. Writing is a precision mechanism here, and the reach is in steps 13
+and 14.
 
 **12. A frozen encoder aimed at syntax.** The step 6 ablation says a bag of lemma one-hots
 represents the syntactic half worst, and a learned deletion lexicon is the transfer risk that
@@ -225,9 +226,10 @@ Stated in advance so it is recognisable when it happens.
 - **Accuracy collapses as reach grows.** The likeliest failure, and step 3 already showed the
   shape: marginal 72.3% against an average of 78.1%. If marginal accuracy tracks toward 50% the
   approach caps out near where it is now.
-- **Closure and quality come apart.** Closure rewards agreement with one editor. Step 6 is the
-  proof that this is not theoretical: ranked on closure alone, the variant that wrecks the grammar
-  wins. Step 9 is what catches the general case, which is why it blocks.
+- **Closure and quality come apart.** Closure rewards agreement with one editor, and step 9
+  measured how far apart: at 1.32% closure a reader found damage in 48 of 100 changed paragraphs,
+  and half of that damage was in edits Opus and Qwen both appeared to support. The damage set is
+  the only instrument that sees it, it is hand-made, and it currently has one judge.
 - **Family sizes keep overstating opportunity.** Step 3's forecast was wrong by 5x because the
   evidence table names the construction involved, not the transformation applied. The attestation
   probe is the general fix and it has already refused one family.

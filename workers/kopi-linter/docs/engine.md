@@ -40,11 +40,20 @@ Status vocabulary, used strictly:
 | `guard.py` | Citation set, number preservation, band floor, non-empty | running | all four passed on a known-broken output |
 | `guard.py` | Quoted spans protected from rule proposals | running | did not protect against the realiser until 2026-07-26 |
 
+## 2a. The hand-checked damage set (`damage/`)
+
+| Component | Technique | Status | Measured at |
+|---|---|---|---|
+| `sheet.py` | Every changed held-out paragraph laid out with its edits, the gold and the triage class | running | 95 paragraphs, 132 edits |
+| `verdicts.py` | One hand verdict per edit id, kept in the tree so the rate can be recomputed | running | 9% of changed paragraphs damaged, one judge |
+| `report.py` | Rate by criterion, by band, by who attests the edit, and by deleted word | running | aggressive 13%, firm 2%, clarity 0% |
+
 ## 3. Transformation families (`rules/`)
 
 | Family | Status | Fired | Attestation |
 |---|---|---|---|
-| `tagged` deletion, fitted per token | running | 1,496 | **ceiling 84.0%**, the highest in the engine |
+| `tagged` deletion, fitted per token | running | 693 | **ceiling 83.7%** |
+| `tagged` rewriting, closed phrase table | running | 127 | **ceiling 73.2%**, the first rule that writes |
 | `relative-clause` reduction (whiz-deletion) | running | 114 | **ceiling 89%**, previously misreported as 100% |
 | `support-verb` collapse | withdrawn | 2 | disagreed twice; 20% base rate did not support firing |
 | `adjunct` PP-drop, structural licence | built, rejected | 647 | **2%** ceiling; over-fires, see constraints C9 |
@@ -110,15 +119,16 @@ The licence and the execution asked as one question, per token.
 | `fit.py` | Projected closure per threshold, so the operating point is chosen in the project's own metric | running | best 4.5%, an upper bound |
 | `fit.py` | Feature-group ablation, each group removed and each on its own | running | length alone fires on 0 of 31,464 words |
 | `model.py` | Weights written out as a generated module and scored with a dot product, so the engine reads no scikit-learn | running | 6,136 columns, round-trips exactly |
-| | Phrase head | **missing**; only the keep-or-delete half is fitted |
+| `phrases.py` | Phrase head as a closed table keyed on the span's text, no model | running | 348 entries, 81.4% exact on held-out spans |
 
 ## 8. The tagger as a rule (`rules/rule_tagged.py`)
 
 | Component | Technique | Status | Measured at |
 |---|---|---|---|
-| `rule_tagged.py` | Per-word score, neighbouring words grouped into one span, probability carried as the edit's confidence | running | 220 fired on 233 held-out paragraphs, 84% attested |
-| `rule_tagged.py` | Six shape priors, each registered as an ablation and each measured | running | 49 introduced defects down to **5**; two priors inert |
-| `rule_tagged.py` | A prior holds one word back and the rest of the run is still deleted | running | 190 words released of 2,681 proposed, worth 0.07 closure points |
+| `rule_tagged.py` | Per-word score, neighbouring words grouped into one span, probability carried as the edit's confidence | running | 118 fired on 233 held-out paragraphs, 86% attested |
+| `rule_tagged.py` | Five shape priors, each registered as an ablation and each measured | running | damage in **48% of changed paragraphs down to 12%**; no ablation survives its cases |
+| `rule_tagged.py` | A prior holds one word back and the rest of the run is still deleted | running | dropping the whole run instead costs 0.13 closure points |
+| `rule_tagged.py` | The phrase table writes where the model licensed the span | running | closure 0.89% to 0.98%, accuracy 69.5% to 73.9% |
 | `grammatical.py` | `subjectless_verb`, for the shape a deleted expletive leaves | running | caught 1 real defect and 1 false positive on a reparsed long sentence |
 | `grammatical.py` | `orphaned_determiner`, keyed on the fine tag because the dependency layer relabels the damage away | running | 3 to 0; see C17 |
 
@@ -129,11 +139,11 @@ Corpus SARI over 1,490 gold paragraphs:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5428 | 0.0052 | 0.7382 | 0.8851 |
+| kopi-linter | 0.5489 | 0.0097 | 0.7349 | 0.9022 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
-Read with section 5.4 of `good.md`: the linter changes **823 of 1,490 paragraphs (55.2%)** and
-moves **1,890 words against Opus's 22,816**. It passes a 32B model on the composite while doing
+Read with section 5.4 of `good.md`: the linter changes **658 of 1,490 paragraphs (44.2%)** and
+moves **1,061 words against Opus's 22,816**. It passes a 32B model on the composite while doing
 under five percent of the work, which is the clearest possible argument for never reporting the
 composite alone.
 
@@ -141,12 +151,14 @@ Closure by split, which is the number that says whether any of this generalises:
 
 | Split | Paragraphs | Closure | Reach | Accuracy |
 |---|---:|---:|---:|---:|
-| train | 1,257 | 1.7% | 4.6% | 68.5% |
-| test (held out) | 233 | **1.5%** | 4.6% | 65.9% |
+| train | 1,257 | 1.3% | 2.7% | 73.3% |
+| test (held out) | 233 | **1.1%** | 2.5% | 73.0% |
 
 The tagger is fitted on the train documents and scores the same on documents it never saw, which
 is the point of the row. It also answers C14: the held-out side used to rest on 14 edits and
 could not separate 68% from 77%, and it now carries hundreds.
 
-The `add` column is still the whole remaining gap, and the phrase head is the first thing that
-would touch it.
+The `add` column moved for the first time, from 0.0052 to 0.0097, and it is still where the gap
+is: Qwen scores 0.2040 there. The phrase table can only write at a site the deletion model
+already licensed, so the rest of that column is behind allocation and sentence dropping rather
+than behind more writing (`constraints.md` C23).

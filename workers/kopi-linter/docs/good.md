@@ -190,7 +190,15 @@ moved. The linter's current 10.3% and 347 words against 22,816 is the real headl
 not visible in SARI at all.
 
 **5.5 Damage rate.** Of the paragraphs changed, how many contain an edit that violates G1 to G3?
-Requires a held-out hand-checked set. It does not exist yet and nothing substitutes for it.
+`manage.py damage` builds the sheet: every paragraph the linter changes in the held-out
+documents, each edit shown against the original and against Opus, with one verdict per edit in
+`damage/verdicts.jsonl`. It stands at **9% of changed paragraphs and 8% of edits**, down from 48%
+and 39% when the set was first read (`constraints.md` C21).
+
+Two things about it are not negotiable. It is judged by hand, so it costs an afternoon per
+reading and cannot be run per commit; and it has had **one judge**, so the rate is one reader's
+opinion until a second reading gives an agreement figure. Nothing else in the panel sees this at
+all: the automatic grammaticality check found five of the seventy-one damaged edits.
 
 ## 6. The bar a method has to clear
 
@@ -206,7 +214,11 @@ To join `lint/registry.py`:
 Point 5 is what `experiments/` exists to make cheap. Until several approaches to a family can be
 run and scored in one command, "we tried X" means "we shipped X".
 
-**Point 4 outranks the master metric, and this is not hypothetical.** Ranked on closure alone,
+**Point 4 outranks the master metric, and this is not hypothetical.** The hand-checked set
+settled it: the configuration with the higher closure was damaging half the paragraphs it
+touched, and no automatic column in the panel could see it (C21).
+
+The smaller version of the same finding, from the ablation table: ranked on closure alone,
 the best variant of the fitted deletion rule is the one with no shape priors at all: it scores
 1.13% against the gated rule's 0.85% and introduces **twenty-one** grammatical defects against
 two (C17, C18). Closure charges one word-operation for deleting a sentence's only verb and a reader

@@ -1,10 +1,14 @@
 """Pick the highest-scoring conflict-free subset of proposed edits via
-weighted interval scheduling, then trim to the word budget by dropping the
-weakest edits, ranked families first.
+weighted interval scheduling, licensed edits first, then trim to the word
+budget by dropping the edits that relieve it most cheaply.
 """
 from bisect import bisect_right
 
 from lint.edit import Edit
+
+# Divisor for an edit of no confidence at all, so ranking by relief per unit of
+# confidence cannot divide by zero.
+_FAINT = 0.01
 
 
 def _best_set(edits: list[Edit], text: str) -> list[Edit]:
@@ -32,14 +36,29 @@ def _best_set(edits: list[Edit], text: str) -> list[Edit]:
     return chosen
 
 
+def _clear_of(edit: Edit, chosen: list[Edit]) -> bool:
+    """Whether ``edit`` overlaps nothing already chosen."""
+    for taken in chosen:
+        if edit.start < taken.end and taken.start < edit.end:
+            return False
+    return True
+
+
 def _trim(kept: list[Edit], text: str, floor: int, ranked_only: bool) -> list[Edit]:
-    """Drop the weakest edits until the result keeps at least ``floor`` words."""
+    """Drop edits until the result keeps at least ``floor`` words.
+
+    The edit dropped is the one giving back the most words for the least
+    confidence, and an edit saving no words is never dropped: it cannot move the
+    constraint, so removing it loses correct work and leaves the breach exactly
+    where it was.
+    """
     original = len(text.split())
     while kept and original - sum(e.words_saved(text) for e in kept) < floor:
-        pool = [e for e in kept if e.ranked] if ranked_only else kept
+        pool = [e for e in kept if e.ranked] if ranked_only else list(kept)
+        pool = [e for e in pool if e.words_saved(text) > 0]
         if not pool:
             break
-        kept.remove(min(pool, key=lambda e: (e.confidence, e.words_saved(text))))
+        kept.remove(max(pool, key=lambda e: e.words_saved(text) / max(e.confidence, _FAINT)))
     return kept
 
 
@@ -69,7 +88,13 @@ def select(edits: list[Edit], text: str, band) -> list[Edit]:
     Returns:
         Edits in document order, guaranteed non-overlapping, so
         :func:`lint.edit.apply_edits` can splice them directly.
+
+    Licensed edits are scheduled on their own and ranked guesses fill what is
+    left. Scheduling both at once compares a probability with an ordering, and a
+    long unlicensed guess then outweighs the short licensed edit it overlaps.
     """
     admissible = [e for e in edits if band.admits(e) and e.start <= e.end]
-    chosen = _best_set(admissible, text)
+    licensed = _best_set([e for e in admissible if not e.ranked], text)
+    free = [e for e in admissible if e.ranked and _clear_of(e, licensed)]
+    chosen = sorted(licensed + _best_set(free, text), key=lambda e: e.start)
     return _within_budget(chosen, text, band)

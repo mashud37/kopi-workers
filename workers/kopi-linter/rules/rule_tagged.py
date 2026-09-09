@@ -25,15 +25,6 @@ _PREP_COMPLEMENTS = frozenset([
     "advmod",
 ])
 
-# Words that modify a noun from in front of it and cannot stand where it stood.
-_ATTACHED = frozenset([
-    "det",
-    "poss",
-    "amod",
-    "compound",
-    "nummod",
-])
-
 # What a verb needs in order to keep standing once the words beside it go.
 _SUPPORTING = frozenset([
     "aux",
@@ -47,19 +38,6 @@ _SUPPORTING = frozenset([
 
 # What a verb governs and cannot be left without.
 _GOVERNED = frozenset([
-    "dobj",
-    "dative",
-    "attr",
-    "oprd",
-])
-
-# What hangs off a verb and is left with nothing to hang off if the verb goes.
-_DEPENDANTS = frozenset([
-    "nsubj",
-    "nsubjpass",
-    "csubj",
-    "csubjpass",
-    "expl",
     "dobj",
     "dative",
     "attr",
@@ -88,28 +66,33 @@ class Gates:
     from intuition, and each names one word the run may not take.
 
     Attributes:
-        keep_the_root: hold back a word that is its own sentence's root, which is
-            what leaves a sentence with no predicate.
+        keep_words_with_dependants: hold back a word any of whose own dependants
+            stays behind, which is what leaves "as us to broader our view" and a
+            sentence with no predicate.
         keep_prepositions_complete: hold back a complement whose preposition
             survives and would be left governing nothing.
-        keep_modifiers_attached: hold back a noun whose determiner or adjective
-            survives and would be left standing on its own.
         keep_verbs_supported: hold back an auxiliary or a subject whose verb
             survives, which is what leaves "might enabling" or no subject at all.
         keep_verbs_complete: hold back an object whose verb survives, which is
             what leaves "provided to articulate relationships".
-        keep_clause_heads: hold back a verb whose own subject or object survives,
-            which is what leaves "cases from the literature that how".
+        keep_possessives: hold back a possessive marker, which is a clitic on the
+            word before it rather than a word, and leaves "peoplescreens".
+        keep_joins_distinct: refuse a deletion that would leave the same word
+            twice in a row, which is what "as well as" and "refer to" become
+            when the word between the pair goes.
+        write_phrases: write the gold editor's own phrase in place of a span the
+            table has one for, instead of deleting the span outright.
         trim_refused_runs: delete what is left of a run once the held-back words
             are taken out. With this off the whole run is dropped instead, which
             costs every deletion that merely stood next to an offender.
     """
-    keep_the_root: bool = True
+    keep_words_with_dependants: bool = True
     keep_prepositions_complete: bool = True
-    keep_modifiers_attached: bool = True
     keep_verbs_supported: bool = True
     keep_verbs_complete: bool = True
-    keep_clause_heads: bool = True
+    keep_possessives: bool = True
+    keep_joins_distinct: bool = True
+    write_phrases: bool = True
     trim_refused_runs: bool = True
 
 
@@ -121,6 +104,34 @@ def _fitted() -> dict:  # lint-style: ignore FN004
     from tagging import weights
 
     return {"intercept": weights.INTERCEPT, "weights": weights.WEIGHT}
+
+
+@lru_cache(maxsize=1)
+def _phrase_table() -> dict:
+    """What the gold editor wrote in place of a span, keyed on the span's text."""
+    try:
+        from tagging import replacements
+    except ImportError:
+        return {}
+    return replacements.PHRASE
+
+
+def _written_edit(doc, piece: list, phrase: str) -> Edit:
+    """One replacement covering a span, confident only as its least confident word.
+
+    The span ends at its own last character rather than at the next word, which
+    is where a deletion ends: the space after the span is what the phrase is
+    written in front of, and taking it would join the phrase to the next word.
+    """
+    start = piece[0]["token"].idx
+    last = piece[-1]["token"]
+    end = last.idx + len(last.text)
+    confidence = min(item["score"] for item in piece)
+    return Edit(
+        start=start, end=end, replacement=phrase,
+        rule="tagged.write", family=FAMILY, confidence=confidence,
+        note=f"tagged for rewriting: '{doc.text[start:end].strip()}' becomes '{phrase}'",
+    )
 
 
 def _wanted(doc, fitted: dict) -> list:
@@ -162,6 +173,29 @@ def _next_index(doc, start: int) -> int | None:
         if not doc[index].is_space:
             return index
     return None
+
+
+def _previous_index(doc, start: int) -> int | None:
+    """Where the last token before ``start`` that is not whitespace sits."""
+    for index in range(start - 1, -1, -1):
+        if not doc[index].is_space:
+            return index
+    return None
+
+
+def _repeats_a_word(piece: list) -> bool:
+    """Whether deleting this piece would leave the same word twice in a row.
+
+    A correlative pair is the case: "as well as" and "as much as" both close up
+    into "as as", and "refer to" into "to to". The pair is found in the text
+    rather than in a list of expressions, because the list would never end.
+    """
+    doc = piece[0]["token"].doc
+    before = _previous_index(doc, piece[0]["token"].i)
+    after = _next_index(doc, piece[-1]["token"].i)
+    if before is None or after is None:
+        return False
+    return doc[before].text.lower() == doc[after].text.lower()
 
 
 def _opens_sentence(run: list) -> bool:
@@ -210,17 +244,33 @@ def _inside(run: list) -> set:
     return {item["token"].i for item in run}
 
 
-def _the_root(run: list) -> set:
-    """The run's own sentence root, where the run holds it.
+def _governing_words(run: list) -> set:
+    """Words the run would delete while something that hangs off them stays.
 
-    Compared by index rather than by identity, because spaCy builds a fresh
-    ``Token`` object on every access and two of them are never the same object.
+    The general case of three defects that were found one at a time: a sentence
+    left with no predicate, a noun left holding a determiner, and a relative
+    clause left with a subject and no verb. Punctuation is not a dependant worth
+    keeping a word for, and indices are compared rather than tokens, because
+    spaCy builds a fresh ``Token`` object on every access.
     """
+    inside = _inside(run)
     held = set()
     for item in run:
         token = item["token"]
-        if token.i == token.sent.root.i:
-            held.add(token.i)
+        for child in token.children:
+            if child.dep_ == "punct" or child.is_space:
+                continue
+            if child.i not in inside:
+                held.add(token.i)
+    return held
+
+
+def _possessive_markers(run: list) -> set:
+    """Possessive markers, which are clitics on the word before them."""
+    held = set()
+    for item in run:
+        if item["token"].dep_ == "case":
+            held.add(item["token"].i)
     return held
 
 
@@ -243,18 +293,6 @@ def _last_complements(run: list) -> set:
             continue
         if head.i not in inside and not _still_complete(head, inside):
             held.add(token.i)
-    return held
-
-
-def _modified_words(run: list) -> set:
-    """Words a surviving determiner or adjective would be left attached to."""
-    inside = _inside(run)
-    held = set()
-    for item in run:
-        token = item["token"]
-        for child in token.children:
-            if child.dep_ in _ATTACHED and child.i not in inside:
-                held.add(token.i)
     return held
 
 
@@ -284,40 +322,19 @@ def _verb_objects(run: list) -> set:
     return held
 
 
-def _clause_heads(run: list) -> set:
-    """Verbs whose own subject or object stays behind when the run goes.
-
-    The sentence root is one case of this and has its own prior; a relative
-    clause's verb is the case that prior cannot see, because the clause is not
-    the sentence.
-    """
-    inside = _inside(run)
-    held = set()
-    for item in run:
-        token = item["token"]
-        if token.pos_ not in _VERBAL:
-            continue
-        for child in token.children:
-            if child.dep_ in _DEPENDANTS and child.i not in inside:
-                held.add(token.i)
-    return held
-
-
 def _held_back(run: list, gates: Gates) -> set:
     """Every word in the run that an enabled shape prior refuses to delete."""
     held = set()
-    if gates.keep_the_root:
-        held |= _the_root(run)
+    if gates.keep_words_with_dependants:
+        held |= _governing_words(run)
     if gates.keep_prepositions_complete:
         held |= _last_complements(run)
-    if gates.keep_modifiers_attached:
-        held |= _modified_words(run)
     if gates.keep_verbs_supported:
         held |= _verb_support(run)
     if gates.keep_verbs_complete:
         held |= _verb_objects(run)
-    if gates.keep_clause_heads:
-        held |= _clause_heads(run)
+    if gates.keep_possessives:
+        held |= _possessive_markers(run)
     return held
 
 
@@ -358,10 +375,14 @@ def _trimmed(run: list, gates: Gates) -> list:
 def _admitted(run: list, gates: Gates) -> list:
     """The spans of this run that may be deleted."""
     if gates.trim_refused_runs:
-        return _trimmed(run, gates)
-    if _held_back(run, gates):
-        return []
-    return [run]
+        pieces = _trimmed(run, gates)
+    elif _held_back(run, gates):
+        pieces = []
+    else:
+        pieces = [run]
+    if not gates.keep_joins_distinct:
+        return pieces
+    return [piece for piece in pieces if not _repeats_a_word(piece)]
 
 
 def propose(doc, gates: Gates = DEFAULT):
@@ -373,5 +394,10 @@ def propose(doc, gates: Gates = DEFAULT):
     edits = []
     for run in _runs(wanted):
         for piece in _admitted(run, gates):
-            edits.append(_edit_for(doc, piece))
+            spelt = " ".join(item["token"].text for item in piece).lower()
+            phrase = _phrase_table().get(spelt, "") if gates.write_phrases else ""
+            if phrase:
+                edits.append(_written_edit(doc, piece, phrase))
+            else:
+                edits.append(_edit_for(doc, piece))
     return edits

@@ -358,6 +358,31 @@ TAGGED = (
         observed=True,
         span="there",
     ),
+    Case(
+        "They argue that it is through people’s embodied interaction with devices like "
+        "the smartphone that the binary between online and offline fades.",
+        "tagged", "refuse",
+        "a possessive marker is a clitic on the word before it, and deleting it joins "
+        "the two: 'peopleembodied'",
+        observed=True,
+        span="’s",
+    ),
+    Case(
+        "Moores draws on Ingold's work here to underline that people's ability to know "
+        "their whereabouts is not a form of rational navigation.",
+        "tagged", "refuse",
+        "takes a verb and leaves the clause it governs: 'here to that people's ability'",
+        observed=True,
+        span="underline",
+    ),
+    Case(
+        "If we want to understand the power that social media hold today, as well as "
+        "their appeal and meaningfulness, we need to look at their algorithms.",
+        "tagged", "refuse",
+        "closes a correlative pair up into 'as as their appeal'",
+        observed=True,
+        span="well",
+    ),
 )
 
 ALL = RELATIVE + REALISATION + ADJUNCT + TAGGED

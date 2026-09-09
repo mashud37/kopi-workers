@@ -1244,6 +1244,172 @@ both exist and neither is in this corpus, which is an argument and not a measure
 
 ---
 
+## C21. A reader finds damage in half the paragraphs the panel called clean
+
+**Evidence.** `manage.py damage` lints the held-out documents, takes every paragraph it changed
+in corpus order, and lays each edit out with the original, the linted text and Opus's version.
+The first set is 100 paragraphs and 184 edits, judged one at a time against G1 to G3 in
+`good.md` section 2, with the verdicts kept in `damage/verdicts.jsonl` so the number can be
+recomputed and disputed.
+
+| | Judged | Damaged |
+|---|---:|---:|
+| **paragraphs the linter changed** | **100** | **48 (48%)** |
+| edits | 184 | 71 (39%) |
+
+The panel that scored this same configuration reported **five** defects. `eval/grammatical.py`
+looks for a sentence with no root predicate and finds one damaged edit in fourteen. Nothing else
+in the harness was looking at all, so 48% was the standing state of the shipped rule and every
+number in C16 to C20 was measured over it.
+
+**Attestation does not protect the reader.** Of the 140 edits Opus and the foil both appear to
+support, 50 damage the text: agreeing with the reference is agreement about *which words go*, and
+the damage is in what the sentence becomes afterwards. The "attested by neither" class, which
+step 9 was told to triage by, is the worst at 64% but holds only 14 edits, so triage would have
+found a tenth of this.
+
+**Three shapes account for four fifths of it, and all three are structural.**
+
+| Shape | Damaged edits | Example |
+|---|---:|---|
+| the deleted word has a dependant that stays | 40 | "here to underline that people's ability" to "here to that people's ability" |
+| a possessive marker deleted on its own | 17 | "people's screens" to "peoplescreens" |
+| a correlative pair closes up | 5 | "as well as their appeal" to "as as their appeal" |
+
+The first is the general case of three priors that had been found one at a time: the sentence
+root, the modified noun, and the relative clause's verb are all words with a surviving dependant.
+Replacing all three with `keep_words_with_dependants` makes the two priors C20 called inert into
+one prior that is the largest single safety gate in the rule, and drops the count from six to
+five. `keep_possessives` refuses a clitic, which is not a word the engine may take on its own.
+`keep_joins_distinct` refuses a deletion that leaves the same word twice in a row, which is what
+"as well as" and "refer to" become when the word between the pair goes; the pair is found in the
+text rather than in a list of expressions, because the list would never end.
+
+On the 233 held-out paragraphs, before and after, with the damage set re-judged on the new
+output:
+
+| | Cases | Closure | Reach | Accuracy | Fired | Ceiling | Paragraphs damaged |
+|---|---|---:|---:|---:|---:|---:|---:|
+| six priors, as C20 shipped them | 10/10 | **1.32%** | 4.19% | 65.7% | 220 | 84% | **48 of 100** |
+| five priors, after the damage set | 13/13 | **0.89%** | 2.27% | 69.5% | 118 | 87% | **11 of 95** |
+
+The second row changes 95 paragraphs rather than 100, which is every paragraph it changes at
+all, and four of its edits carry no verdict because they exist only in that variant, so 11 is a
+floor. **Damage cost 0.43 points of held-out closure and removed four fifths of itself.** That is the
+trade `good.md` section 6 point 4 says to take, and this is the first time the project has had
+the number on both sides of it. Every ablation of the five is now disqualified by a case, so
+nothing here is inert: dropping the dependant prior alone scores 1.64% and damages 37 edits.
+
+**What is left is not structural.** In the rule that ships today ten edits still damage: five are G3, and five are G1 of one
+kind, a modifier whose removal changes what the sentence claims. "negatively affecting their
+wellbeing" to "affecting their wellbeing", "the primary way" to "the way", "accessible
+potentially anywhere" to "accessible anywhere". Nothing in a parse separates those from "nicely
+illustrates", which is a sound cut, and closure cannot see them either, because Opus deleted
+several of the same words in its own version. A hedge is a semantic class and this engine has no
+semantic feature.
+
+**The judge was Claude and not the author, and one judge is not a repeatability check.** The set,
+the tool and the criteria exist; what does not exist is a second reading. `plan.md` step 9 says
+the step fails if hand judgement cannot be made repeatably, and that half is unanswered rather
+than passed.
+
+**Experiments.**
+1. ~~*Build the set and measure the rate.*~~ Built, and it moved the rule rather than the report.
+2. *Have the author re-judge a sample of the set.* Two judges on the same 184 edits gives the
+   agreement rate that decides whether 9% is a measurement or one reader's opinion.
+3. *Find a feature that separates a hedge from an adverb.* The five remaining G1 edits are one
+   class, and it is the only class left that structure cannot reach.
+4. *Ask what the aggressive band is for.* Damage runs 13% there against 2% at firm, on a band
+   that exists because C20 read it off the operating table.
+
+---
+
+## C22. Three defects that no measurement could have found, because nothing yet triggers them
+
+**Evidence.** All three were read out of the code rather than measured, and all three are latent
+exactly while one licensed family and no ranked family are registered.
+
+**Selection compared a probability with an ordering.** `lint/select._best_set` ran one interval
+schedule over every admissible proposal, scoring each as `confidence x (1 + words_saved)`. A
+ranked proposal's confidence is an ordering inside its own rule and means nothing against a
+threshold (C9 to C11), so a six-word adjunct guess at 0.40 weighed 2.80 and outweighed a licensed
+relative-clause reduction at 0.92 weighing 2.76. Selection now schedules the licensed proposals on
+their own and lets ranked guesses fill only what is left, which cannot be tuned wrong because it
+is not a comparison.
+
+**The budget dropped edits that were not causing the breach.** `_trim` removed the least confident
+edit until the paragraph kept enough words. An edit that saves no words cannot move that
+constraint, so the pass removed correct work and looped again with the breach untouched. It now
+drops the edit that gives back the most words per unit of confidence given up, and never one that
+gives back nothing.
+
+**Reproducibility was claimed and not pinned.** `requirements.txt` pinned no version and
+`en_core_web_sm` was fetched by `python -m spacy download`, while every prior in
+`rules/rule_tagged.py` reads `dep_`, `tag_` and `pos_`. A parser bump silently changes every
+number in these documents. The requirements are now pinned, the model version is pinned at 3.7.1,
+and `manage.py install` reports a mismatch as a failure with the exact wheel to install.
+
+**Target and result.** The step's stated target was **no closure movement**, which is what a
+latent defect should produce, and a run that reproduces the headline byte for byte. Linting all
+233 held-out paragraphs before and after gives the same SHA-256 over the concatenated output,
+`8cb5fff2915f6c99`, under three different `PYTHONHASHSEED` values. The fix is therefore free
+today and the defect is real tomorrow: the day a ranked family registers, the old selection
+would have preferred its guesses.
+
+---
+
+## C23. The engine writes, and writing is worth a tenth of what the roadmap projected
+
+**Evidence.** C15 said a closed vocabulary induced from the training documents reproduces Opus
+exactly on 64.6% of rewriting spans, and step 11 was to build it. It is a table and not a model:
+for every span the gold editor deleted, `tagging/phrases.py` counts what was written in its
+place, and a span keeps an entry when one phrase was written at least twice and accounts for at
+least 60% of what the editor did to that span. That is 348 entries. On held-out spans it has an
+entry for, it fires 306 times and writes exactly what Opus wrote **249 times, 81.4%**.
+
+The licence is not the table's. A span is only offered to it because the fitted keep-or-delete
+model already wants those words gone and the five shape priors already allowed it, which is the
+division C9 to C12 could not find: **allocation is learned per token, execution is a closed
+lookup.** Nothing here can invent a word, so G8 holds by construction and the changelog reads
+`'Firstly' becomes 'First'` rather than naming a model.
+
+On the 233 held-out paragraphs:
+
+| | Cases | Closure | Reach | Accuracy | SARI | add | Ceiling |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `tagged/deletes-only` | 13/13 | 0.89% | 2.27% | 69.5% | 0.5574 | 0.0018 | 87% |
+| **`tagged/deletes-and-writes`** | 13/13 | **0.98%** | 2.05% | **73.9%** | **0.5598** | **0.0074** | 86% |
+
+Over the whole corpus the linter now closes **1.3%**, held out **1.1%**, at 73.2% accuracy, and
+`tagged.write` fires 127 times against `tagged.delete`'s 693, attested 73.2% against 83.7%.
+Writing is the less reliable half, as C15 predicted at 81.4% exact, and it still pays: accuracy
+rises four points because replacing a word is right where deleting it was too much.
+
+**The target was 2% to 4% and the result is 0.09 points. The target was wrong, and it was wrong
+in a way worth keeping.** Reach *falls* when the table fires, from 2.27% to 2.05%, because a
+replacement moves fewer words than a deletion. The phrase head cannot open a site: it only
+changes what happens at a site the deletion model already licensed, and that model licenses 2.3%
+of words. Step 11 was written as though writing were a reach mechanism. It is a precision
+mechanism, and **the reach the roadmap still needs is entirely in steps 13 and 14**, where a
+document decides which paragraphs absorb a reduction and whole sentences go.
+
+**One damage case is the table's own.** "In the specific case mentioned, Hannes shared..." became
+"In the specific case said,...", because the table's entry for that span was induced where the
+surrounding sentence was different. Purity is a per-span statistic and carries no context; that
+is the whole of what a table can be wrong about, and 81.4% is the rate.
+
+**Experiments.**
+1. ~~*Induce the table and wire it in.*~~ Built. Closure 0.89% to 0.98% held out, and the first
+   `add` column above noise.
+2. *Sweep support and purity against the damage set rather than against agreement.* 81.4% exact
+   is agreement with Opus; the question the damage set asks is how many of the other 18.6% are
+   wrong English rather than different English.
+3. *Let the table fire where the model does not.* Every entry is a span Opus rewrote, and the
+   rule only ever offers it spans the deletion model already wanted. Offering the table every
+   span it knows would be a second licence, and C9 is the reason to expect that to fail.
+
+---
+
 ## Where the queue lives
 
 There is no queue here. This file records what each measurement established, in the order it was

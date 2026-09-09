@@ -105,40 +105,45 @@ METHODS = (
         "same, but four times the evidence before a rate is trusted",
     ),
     Method(
-        "tagged/deletions", "tagged", _tagged(),
-        "the fitted keep-or-delete model, asked per token instead of per category",
+        "tagged/deletes-and-writes", "tagged", _tagged(),
+        "the fitted keep-or-delete model per token, writing the induced phrase where "
+        "the table has one",
         baseline=True,
     ),
     Method(
         "tagged/no-gates", "tagged",
-        _tagged(keep_the_root=False, keep_prepositions_complete=False,
-                keep_modifiers_attached=False, keep_verbs_supported=False,
-                keep_verbs_complete=False, keep_clause_heads=False),
+        _tagged(keep_words_with_dependants=False, keep_prepositions_complete=False,
+                keep_verbs_supported=False, keep_verbs_complete=False,
+                keep_possessives=False, keep_joins_distinct=False),
         "ablation: the model's own confidence and nothing else",
     ),
     Method(
-        "tagged/no-root-gate", "tagged", _tagged(keep_the_root=False),
-        "ablation: allows a run to take its sentence's root with it",
+        "tagged/no-dependant-gate", "tagged", _tagged(keep_words_with_dependants=False),
+        "ablation: allows a word to go while what hangs off it stays behind",
     ),
     Method(
         "tagged/no-prep-gate", "tagged", _tagged(keep_prepositions_complete=False),
         "ablation: allows a preposition to lose its last complement",
     ),
     Method(
-        "tagged/no-modifier-gate", "tagged", _tagged(keep_modifiers_attached=False),
-        "ablation: allows a noun to go while its determiner stays behind",
-    ),
-    Method(
         "tagged/no-support-gate", "tagged", _tagged(keep_verbs_supported=False),
         "ablation: allows an auxiliary or a subject to go while its verb stays",
     ),
     Method(
-        "tagged/no-object-gate", "tagged", _tagged(keep_verbs_complete=False, keep_clause_heads=False),
+        "tagged/no-object-gate", "tagged", _tagged(keep_verbs_complete=False),
         "ablation: allows an object to go while the verb that governs it stays",
     ),
     Method(
-        "tagged/no-clause-gate", "tagged", _tagged(keep_clause_heads=False),
-        "ablation: allows a clause's verb to go while its subject or object stays",
+        "tagged/no-possessive-gate", "tagged", _tagged(keep_possessives=False),
+        "ablation: allows a possessive marker to go, joining the words beside it",
+    ),
+    Method(
+        "tagged/no-join-gate", "tagged", _tagged(keep_joins_distinct=False),
+        "ablation: allows a deletion to leave the same word twice in a row",
+    ),
+    Method(
+        "tagged/deletes-only", "tagged", _tagged(write_phrases=False),
+        "ablation: deletes every span outright, which is every edit before the phrase table",
     ),
     Method(
         "tagged/drop-whole-run", "tagged", _tagged(trim_refused_runs=False),

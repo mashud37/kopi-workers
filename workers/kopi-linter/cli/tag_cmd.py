@@ -65,7 +65,7 @@ def _curve(train: dict, test: dict) -> list:
     return lines
 
 
-def _write(result: dict, samples: int, scored: dict) -> Path:
+def _write(result: dict, samples: int, scored: dict, written: dict) -> Path:
     train, test = result["train"], result["test"]
     OUTPUT.mkdir(exist_ok=True)
     path = OUTPUT / "tag_survey.md"
@@ -100,6 +100,7 @@ def _write(result: dict, samples: int, scored: dict) -> Path:
     lines += _curve(train, test)
     lines += _report_model(scored)
     lines += _report_ablation(scored)
+    lines += _report_phrases(written)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -159,6 +160,46 @@ def _report_ablation(scored: dict) -> list:
     return lines
 
 
+def _phrases(samples, nlp, held_out: set) -> dict:
+    """Induce the phrase table on the training documents and score it held out."""
+    from tagging import phrases
+
+    train = [sample for sample in samples if sample.doc not in held_out]
+    test = [sample for sample in samples if sample.doc in held_out]
+    bar = BatchProgress(len(train), "reading rewritten spans")
+    seen = phrases.counts(train, nlp, on_progress=bar.on_item)
+    bar.finish()
+    written = phrases.table_from(seen)
+    scored = phrases.agreement(written, phrases.counts(test, nlp))
+    saved = phrases.write(written)
+    ui.ok(f"{saved['entries']} spans in the phrase table, written into "
+          f"{saved['path'].name}")
+    ui.info(f"on held-out spans it has an entry for it writes exactly what Opus wrote "
+            f"{scored['exact']} times of {scored['fired']} ({scored['share']:.1%})")
+    return {"entries": saved["entries"], **scored}
+
+
+def _report_phrases(scored: dict) -> list:
+    """What the phrase table covers and how often it is right, as report lines."""
+    from tagging import phrases
+
+    return [
+        "## What to write in place of a span",
+        "",
+        f"The other half of the tag. A span the gold editor rewrote the same way at least "
+        f"{phrases.MINIMUM_SUPPORT} times, where that one phrase accounts for at least "
+        f"{phrases.MINIMUM_PURITY:.0%} of what the editor did to it, becomes an entry in a "
+        f"closed table keyed on the span's own text. There is no model here: the licence to "
+        f"touch the span comes from the fitted decision above, and this only answers what to "
+        f"put there.",
+        "",
+        "| Spans in the table | Held-out spans it fires on | Exactly what Opus wrote |",
+        "|---:|---:|---:|",
+        f"| {scored['entries']} | {scored['fired']} | {scored['exact']} ({scored['share']:.1%}) |",
+        "",
+    ]
+
+
 def run(limit: int | None = None) -> None:
     from tagging import vocabulary
 
@@ -190,7 +231,8 @@ def run(limit: int | None = None) -> None:
               f"{got['share']:.1%} of held-out writing covered")
 
     scored = _fit(samples, nlp, held_out)
-    print(_write(result, len(samples), scored))
+    written = _phrases(samples, nlp, held_out)
+    print(_write(result, len(samples), scored, written))
 
 
 def _fitting(index: int, total: int, label: str) -> None:  # lint-style: ignore FN004

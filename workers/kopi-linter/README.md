@@ -24,12 +24,17 @@ Early, and deliberately measured rather than advertised. The evidence layer, the
 engine and the experiment harness all run. Two transformation families are live: relative-clause
 reduction, and a fitted keep-or-delete decision that scores every word and proposes the ones the
 gold editor would cut. A third (`adjunct`) has three competing licence models under comparison
-and none of them is registered. The execution tier is probed but not built: `manage.py execute`
-has measured what a backend could write at a known site, and nothing yet writes one during a
-lint, so every edit the linter makes is still a deletion.
+and none of them is registered. The linter also writes now, in the narrowest possible way: where
+a span it wanted to delete is one the gold editor rewrote the same way at least twice, it writes
+that phrase instead. It cannot write anything else.
+
+Quality is checked by hand as well as by metric. `manage.py damage` lays out every edit the
+linter makes on the held-out documents for a person to judge against three criteria, and the
+first reading of that set changed the engine rather than the report: damage in 48% of changed
+paragraphs, against five defects the automatic check had found.
 
 Progress is tracked as a single per cent, **closure**, defined in
-[docs/good.md](docs/good.md) section 0 and standing at 1.7%, and at 1.5% on documents the
+[docs/good.md](docs/good.md) section 0 and standing at 1.3%, and at 1.1% on documents the
 fitted model has never seen. The work follows a fixed loop,
 analyse then plan then build then evaluate then analyse again, set out in
 [docs/method.md](docs/method.md). Six documents carry the state:
@@ -81,7 +86,8 @@ rules/                  one module per transformation family, plus induced table
 grammar/                orthography (British/American), realise (surface repair)
 eval/                   sari, harness, grammatical: the gate every rule has to pass
 execute/                template, ceiling, decoder: backends that write a replacement span
-tagging/                vocabulary, features, fit, model, weights: keep-or-delete per word
+tagging/                vocabulary, features, fit, model, phrases: what to do to each word
+damage/                 sheet, verdicts, report: the hand-checked damage set
 experiments/            registry, cases, compare, report: method-versus-method comparison
 cli/                    argparse dispatch, menu, install, ui, progress
 docs/                   typology, approaches, constraints, good, method
@@ -95,7 +101,7 @@ for the rule tables and the edit corpus.
 
 ```
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
+pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 python -c "import nltk; nltk.download('wordnet')"
 python manage.py install      # checks packages, models, and the corpus link
 python manage.py              # launch the interactive menu
@@ -114,7 +120,8 @@ also a direct subcommand.
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
 | Ask whether Opus performs a transformation at all | `manage.py probe <generator> [-n N]` |
 | Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--transport {served\|local}] [--reproduce]` |
-| Fit the keep-or-delete decision the linter uses | `manage.py tag [-n N]` |
+| Fit the keep-or-delete decision and the phrase table | `manage.py tag [-n N]` |
+| Build the hand-judging sheet and report the damage rate | `manage.py damage [-n N]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N] [--split {all\|train\|test}]` |
 | Compare scoring functions for which phrase to drop first | `manage.py rank [-n N] [--split {all\|train\|test}]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |
@@ -140,8 +147,15 @@ rather than as a plausible number. `--reproduce` runs two passes over the same s
 checks they produce the same bytes, with a sampling decoder as the control that has to fail.
 
 `tag` fits the model the `tagged` rule reads and writes it to `tagging/weights.py` as plain
-numbers, so the engine scores a word with a dot product and never imports scikit-learn. Rerun
-it after the corpus changes; the rule uses whatever is committed until you do.
+numbers, so the engine scores a word with a dot product and never imports scikit-learn. It also
+induces the phrase table into `tagging/replacements.py`. Rerun it after the corpus changes; the
+rule uses whatever is committed until you do.
+
+`damage` is the only check here that reads the output as English rather than as agreement with
+Opus. It lints the held-out documents, writes every changed paragraph and every edit into a sheet
+to be judged by hand, and reports the rate implied by the verdicts recorded in
+`damage/verdicts.jsonl`. It is slow, it is manual, and it has found what no automatic column
+could.
 
 `experiment` is the one to reach for once a family survives the probe: it runs every
 registered method for a family against the same licence cases and the same corpus, and
@@ -236,7 +250,7 @@ paragraphs, against Opus's edit of the same paragraph at the same band:
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **1.7%** | 4.6% | 68.1% |
+| **kopi-linter** | **1.3%** | 2.7% | 73.2% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
 `reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
@@ -245,8 +259,8 @@ is attempted. The linter's licence mechanism works and is applied to a small fra
 text; reach is still the whole problem. See [docs/plan.md](docs/plan.md) for what each family
 is worth.
 
-Split out, the held-out documents read **1.5% closure at 65.9% accuracy** against the train
-split's 1.7% and 68.5%. The keep-or-delete model is fitted on the train documents only, so
+Split out, the held-out documents read **1.1% closure at 73.0% accuracy** against the train
+split's 1.3% and 73.3%. The keep-or-delete model is fitted on the train documents only, so
 that near-identical pair is the point of the row rather than an aside: it scores the same on
 prose it has never seen. Earlier versions of this table could not say anything of the kind,
 because the held-out side rested on fourteen edits (`docs/constraints.md` C14).
@@ -277,12 +291,27 @@ Guessing delete for every word scores 25.2%. Ablating the feature groups says th
 lexical first and syntactic second: length features alone never reach the threshold on a single
 word in 31,464, so the model is largely a learned deletion lexicon.
 
-Six shape priors sit in front of the model, because a per-token score cannot know that the word
-it likes is its clause's only verb, or the object of a verb that is staying. They cost half the
-closure and remove forty-four of the forty-nine introduced grammatical defects, which is why the
-highest-scoring variant is not the one that ships. A prior holds one word back rather than
-refusing the phrase around it, so the rest of a run is still deleted. Each is registered as an ablation, so `manage.py experiment tagged`
-prints the trade rather than asserting it.
+Five shape priors sit in front of the model, because a per-token score cannot know that the word
+it likes is holding up the rest of its clause. They refuse a word whose own dependants stay
+behind, a complement whose preposition would be left governing nothing, an auxiliary or subject
+whose verb stays, an object whose verb stays, and a possessive clitic; and a sixth rule refuses
+any deletion that would leave the same word twice in a row. They cost a third of the closure and
+take damage from 48% of changed paragraphs to 12%, which is why the highest-scoring variant is
+not the one that ships. A prior holds one word back rather than refusing the phrase around it, so
+the rest of a run is still deleted. Each is registered as an ablation, so
+`manage.py experiment tagged` prints the trade rather than asserting it.
+
+### How the linter decides what to write
+
+The other half of the same tag. For every span the gold editor deleted, the induced table records
+what was written in its place; a span keeps an entry when one phrase was written at least twice
+and accounts for at least 60% of what the editor did to that span. That is 348 entries, and on
+held-out spans it fires on, it writes exactly what Opus wrote **81.4%** of the time.
+
+The table never decides *whether* to touch a span. The fitted model and the priors do that, and
+the table only answers what to put there, which is why writing raises accuracy from 69.5% to
+73.9% while reach falls: a replacement moves fewer words than a deletion. Writing is a precision
+mechanism here, not a coverage one.
 
 ### What a local backend could write
 
@@ -308,14 +337,14 @@ composite does not:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5428 | 0.0052 | 0.7382 | 0.8851 |
+| kopi-linter | 0.5489 | 0.0097 | 0.7349 | 0.9022 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
 That table says the linter beats a 32B model, which is why it is not the headline. The
-score is delete precision earned on 823 changed paragraphs out of 1,490 and 1,890 words moved
-against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0052
-against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
-every rule it has deletes.
+score is delete precision earned on 658 changed paragraphs out of 1,490 and 1,061 words moved
+against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0097
+against Qwen's 0.2040, is where the gap lives: the linter writes only where a closed table has
+seen the same span rewritten before.
 
 The two metrics disagree, usefully. Extending the relative-clause rule raised closure and
 lowered SARI, because SARI's delete component is precision-only by design and penalises
@@ -352,3 +381,6 @@ Coverage, not precision, is the open problem. See
   necessarily wrong, only unattested, so agreement is a floor on precision rather than a
   measure of correctness.
 - `lint` reads `.md` and `.txt` only. Ingesting `.docx` is kopi-editor's job for now.
+- The damage rate is a hand judgement and has had one judge. It is the only measure here that
+  sees whether the output is good English rather than whether it agrees with Opus, and until a
+  second reading gives an agreement figure it should be read as one reader's opinion.
