@@ -6,7 +6,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
-from rules import probe_lexical_relative, rule_adjunct, rule_relative, rule_tagged
+from rules import (
+    probe_clause,
+    probe_lexical_relative,
+    probe_voice,
+    rule_adjunct,
+    rule_relative,
+    rule_tagged,
+)
 from rules.rule_adjunct import Licence
 from rules.rule_relative import Gates
 from rules.rule_tagged import Gates as TaggedGates
@@ -54,6 +61,22 @@ METHODS = (
         "relative/lexical-probe", "relative-clause-lexical",
         probe_lexical_relative.propose,
         "probe only, never registered: 'which revolve around' to 'revolving around'",
+    ),
+    # Probe-only, each on its own family name so no experiment picks it up.
+    # Step 15 asks whether the gold editor performs these at all before either
+    # is built (`docs/plan.md` section 4, and the discipline of C13).
+    Method(
+        "clause/adverbial", "clause-probe", probe_clause.propose,
+        "probe only: drop a whole adverbial clause",
+    ),
+    Method(
+        "clause/complement", "clause-probe",
+        partial(probe_clause.propose, deps=probe_clause.COMPLEMENT),
+        "probe only: drop a whole complement clause, which is an argument and should refuse",
+    ),
+    Method(
+        "voice/probe", "voice-probe", probe_voice.propose,
+        "probe only: drop the passive auxiliary, and the agent phrase after it",
     ),
     Method(
         "relative/no-cleft-gate", "relative-clause", _relative(block_cleft=False),

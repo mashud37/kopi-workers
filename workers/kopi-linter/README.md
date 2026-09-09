@@ -33,6 +33,12 @@ linter makes on the held-out documents for a person to judge against three crite
 first reading of that set changed the engine rather than the report: damage in 48% of changed
 paragraphs, against five defects the automatic check had found.
 
+Every remaining way of deleting more without writing more has now been measured and refused:
+allocating a reduction across a document beats nothing that counting words does not, a dropped
+sentence cannot be told from a kept one, and the gold editor declines both clause dropping and
+passive-auxiliary dropping when asked. Those measurements are commands in the table below and
+they shipped no rules, which is the point of running them.
+
 Progress is tracked as a single per cent, **closure**, defined in
 [docs/good.md](docs/good.md) section 0 and standing at 1.3%, and at 1.1% on documents the
 fitted model has never seen. The work follows a fixed loop,
@@ -88,6 +94,7 @@ eval/                   sari, harness, grammatical: the gate every rule has to p
 execute/                template, ceiling, decoder: backends that write a replacement span
 tagging/                vocabulary, features, fit, model, phrases: what to do to each word
 damage/                 sheet, verdicts, report: the hand-checked damage set
+document/               allocate, sentences: the decisions a paragraph cannot make alone
 experiments/            registry, cases, compare, report: method-versus-method comparison
 cli/                    argparse dispatch, menu, install, ui, progress
 docs/                   typology, approaches, constraints, good, method
@@ -103,6 +110,7 @@ for the rule tables and the edit corpus.
 pip install -r requirements.txt
 pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 python -c "import nltk; nltk.download('wordnet')"
+pip install torch transformers    # only for `manage.py encoder`, nothing else uses them
 python manage.py install      # checks packages, models, and the corpus link
 python manage.py              # launch the interactive menu
 ```
@@ -122,6 +130,9 @@ also a direct subcommand.
 | Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--transport {served\|local}] [--reproduce]` |
 | Fit the keep-or-delete decision and the phrase table | `manage.py tag [-n N]` |
 | Build the hand-judging sheet and report the damage rate | `manage.py damage [-n N]` |
+| Compare a frozen encoder against the one-hot features | `manage.py encoder [-n N]` |
+| Compare ways of splitting a document's reduction across paragraphs | `manage.py allocate [--split {all\|train\|test}]` |
+| Ask whether the sentences Opus drops can be told from the ones it keeps | `manage.py sentence [-n N]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N] [--split {all\|train\|test}]` |
 | Compare scoring functions for which phrase to drop first | `manage.py rank [-n N] [--split {all\|train\|test}]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |

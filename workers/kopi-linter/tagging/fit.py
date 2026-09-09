@@ -58,7 +58,7 @@ def dataset(samples, nlp, held_out: set, on_progress=None) -> dict:
     return out
 
 
-def _operating_points(labels, scores, gap: int) -> list:
+def operating_points(labels, scores, gap: int) -> list:
     """Precision, recall and projected closure at each threshold the band could use.
 
     Closure is projected rather than measured: one deleted word is counted as one
@@ -133,7 +133,7 @@ def _fit_one(encoded: dict, data: dict, keep: set) -> dict:
     model.fit(encoded["train"][:, columns], data["train"]["labels"])
     scores = model.predict_proba(encoded["test"][:, columns])[:, 1]
     return {
-        "points": _operating_points(data["test"]["labels"], scores, data["gap"]),
+        "points": operating_points(data["test"]["labels"], scores, data["gap"]),
         "columns": [encoded["names"][index] for index in columns],
         "intercept": float(model.intercept_[0]),
         "weights": [float(weight) for weight in model.coef_[0]],

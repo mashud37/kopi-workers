@@ -58,7 +58,10 @@ Status vocabulary, used strictly:
 | `support-verb` collapse | withdrawn | 2 | disagreed twice; 20% base rate did not support firing |
 | `adjunct` PP-drop, structural licence | built, rejected | 647 | **2%** ceiling; over-fires, see constraints C9 |
 | `adjunct` PP-drop, induced licence (3 variants) | built, rejected | 3 | cannot reach any band threshold, see C9 |
-| `voice` restoration | paper | | 1,156 / 2,988; the family that would open the SARI `add` column |
+| `voice` auxiliary dropped, probe only | probed, refused | 1,725 proposed | **2.5%** attested of 281 decidable, see C27 |
+| `clause` dropped, probe only, adverbial and complement | probed, refused | 3,332 proposed | **0%** attested of 775 decidable, see C27 |
+| `sentence` dropped, fitted per sentence | fitted, refused | 0 above 0.5 | **8%** precision against a 5.5% base rate, see C26 |
+| `voice` restoration | paper | | 1,156 / 2,988; the agent-restoring half is untouched |
 | `nominalisation` to verb | paper | | |
 | `sentence` merge and cut | paper | | 454 instances / 8,212 words, the largest by word budget |
 | lexical substitution | paper | | |
@@ -120,6 +123,20 @@ The licence and the execution asked as one question, per token.
 | `fit.py` | Feature-group ablation, each group removed and each on its own | running | length alone fires on 0 of 31,464 words |
 | `model.py` | Weights written out as a generated module and scored with a dot product, so the engine reads no scikit-learn | running | 6,136 columns, round-trips exactly |
 | `phrases.py` | Phrase head as a closed table keyed on the span's text, no model | running | 348 entries, 81.4% exact on held-out spans |
+| `encoder.py` | A frozen sentence encoder giving every word its contextual vector, one thread, eval mode | measured, not wired | 384 columns, **43.1%** precision alone |
+| `heads.py` | The same decision fitted on the one-hot bag, on the encoder, and on both | measured, not wired | projected closure 4.5%, -0.3% and **5.4%** |
+
+## 7a. Document-level decisions (`document/`)
+
+Both of these are measurements that shipped nothing. They are in the tree because the roadmap's
+remaining reach rested on them and the result was negative, which is a thing the engine has to be
+able to state.
+
+| Component | Technique | Status | Measured at |
+|---|---|---|---|
+| `allocate.py` | A document's reduction split across its paragraphs, five ways, against Opus's own split | measured, refused | length-proportional **84.6%**, every model variant below it |
+| `sentences.py` | Whether the gold editor drops a sentence, fitted over size, discourse and internal features | measured, refused | never reaches 0.5; **8%** at the top of the ranking |
+| `sentences.py` | The same decision read as a ranking, since the class is 5.5% of sentences | measured, refused | every depth loses words, -986 at 100 drops |
 
 ## 8. The tagger as a rule (`rules/rule_tagged.py`)
 

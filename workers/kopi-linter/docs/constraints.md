@@ -1390,8 +1390,8 @@ in a way worth keeping.** Reach *falls* when the table fires, from 2.27% to 2.05
 replacement moves fewer words than a deletion. The phrase head cannot open a site: it only
 changes what happens at a site the deletion model already licensed, and that model licenses 2.3%
 of words. Step 11 was written as though writing were a reach mechanism. It is a precision
-mechanism, and **the reach the roadmap still needs is entirely in steps 13 and 14**, where a
-document decides which paragraphs absorb a reduction and whole sentences go.
+mechanism, and the reach the roadmap still needs is somewhere other than here. Steps 13 and 14
+were where this constraint expected to find it, and C25 and C26 measured both and found nothing.
 
 **One damage case is the table's own.** "In the specific case mentioned, Hannes shared..." became
 "In the specific case said,...", because the table's entry for that span was induced where the
@@ -1407,6 +1407,194 @@ is the whole of what a table can be wrong about, and 81.4% is the rate.
 3. *Let the table fire where the model does not.* Every entry is a span Opus rewrote, and the
    rule only ever offers it spans the deletion model already wanted. Offering the table every
    span it knows would be a second licence, and C9 is the reason to expect that to fail.
+
+---
+
+## C24. A frozen encoder cannot license on its own, and is worth a point as extra columns
+
+**Evidence.** Step 12 asked whether the syntactic half of the keep-or-delete decision is better
+represented by a pretrained encoder than by the lemma one-hot bag C16 fitted. `manage.py encoder`
+fits the same decision three times over the same words, all on the training documents, all scored
+on the held-out ones: the shipped feature set, the frozen encoder alone, and both together. The
+encoder is `sentence-transformers/all-MiniLM-L6-v2`, run in eval mode on one thread over the whole
+paragraph, giving every word the 384 numbers that describe it in context. There is no lemma column
+in it anywhere.
+
+174,231 training words, 31,464 held-out words, read at threshold 0.60:
+
+| Features | Columns | Words fired on | Precision | Recall | Projected closure |
+|---|---:|---:|---:|---:|---:|
+| one-hot | 6,136 | 1,118 | 64.9% | 9.1% | 4.5% |
+| encoder | 384 | 144 | **43.1%** | 0.8% | **-0.3%** |
+| one-hot and encoder | 6,520 | 1,441 | 64.0% | 11.6% | **5.4%** |
+
+**The encoder alone is not a licence.** It fires on 144 words and is wrong on more than half of
+them, which is below the break-even line closure puts at 50% accuracy, so switching to it would
+subtract. That is the answer to the ablation C18 raised: the one-hot bag is not a weak stand-in
+for meaning, it is where nearly all of the signal is, and the reason is visible in the shapes.
+The bag carries 6,136 columns fitted on 174,231 words; the encoder carries 384 columns that were
+fitted on somebody else's corpus for somebody else's task, and nothing in this pipeline adapts
+them.
+
+**Added to the bag it buys recall, not precision.** Together the two sets fire on 29% more words
+at the same precision, which is 0.9 projected points. That clears step 12's target, and the target
+is worth reading carefully: projected closure is an upper bound that ignores repair and the guard,
+and the last time the engine cashed one in, C16's projected 2.7% arrived as 1.3%. Half of 0.9
+points is the honest expectation.
+
+**What it would cost is the reason it is not wired in.** The engine imports spaCy and reads a
+table of rounded weights; wiring these columns in puts `torch` and a downloaded encoder inside
+`manage.py lint`, and every damage verdict in `damage/verdicts.jsonl` would have to be judged
+again. That is a trade about what this tool is, not a measurement, so it is recorded here and
+left to be decided rather than taken.
+
+**Experiments.**
+1. ~~*Fit the encoder against the one-hot bag on held-out documents.*~~ Done, above.
+2. *Fine-tune the head rather than freezing it.* Every number here is a linear head on frozen
+   vectors, which is the cheap end of the ladder `learning.md` sets out; the gate for climbing it
+   is that prompting and features have demonstrably plateaued, and one measurement is not that.
+3. *Ask the same question of the phrase table.* The encoder was tested on the deletion half only.
+   C23's table is keyed on a span's literal text, which is exactly where a contextual vector has
+   something a lookup cannot have.
+
+---
+
+## C25. Allocation is paragraph length, and the engine's own evidence makes it worse
+
+**Evidence.** Step 13 was the roadmap's answer to reach: given a document and a reduction, choose
+which paragraphs absorb it. `manage.py allocate` holds the size of the cut fixed at what Opus
+actually removed from that document at that band, so only the split across paragraphs is judged.
+15 document-and-band units, 3,301 removed words, held out.
+
+| Method | Captured | Wasted | Error |
+|---|---:|---:|---:|
+| length-proportional | **84.6%** | 1.8% | 0.31 |
+| equal share | 79.6% | 2.7% | 0.41 |
+| model words | 62.6% | 0.6% | 0.75 |
+| model mass | 62.2% | 0.6% | 0.76 |
+| length and model mass, halved | 76.1% | 1.2% | 0.48 |
+| gold allocation (anchor) | 100.0% | 0.0% | 0.00 |
+
+`captured` is the share of Opus's cut that a paragraph's budget can pay for, counting the smaller
+of the two, so nothing is earned by handing a paragraph more than was taken from it.
+
+**Step 13 fails its target and the failure is informative twice over.** One: what the engine does
+today, one band target applied to every paragraph, already captures 84.6%, so the whole of
+document-level allocation is worth at most 15 points of budget placement and not the reach step 14
+was waiting for. Opus spreads its cut close to proportionally, and a document where one paragraph
+absorbs everything is not the document this corpus holds. Two: every variant that consults the
+fitted model is *worse* than counting words, and the blend is worse than length alone. The model
+knows which words it wants gone; summed over a paragraph that is a statement about how many
+deletable-looking words the paragraph contains, which is not the same thing as how much the editor
+chose to cut there, and C9's type-and-token distinction has now been demonstrated at a second
+altitude.
+
+**Experiments.**
+1. ~~*Beat a length-proportional quota.*~~ Done, and nothing did.
+2. *Ask whether the 15 points are reachable at all.* The anchor is a per-paragraph split; the
+   question this does not answer is whether any feature of a paragraph, rather than of its words,
+   predicts the residual after length.
+3. *Read the same table on the train split.* 15 units is enough to separate 84.6% from 62.6% and
+   not enough to separate 84.6% from 80%.
+
+---
+
+## C26. The largest family is the least predictable: a dropped sentence looks like a kept one
+
+**Evidence.** `sentence` is the biggest thing in the corpus, 15.6 reach points at 18.1 words per
+decision, and step 14 held it back for step 13 on the grounds that dropping a sentence is a
+discourse decision. C25 removed that gate by failing it, so the question was asked directly:
+given every source sentence of the 1,490 gold paragraphs, labelled by whether the aligner puts it
+in a delete bead, can a fitted decision tell the dropped ones from the kept ones? 6,557 training
+sentences, 1,236 held-out sentences, 68 of them dropped, over 29 columns in three groups: `size`,
+`inside` (what the sentence is made of) and `discourse` (where it sits, how much of its vocabulary
+repeats elsewhere in the paragraph, whether it opens with a connective).
+
+Dropping every sentence would be right 5.5% of the time. The fitted decision never reaches 0.5 on
+any held-out sentence at all, so read as a ranking instead:
+
+| Sentences dropped | Opus dropped them too | Precision | Net words |
+|---:|---:|---:|---:|
+| 10 | 0 | 0.0% | -79 |
+| 25 | 2 | 8.0% | -180 |
+| 50 | 3 | 6.0% | -433 |
+| 100 | 8 | 8.0% | -986 |
+
+**Nothing here beats guessing.** 8% against a 5.5% base rate is a 1.5x lift, below C10's 1.88x and
+C12's 1.24x, and the sentences the model is *most* confident about are the ten it gets entirely
+wrong. Every threshold that fires at all loses words: the best row in the table is -2.6% closure
+and the rest are zero because the model refuses to fire. Every ablation is identical, which is not
+a finding about the features but the absence of one, since a model that never crosses the
+threshold cannot be made to cross it by removing columns.
+
+**The discourse features are there and they carry nothing.** `repeated` and `unique` measure how
+much of a sentence's content vocabulary appears elsewhere in its paragraph, which is redundancy,
+which is the textbook reason to cut a sentence. Removing the whole `discourse` group changes
+nothing, because there was nothing to remove. What Opus drops is a sentence whose *content* the
+document does not need, and no count of shared lemmas inside one paragraph is a measure of that.
+
+**Read with C21.** This family is deletion at 18.1 words a time, and the damage set already shows
+that at 8% precision an edit does not merely fail to close the gap, it damages the paragraph.
+Wiring this in at any threshold would cost closure twice and would be the single largest source of
+damage in the engine.
+
+**Experiments.**
+1. ~~*Fit the drop decision and score it held out.*~~ Done, and it does not beat the base rate.
+2. *Ask the same question with the document, not the paragraph, in scope.* Every feature here is
+   computed inside one paragraph because that is the only unit the corpus stores; a sentence that
+   repeats what an earlier paragraph said is invisible to all of it, and that is the most likely
+   place the signal actually is.
+3. *Check the label.* A delete bead is the aligner's judgement, and `_split_out_deletions` is the
+   heuristic that separates a drop from a merge. 68 held-out positives is few enough that a
+   labelling error rate of a few per cent would matter.
+
+---
+
+## C27. `clause` and `voice` both refuse the probe, and one of them refuses absolutely
+
+**Evidence.** Step 15 named two families the typology calls mostly deletion and nobody had ever
+asked Opus about. Per step 3 and C13, the probe comes before the rule, so three probe-only
+generators were written and registered under their own family names, where no experiment can pick
+them up: `clause/adverbial` drops a whole adverbial clause, `clause/complement` drops a complement
+clause, and `voice/probe` drops the passive auxiliary and any agent phrase after it. Measured on
+the training documents, so the held-out split stays unspent.
+
+| Probe | Attested | Declined | Rewritten or dropped | Rate |
+|---|---:|---:|---:|---:|
+| `clause/adverbial` | 0 | 368 | 1,172 | **0.0%** |
+| `clause/complement` | 0 | 407 | 1,379 | **0.0%** |
+| `voice/probe` | 7 | 274 | 1,444 | **2.5%** |
+
+The gate C13 set is 20% of decidable candidates, and 2.5% is the highest of the three. All three
+are refused, and no rule is built for either family.
+
+**Zero is a result, not a broken probe.** The same machinery returns 7 attested for the voice
+probe on the same corpus in the same run, so it can say yes; it says no 775 times for clause
+dropping. Opus does drop clauses, 127 times by the typology's count, and it does not drop the ones
+a parse can point at: an `advcl` is an adverbial clause by its label and a reason, a condition or a
+time by its function, and removing it takes out a truth condition (G1) rather than a wordy
+construction. `clause` is 781 instances of which 654 are predicate absorption, which is rewriting
+and not this.
+
+**Voice fails for the reason the typology predicted.** 2.5% is the rate for taking the passive
+apart by deleting its auxiliary, and the seven attested cases are `being` and `were` inside spans
+Opus was rewriting anyway. The typology says the real work in this family is recovering an agent
+that is absent from the surface and deciding whether the change is wanted at all, which it calls a
+discourse question. Deleting the auxiliary is the part that is easy to propose, and it is not the
+part Opus performs.
+
+**Together with C25 and C26 this closes the deterministic ladder.** Steps 13, 14 and 15 were the
+roadmap's three remaining sources of reach that do not write words, and all three are now measured
+and refused. What is left in `plan.md` is step 16, and step 16 generates.
+
+**Experiments.**
+1. ~~*Probe `clause` and `voice` before building either.*~~ Done, above, and both refused.
+2. *Probe predicate absorption instead.* 654 of the 781 `clause` instances are a finite clause
+   becoming a participial or appositive phrase, which is a rewriting operation with a closed shape
+   and was never separated from clause dropping when the family was named.
+3. *Probe `agent-restored` on its own.* 233 instances, and the only part of `voice` that adds
+   words rather than removing them, so it is the one part of the family the phrase table's
+   architecture cannot express at all.
 
 ---
 

@@ -2,7 +2,9 @@
 the user closes it, returning here after every action finishes or fails, and
 mirrors the subcommands one-to-one."""
 from . import (
+    allocate_cmd,
     damage_cmd,
+    encoder_cmd,
     eval_cmd,
     evidence_cmd,
     execute_cmd,
@@ -12,6 +14,7 @@ from . import (
     lint_cmd,
     probe_cmd,
     rank_cmd,
+    sentence_cmd,
     tag_cmd,
     ui,
 )
@@ -22,6 +25,9 @@ _ACTIONS = [
     ("execute", "Probe whether a local backend can perform the gold edits", execute_cmd.run),
     ("tag", "Fit the keep-or-delete decision the linter uses", tag_cmd.run),
     ("damage", "Build the hand-judging sheet and report the damage rate", damage_cmd.run),
+    ("encoder", "Compare a frozen encoder against the one-hot features", encoder_cmd.run),
+    ("allocate", "Compare ways of splitting a document's reduction across paragraphs", allocate_cmd.run),
+    ("sentence", "Ask whether the sentences Opus drops can be told from the ones it keeps", sentence_cmd.run),
     ("experiment", "Compare every method for one transformation family", experiment_cmd.run),
     ("rank", "Compare scoring functions for which phrase to drop first", rank_cmd.run),
     ("evaluate", "Score the linter against Opus on the gold corpus", eval_cmd.run),

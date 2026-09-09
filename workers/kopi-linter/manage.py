@@ -3,7 +3,9 @@ import argparse
 import sys
 
 from cli import (
+    allocate_cmd,
     damage_cmd,
+    encoder_cmd,
     eval_cmd,
     evidence_cmd,
     execute_cmd,
@@ -13,6 +15,7 @@ from cli import (
     lint_cmd,
     probe_cmd,
     rank_cmd,
+    sentence_cmd,
     tag_cmd,
     ui,
 )
@@ -53,16 +56,6 @@ def _measurement_parsers(sub) -> None:
     executor.add_argument("--transport", default=decoder.DEFAULT_TRANSPORT, choices=decoder.TRANSPORTS, help="where the decoder runs (default: served)")
     executor.add_argument("--reproduce", action="store_true", help="check two runs write the same bytes")
 
-    tagger = sub.add_parser(
-        "tag", help="Fit the keep-or-delete decision the linter uses"
-    )
-    tagger.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
-
-    damage = sub.add_parser(
-        "damage", help="Build the hand-judging sheet and report the damage rate"
-    )
-    damage.add_argument("-n", "--limit", type=int, default=damage_cmd.SIZE, help="how many changed paragraphs to judge")
-
     prober = sub.add_parser(
         "probe", help="Ask whether Opus performs a transformation, before building it"
     )
@@ -76,6 +69,34 @@ def _measurement_parsers(sub) -> None:
                          help="fewest observations for a construction to be tabled")
 
 
+def _fitting_parsers(sub) -> None:
+    """Subcommands that fit a decision from the corpus or judge one by hand."""
+    tagger = sub.add_parser(
+        "tag", help="Fit the keep-or-delete decision the linter uses"
+    )
+    tagger.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    damage = sub.add_parser(
+        "damage", help="Build the hand-judging sheet and report the damage rate"
+    )
+    damage.add_argument("-n", "--limit", type=int, default=damage_cmd.SIZE, help="how many changed paragraphs to judge")
+
+    encoder = sub.add_parser(
+        "encoder", help="Compare a frozen encoder against the one-hot features"
+    )
+    encoder.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+    allocator = sub.add_parser(
+        "allocate", help="Compare ways of splitting a document's reduction across paragraphs"
+    )
+    allocator.add_argument("--split", default="test", choices=load.SPLITS, help="which documents to score on (default: test)")
+
+    sentencer = sub.add_parser(
+        "sentence", help="Ask whether the sentences Opus drops can be told from the ones it keeps"
+    )
+    sentencer.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="manage.py",
@@ -83,6 +104,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
     _measurement_parsers(sub)
+    _fitting_parsers(sub)
 
     linter = sub.add_parser("lint", help="Lint a document and write the edited text")
     linter.add_argument("file", nargs="?",
@@ -120,6 +142,12 @@ def main():
         return tag_cmd.run(limit=args.limit)
     if args.command == "damage":
         return damage_cmd.run(size=args.limit)
+    if args.command == "encoder":
+        return encoder_cmd.run(limit=args.limit)
+    if args.command == "allocate":
+        return allocate_cmd.run(split=args.split)
+    if args.command == "sentence":
+        return sentence_cmd.run(limit=args.limit)
     if args.command == "probe":
         return probe_cmd.run(name=args.method, limit=args.limit)
     if args.command == "induce":

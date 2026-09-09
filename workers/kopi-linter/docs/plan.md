@@ -35,7 +35,8 @@ edit a reader would object to.
 **Accuracy is the highest it has been and reach is the lowest since step 6.** Just under three
 quarters of edits land on something Opus also changed. Reach is 2.7% because the engine now
 refuses far more than it did, and because a written phrase moves fewer words than a deletion.
-Nothing in steps 9 to 11 was a reach mechanism; steps 13 and 14 are where reach comes back.
+Nothing in steps 9 to 11 was a reach mechanism, and steps 13 to 15 then measured the three
+that were left and refused all three, so reach now comes back only through step 16.
 
 **Qwen is below the break-even line**, changing more than Opus did at under 50% accuracy, so its
 output sits further from Opus's version than the untouched original. One honest caveat: closure
@@ -104,15 +105,14 @@ buy, and states the result that kills it. A step that misses its number is a fin
 
 ```mermaid
 flowchart TD
-    D["steps 1 to 11, done<br/>closure 1.3%, held out 1.1%, 9% of changed paragraphs damaged"] --> S12["12 a frozen encoder for syntax"]
-    S12 --> S13["13 document-level allocation"]
-    S13 --> S14["14 sentence dropping"]
-    S14 --> S15["15 clause and voice deletion"]
-    S15 --> S16["16 the constrained decoder"]
+    D["steps 1 to 11, done<br/>closure 1.3%, held out 1.1%, 9% of changed paragraphs damaged"] --> M["steps 12 to 15, measured<br/>nothing shipped: one point offered, three families refused"]
+    M --> S16["16 the constrained decoder<br/>needs an endpoint"]
     classDef done fill:#e6f4ea,stroke:#34a853,color:#1a1a1a;
+    classDef shut fill:#fce8e6,stroke:#ea4335,color:#1a1a1a;
     classDef open fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a;
     class D done;
-    class S12,S13,S14,S15,S16 open;
+    class M shut;
+    class S16 open;
 ```
 
 **1. Build the measurement layer first.** *Done.* Bead alignment, the span taxonomy, the
@@ -183,38 +183,57 @@ held-out spans it fires on, and the rule uses it where the deletion model alread
 span. Held-out closure 0.89% to **0.98%**, accuracy 69.5% to 73.9%, and SARI `add` 0.0018 to
 0.0074, the first time that column has been anything. The target of 2% to 4% assumed writing
 would open new sites; it cannot, because the licence is still the deletion model's, so reach
-*fell* from 2.27% to 2.05%. Writing is a precision mechanism here, and the reach is in steps 13
-and 14.
+*fell* from 2.27% to 2.05%. Writing is a precision mechanism here, and the reach this step
+expected to leave for steps 13 and 14 turned out not to be there either.
 
-**12. A frozen encoder aimed at syntax.** The step 6 ablation says a bag of lemma one-hots
-represents the syntactic half worst, and a learned deletion lexicon is the transfer risk that
-comes with it. Freeze a small pretrained encoder, mark the span, fit a linear head, score on the
-same held-out documents.
-Target: beat the one-hot baseline on held-out closure. Fails otherwise, and the lexicon is
-recorded as the ceiling of this feature set.
+**12. A frozen encoder aimed at syntax.** *Done, C24, and it offers one point at a price.*
+`manage.py encoder` fits the keep-or-delete decision three ways over the same 174,231 training
+words and scores all three on the same 31,464 held-out ones. The frozen encoder on its own fires
+at **43.1% precision**, which is below the break-even line, so it cannot license anything. Added
+to the one-hot columns it fires on 29% more words at the same precision, and projected closure
+goes 4.5% to **5.4%**. That clears the target and is not wired in: the columns bring `torch` into
+`manage.py lint`, and every hand verdict in the damage set would have to be judged again. The
+trade is recorded and left to be decided.
 
-**13. Document-level allocation.** Given a document and a requested reduction, choose which
-paragraphs absorb it. The first thing in this project that cannot be decided one paragraph at a
-time, and nothing in the code can express it yet.
-Target: beat a length-proportional quota. Fails otherwise, and step 14 is unreachable.
+**13. Document-level allocation.** *Done, C25, and it failed its target.* `manage.py allocate`
+hands every method the same document and the same reduction Opus actually made, so only the split
+across paragraphs is judged. Length-proportional, which is what the engine already does, captures
+**84.6%** of the gold cut. Nothing beat it: consulting the fitted model captures 62.6%, and
+blending the two captures 76.1%. Allocation is worth at most 15 points of budget placement, it is
+not the reach step 14 was waiting for, and summing a per-word model over a paragraph is C9's
+type-and-token error at a second altitude.
 
-**14. Sentence dropping.** The biggest family, pure deletion, 18.1 words per decision. Dropping a
-sentence is a discourse decision, which is why it waits for step 13 rather than for a licence.
-Target **4% to 8%**.
+**14. Sentence dropping.** *Done, C26, and the largest family is the least predictable.* Every
+source sentence labelled by whether the aligner puts it in a delete bead: 6,557 train, 1,236 held
+out, 68 dropped. The fitted decision never reaches 0.5 on any held-out sentence, and read as a
+ranking it scores **8% precision against a 5.5% base rate**, worse than that at the top. Every
+threshold that fires loses words. The discourse features, including how much of a sentence's
+vocabulary repeats elsewhere in its paragraph, change nothing when removed, because there was
+nothing there to remove. The target was 4% to 8% and the measurement is negative.
 
-**15. `clause` and `voice` deletion.** Both reclassified as mostly deletion and neither probed.
-Attestation probe first, per step 3.
-Target **2% to 4%**, taking the running total to roughly 10% to 17%.
+**15. `clause` and `voice` deletion.** *Done, C27, and both refuse the probe.* Three probe-only
+generators, measured on the train split per step 3: dropping an adverbial clause is attested
+**0 times in 368** decidable candidates, dropping a complement clause **0 in 407**, and dropping a
+passive auxiliary **7 in 281, 2.5%**. The gate is 20%. Opus does drop clauses and does rewrite
+passives, and neither is the operation a parse can point at: what it drops is a clause whose
+content is not needed, and what it does to a passive is recover an agent that is not on the
+surface.
 
-**16. A constrained decoder for `phrase` and `voice` only.** 92.5% of what the vocabulary cannot
-reach sits in those two families and `phrase` alone is 84.7%. A small local model, greedy, given a
-closed task and never a paragraph, running only where step 11's tagger declined. Last, because
-eight rewriting spans in ten are not paraphrase and a model spent on them is a model spent on the
-easy part. Unmeasured until an endpoint exists: the decoder backend reports unavailable on this
-machine, so the failing half of `manage.py execute --reproduce` has never been exercised.
+**16. A constrained decoder for `phrase` and `voice` only.** *Blocked, and it is the only thing
+left.* 92.5% of what the phrase table cannot reach sits in those two families and `phrase` alone
+is 84.7%. A small model, greedy, given a closed task and never a paragraph, running only where the
+table declined. `execute/decoder.py` already speaks to a served endpoint or a local Ollama, and
+neither is configured on this machine, so the backend reports unavailable and the failing half of
+`manage.py execute --reproduce` has still never been exercised. This step needs a deployed
+endpoint before it needs any code.
 
-**Terminal estimate: 30% to 50% closure**, dominated by whether generation accuracy clears 70% and
-whether deletion accuracy holds near 80% as coverage grows. Basis: the family table above with
+**Steps 12 to 15 shipped nothing, and that is the result.** They were the roadmap's remaining
+sources of reach that do not write words. One offers 0.9 projected points for a heavy dependency;
+three are refused by their own measurements. The deterministic ladder is at its top, and
+everything past it generates.
+
+**Terminal estimate, now resting entirely on step 16: 30% to 50% closure**, dominated by whether
+generation accuracy clears 70% and whether deletion accuracy holds near 80% as coverage grows. Basis: the family table above with
 per-step accuracy assumptions stated; estimates only. The residual is the 28.5% of edit distance
 no family accounts for, the head-changing paraphrase core, and the fact that Opus is one sample of
 a stochastic editor, so 100% is not available to anyone including Opus on a second pass.
