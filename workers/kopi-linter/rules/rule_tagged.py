@@ -8,10 +8,12 @@ from lint.edit import Edit
 
 FAMILY = "tagged"
 
-# Only keeps proposals no band would ever admit out of the changelog. The band's
-# own threshold is what decides which of these fire, which is the whole point:
-# the model returns a probability, so the dial already exists.
-_FLOOR = 0.5
+# Proposals below the loosest band's threshold, which is the aggressive row of
+# the model's own operating table. Keeping them would put words in the changelog
+# that nothing can admit. The band's threshold is what decides which of the rest
+# fire, which is the whole point: the model returns a probability, so the dial
+# already exists.
+_FLOOR = 0.6
 
 # What makes a preposition complete. The surviving governor is found by part of
 # speech and not by dependency, because a coordinated preposition ("and in
@@ -51,6 +53,19 @@ _GOVERNED = frozenset([
     "oprd",
 ])
 
+# What hangs off a verb and is left with nothing to hang off if the verb goes.
+_DEPENDANTS = frozenset([
+    "nsubj",
+    "nsubjpass",
+    "csubj",
+    "csubjpass",
+    "expl",
+    "dobj",
+    "dative",
+    "attr",
+    "oprd",
+])
+
 _VERBAL = frozenset([
     "VERB",
     "AUX",
@@ -83,6 +98,8 @@ class Gates:
             survives, which is what leaves "might enabling" or no subject at all.
         keep_verbs_complete: hold back an object whose verb survives, which is
             what leaves "provided to articulate relationships".
+        keep_clause_heads: hold back a verb whose own subject or object survives,
+            which is what leaves "cases from the literature that how".
         trim_refused_runs: delete what is left of a run once the held-back words
             are taken out. With this off the whole run is dropped instead, which
             costs every deletion that merely stood next to an offender.
@@ -92,6 +109,7 @@ class Gates:
     keep_modifiers_attached: bool = True
     keep_verbs_supported: bool = True
     keep_verbs_complete: bool = True
+    keep_clause_heads: bool = True
     trim_refused_runs: bool = True
 
 
@@ -266,6 +284,25 @@ def _verb_objects(run: list) -> set:
     return held
 
 
+def _clause_heads(run: list) -> set:
+    """Verbs whose own subject or object stays behind when the run goes.
+
+    The sentence root is one case of this and has its own prior; a relative
+    clause's verb is the case that prior cannot see, because the clause is not
+    the sentence.
+    """
+    inside = _inside(run)
+    held = set()
+    for item in run:
+        token = item["token"]
+        if token.pos_ not in _VERBAL:
+            continue
+        for child in token.children:
+            if child.dep_ in _DEPENDANTS and child.i not in inside:
+                held.add(token.i)
+    return held
+
+
 def _held_back(run: list, gates: Gates) -> set:
     """Every word in the run that an enabled shape prior refuses to delete."""
     held = set()
@@ -279,6 +316,8 @@ def _held_back(run: list, gates: Gates) -> set:
         held |= _verb_support(run)
     if gates.keep_verbs_complete:
         held |= _verb_objects(run)
+    if gates.keep_clause_heads:
+        held |= _clause_heads(run)
     return held
 
 

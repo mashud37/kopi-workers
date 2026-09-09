@@ -315,14 +315,14 @@ TAGGED = (
         span="Furthermore",
     ),
     Case(
-        "She underlines that social media content feeds are highly commercialised "
-        "spaces.",
+        "Gretta's description nicely illustrates something that I noticed with all my "
+        "participants.",
         "tagged", "fire",
-        "the run is 'underlines that' and only 'underlines' is unsafe, so refusing the "
+        "the run is 'nicely illustrates' and only the root is unsafe, so refusing the "
         "whole run throws away a deletion nothing objected to",
         observed=True,
-        span="that",
-        survives="underlines",
+        span="nicely",
+        survives="illustrates",
     ),
     Case(
         "TikTok sharing practices might be enabling of social interaction.",
@@ -338,6 +338,16 @@ TAGGED = (
         "takes the object of a verb that stayed: 'provided to articulate'",
         observed=True,
         span="opportunities",
+    ),
+    Case(
+        "In the next section, I reflect on these conditions alongside a number of "
+        "cases from the literature that demonstrate how TikTok's content "
+        "recommendation system turns the app into an exclusionary online space.",
+        "tagged", "refuse",
+        "takes a relative clause's verb and leaves its subject: 'cases from the "
+        "literature that how'",
+        observed=True,
+        span="demonstrate",
     ),
     Case(
         "Put differently, there are many forms of activity that people practice in "

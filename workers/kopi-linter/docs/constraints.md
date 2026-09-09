@@ -1138,6 +1138,112 @@ refusals, and the ways to reach it are a better model rather than a better arbit
 
 ---
 
+## C19. The shape priors know nothing about what Opus did, and that is what they are for
+
+**Evidence.** C18 left one question: a prior that holds back 1,111 of the 2,584 words the model
+wants is either catching a model that is wrong about them or blocking a family of edits Opus
+makes. The gold tag for each word answers it directly, since `tagging/vocabulary.tags_for` already
+labels every source word KEEP or DELETE from the alignment. Over the 233 held-out paragraphs:
+
+| Words | Count | Opus deleted the same word | Inside a span Opus changed | Of those, rewritten rather than cut |
+|---|---:|---:|---:|---:|
+| fired | 1,473 | 828 (**56.2%**) | 50.3% | 62.3% |
+| held back by a prior | 1,111 | 613 (**55.2%**) | 49.2% | 60.9% |
+
+Per prior, the words held back and the share Opus also deleted: root 323 / 60.7%, preposition
+333 / 55.9%, modifier 309 / 54.0%, support 299 / 51.8%, object 130 / 51.5%. Four of the five hold
+back words at within four points of the rate for the words that fire, and **the root prior holds
+back words Opus deleted more often than the ones the rule keeps**.
+
+**Neither answer was right.** The priors carry no information about whether Opus touched the word.
+They are not a precision filter and they are not blocking a family; they select on whether this
+engine can take the word out without wrecking the sentence, which is a different axis entirely.
+That is also why they cost so little closure while removing nineteen defects of twenty-one: they
+are almost orthogonal to the gold.
+
+**What it means for the remaining reach.** There are 613 held-out words that Opus deleted and the
+priors refuse. They are not reachable by a better deletion licence, because the objection is not
+about whether the word should go but about what the sentence looks like once it has. Opus deletes
+a sentence root and rewrites the clause around it; the engine deletes a sentence root and leaves a
+fragment. Roughly half of what C16's 4.5% projection assumed is therefore behind generation and
+not behind arbitration, which is the second measurement in a row pointing at the phrase head
+rather than at more licence work.
+
+**Caveat on the denominator.** 56.2% is the share of fired *words* whose gold tag is DELETE, and
+it sits below the 89% attestation ceiling and the 72% closure accuracy because all three count
+different things: the word's own tag, whether Opus changed the text an edit covered, and whether
+an edit moved the paragraph nearer the gold. Quote it against the held-back column and nowhere
+else.
+
+---
+
+## C20. The band was inherited rather than chosen, and choosing it costs accuracy for reach
+
+**Evidence.** `lint/bands.py` holds a threshold per family per band, and the `tagged` family had no
+row, so it fell through to `_DEFAULT_THRESHOLD`: 0.95, 0.90, 0.80, 0.70. Those numbers were set
+for hand-written rules whose confidences are hand-set constants, and the fitted model returns a
+probability whose meaning is measured (C16). Each band now takes a row of that table, and the
+rule's proposal floor moves up to the loosest of them:
+
+| Band | Threshold | Precision at that row |
+|---|---:|---:|
+| clarity | 0.90 | 97.1% |
+| light | 0.80 | 87.3% |
+| firm | 0.70 | 74.9% |
+| aggressive | 0.60 | 64.9%, where projected closure peaks |
+
+Over the full corpus, before and after:
+
+| | closure | held out | reach | accuracy | fired | attested | paragraphs changed |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| inherited default | 1.0% | 1.0% | 2.3% | 72.1% | 690 | 89.9% | 583 (39.1%) |
+| **chosen from the table** | **1.7%** | **1.5%** | 4.6% | 68.1% | 1,496 | 84.0% | 823 (55.2%) |
+
+**This is the first increment here that spends accuracy to buy reach.** Four points of accuracy
+and six points of attestation for 0.7 points of closure. The arithmetic supports it, since at
+68.1% a point of reach is still worth 0.36 points of closure, and `plan.md` section 2 sets the
+abandon line at 62%. It is also the change most likely to be wrong in the way this project cannot
+yet see, because closure rewards agreement with one editor and the paragraph count changed from
+39% to 55%. Step 9's hand-checked damage set is the referee, and it now has something specific to
+referee.
+
+**Reading the output found a defect no panel had.** At the new operating point the sample document
+came back with "cases from the literature that demonstrate how" reduced to "cases from the
+literature that how". The model scores `demonstrate` at 0.87, so this was never a threshold
+question: it fired under the old ladder too, and no measurement had flagged it. The root prior
+cannot see it, because a relative clause's verb is not the sentence's root. A sixth prior,
+`keep_clause_heads`, holds back a verb whose own subject or object survives. It costs 0.2 closure
+points on the train side and **nothing at all on held-out prose**, which is the shape a safety
+gate should have.
+
+On the 233 held-out paragraphs, with the priors as they now stand:
+
+| Method | Cases | Closure | Reach | Accuracy | Fired | Ceiling | Defects |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **`tagged/deletions`** | 10/10 | **1.32%** | 4.19% | 65.7% | 220 | 84% | 5 |
+| `tagged/no-gates` | 2/10 | 2.72% | 8.04% | 66.9% | 473 | 79% | 49 |
+| `tagged/no-prep-gate` | 8/10 | 1.52% | 4.54% | 66.7% | 246 | 82% | 12 |
+| `tagged/no-support-gate` | 9/10 | 1.66% | 4.86% | 67.1% | 263 | 84% | 12 |
+| `tagged/no-clause-gate` | 9/10 | 1.40% | 5.07% | 63.8% | 282 | 79% | 6 |
+| `tagged/no-object-gate` | 8/10 | 1.44% | 5.11% | 64.0% | 285 | 80% | 7 |
+| `tagged/no-root-gate` | 10/10 | 1.36% | 4.36% | 65.5% | 225 | 84% | 5 |
+| `tagged/no-modifier-gate` | 10/10 | 1.32% | 4.19% | 65.7% | 220 | 84% | 5 |
+
+**Two of the six priors are inert.** Dropping the root prior or the modifier prior changes no case,
+no defect and at most 0.04 closure points, because the clause prior holds every root that has a
+subject and the object prior holds every determiner-bearing noun that is an object. They are kept
+for now on the argument that a root without a subject and a modified noun outside object position
+both exist and neither is in this corpus, which is an argument and not a measurement.
+
+**Experiments.**
+1. ~~*Set the band thresholds from the operating table.*~~ Built, and it moved the headline.
+2. *Turn the root and modifier priors off together and re-measure.* Each is inert alone; nothing
+   says they are inert as a pair, and if they are, four priors ship instead of six.
+3. *Read the output at the aggressive band on prose from another field.* The operating point was
+   chosen from one corpus's precision curve, and the lexicon it rests on is that corpus's.
+
+---
+
 ## Where the queue lives
 
 There is no queue here. This file records what each measurement established, in the order it was

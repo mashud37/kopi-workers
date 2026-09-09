@@ -20,19 +20,21 @@ Measured over all 1,490 gold paragraphs (`manage.py evaluate`):
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do-nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **1.0%** | 2.3% | 72.1% |
+| **kopi-linter** | **1.7%** | 4.6% | 68.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
-540 of 52,043 word-edits closed, 1,219 attempted. Held out: **1.0%**, the same as train.
+859 of 52,043 word-edits closed, 2,374 attempted. Held out: **1.5%** against 1.7% on train.
 
-**We are 1.0% of the way to Opus.** Corpus SARI says 0.5489 against a do-nothing 0.2433 and reads
+**We are 1.7% of the way to Opus.** Corpus SARI says 0.5428 against a do-nothing 0.2433 and reads
 like halfway. SARI pays for correct keeping, so a linter that touches a third of paragraphs
 collects most of its score for the two thirds it left alone.
 
-**Accuracy is fine and reach is still the entire problem.** Seven edits in ten land on something
-Opus also changed. That mechanism is applied to 2.3% of the work, up from 0.7% once the fitted
-keep-or-delete decision was wired in. Accuracy fell four points to buy three times the reach,
-which is the trade closure is designed to price and it came out positive.
+**Reach is still the problem, and accuracy has started to pay for it.** Just under seven edits in
+ten land on something Opus also changed, against seven and a half before the band thresholds were
+set from the model's operating table. That bought reach from 2.3% to 4.6% and closure from 1.0% to
+1.7%, which is the trade closure is designed to price and it came out positive. It is also the
+first increment here to spend accuracy rather than earn it, and step 9 is what referees whether
+the spend was real.
 
 **Qwen is below the break-even line**, changing more than Opus did at under 50% accuracy, so its
 output sits further from Opus's version than the untouched original. One honest caveat: closure
@@ -101,8 +103,7 @@ buy, and states the result that kills it. A step that misses its number is a fin
 
 ```mermaid
 flowchart TD
-    D["steps 1 to 7, done<br/>closure 1.0%, held out 1.0%"] --> S8["8 choose the operating point"]
-    S8 --> S9["9 the hand-checked damage set"]
+    D["steps 1 to 8, done<br/>closure 1.7%, held out 1.5%"] --> S9["9 the hand-checked damage set"]
     S9 --> S10["10 make selection safe"]
     S10 --> S11["11 the phrase head"]
     S11 --> S12["12 a frozen encoder for syntax"]
@@ -113,7 +114,7 @@ flowchart TD
     classDef done fill:#e6f4ea,stroke:#34a853,color:#1a1a1a;
     classDef open fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a;
     class D done;
-    class S8,S9,S10,S11,S12,S13,S14,S15,S16 open;
+    class S9,S10,S11,S12,S13,S14,S15,S16 open;
 ```
 
 **1. Build the measurement layer first.** *Done.* Bead alignment, the span taxonomy, the
@@ -154,11 +155,13 @@ belongs to the model wanting words the priors will never allow, not to how the r
 Two priors were added on the way, because trimming around a held-back root deletes the words
 holding the root up, and the parser hides both shapes afterwards.
 
-**8. Choose the operating point instead of inheriting it.** Proposals start at 0.50 and the bands
-admit at 0.70 and 0.80, so most of what the model proposes is never seen and its cost is
-unmeasured. Raise the floor, then set each band threshold from the operating table rather than
-from `lint/bands._DEFAULT_THRESHOLD`, which gates this family by accident.
-Target: the same closure for less work. Any large movement is a defect found, not a gain.
+**8. Choose the operating point instead of inheriting it.** *Done, C20, and it was not the
+no-op the target predicted.* The `tagged` family had no row in `lint/bands.py`, so it inherited
+the default ladder. Each band now takes a row of the model's own operating table: aggressive 0.60
+where projected closure peaks, then 0.70, 0.80 and 0.90, at 64.9%, 74.9%, 87.3% and 97.1%
+precision. Closure 1.0% to **1.7%**, held out 1.0% to **1.5%**, reach 2.3% to 4.6%, and accuracy
+72.1% to 68.1%. Reading the sample output at the new point found a defect that predates the
+change, which is where the sixth shape prior came from.
 
 **9. The hand-checked damage set.** About 100 paragraphs judged against G1 to G3 by hand.
 **Blocking for everything after it**, because closure rewards agreement with one editor and a rule

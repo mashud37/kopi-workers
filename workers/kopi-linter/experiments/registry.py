@@ -113,7 +113,7 @@ METHODS = (
         "tagged/no-gates", "tagged",
         _tagged(keep_the_root=False, keep_prepositions_complete=False,
                 keep_modifiers_attached=False, keep_verbs_supported=False,
-                keep_verbs_complete=False),
+                keep_verbs_complete=False, keep_clause_heads=False),
         "ablation: the model's own confidence and nothing else",
     ),
     Method(
@@ -133,8 +133,12 @@ METHODS = (
         "ablation: allows an auxiliary or a subject to go while its verb stays",
     ),
     Method(
-        "tagged/no-object-gate", "tagged", _tagged(keep_verbs_complete=False),
+        "tagged/no-object-gate", "tagged", _tagged(keep_verbs_complete=False, keep_clause_heads=False),
         "ablation: allows an object to go while the verb that governs it stays",
+    ),
+    Method(
+        "tagged/no-clause-gate", "tagged", _tagged(keep_clause_heads=False),
+        "ablation: allows a clause's verb to go while its subject or object stays",
     ),
     Method(
         "tagged/drop-whole-run", "tagged", _tagged(trim_refused_runs=False),

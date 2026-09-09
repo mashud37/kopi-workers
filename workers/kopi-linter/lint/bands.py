@@ -12,6 +12,7 @@ _CEILING = {"clarity": 0.06, "light": 0.18, "firm": 0.35, "aggressive": 0.55}
 
 _THRESHOLDS = {
     "clarity": {
+        "tagged": 0.90,
         "relative-clause": 0.80,
         "support-verb": 0.90,
         "adjunct": 0.95,
@@ -26,6 +27,7 @@ _THRESHOLDS = {
         "sentence": _UNREACHABLE,
     },
     "light": {
+        "tagged": 0.80,
         "relative-clause": 0.75,
         "support-verb": 0.85,
         "adjunct": 0.90,
@@ -40,6 +42,7 @@ _THRESHOLDS = {
         "sentence": _UNREACHABLE,
     },
     "firm": {
+        "tagged": 0.70,
         "relative-clause": 0.65,
         "support-verb": 0.70,
         "adjunct": 0.75,
@@ -54,6 +57,7 @@ _THRESHOLDS = {
         "sentence": 0.90,
     },
     "aggressive": {
+        "tagged": 0.60,
         "relative-clause": 0.55,
         "support-verb": 0.60,
         "adjunct": 0.60,
@@ -70,6 +74,11 @@ _THRESHOLDS = {
 }
 
 _DEFAULT_THRESHOLD = {"clarity": 0.95, "light": 0.90, "firm": 0.80, "aggressive": 0.70}
+
+# The `tagged` rows above are read off the fitted model's operating table
+# (`constraints.md` C16) rather than set by hand: 0.60 is where projected closure
+# peaks at 64.9% precision, and each stricter band takes the next row up, at
+# 74.9%, 87.3% and 97.1%.
 
 # What the gold editor actually removes, as a share of the paragraph's words.
 # Median over the corpus, measured per band: 454, 68, 528 and 440 paragraphs.
