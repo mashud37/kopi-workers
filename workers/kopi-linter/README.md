@@ -29,14 +29,14 @@ has measured what a backend could write at a known site, and nothing yet writes 
 lint, so every edit the linter makes is still a deletion.
 
 Progress is tracked as a single per cent, **closure**, defined in
-[docs/good.md](docs/good.md) section 0 and standing at 1.0%, or 0.9% on documents the fitted
-model has never seen. The work follows a fixed loop,
+[docs/good.md](docs/good.md) section 0 and standing at 1.0%, the same on documents the fitted
+model has never seen as on the ones it was fitted on. The work follows a fixed loop,
 analyse then plan then build then evaluate then analyse again, set out in
 [docs/method.md](docs/method.md). Six documents carry the state:
 
 | Document | Question it answers |
 |---|---|
-| [docs/plan.md](docs/plan.md) | where this is going, what each phase is worth, and how it fails |
+| [docs/plan.md](docs/plan.md) | the roadmap: one numbered chain, what each step is worth, and how it fails |
 | [docs/typology.md](docs/typology.md) | what a plain-language linter has to do, measured from 1,490 gold edits |
 | [docs/approaches.md](docs/approaches.md) | which techniques might do it |
 | [docs/constraints.md](docs/constraints.md) | what building it revealed, and what each limit blocks |
@@ -236,7 +236,7 @@ paragraphs, against Opus's edit of the same paragraph at the same band:
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **1.0%** | 2.3% | 71.1% |
+| **kopi-linter** | **1.0%** | 2.3% | 72.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
 `reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
@@ -245,8 +245,8 @@ is attempted. The linter's licence mechanism works and is applied to a small fra
 text; reach is still the whole problem. See [docs/plan.md](docs/plan.md) for what each family
 is worth.
 
-Split out, the held-out documents read **0.9% closure at 70.2% accuracy** against the train
-split's 1.0% and 71.3%. The keep-or-delete model is fitted on the train documents only, so
+Split out, the held-out documents read **1.0% closure at 71.4% accuracy** against the train
+split's 1.0% and 72.3%. The keep-or-delete model is fitted on the train documents only, so
 that near-identical pair is the point of the row rather than an aside: it scores the same on
 prose it has never seen. Earlier versions of this table could not say anything of the kind,
 because the held-out side rested on fourteen edits (`docs/constraints.md` C14).
@@ -277,10 +277,11 @@ Guessing delete for every word scores 25.2%. Ablating the feature groups says th
 lexical first and syntactic second: length features alone never reach the threshold on a single
 word in 31,464, so the model is largely a learned deletion lexicon.
 
-Three shape priors sit in front of the model, because a per-token score cannot know that the
-word it likes is its sentence's only verb. They cost about a third of the closure and remove
-seventeen of eighteen introduced grammatical defects, which is why the highest-scoring variant
-is not the one that ships. Each is registered as an ablation, so `manage.py experiment tagged`
+Five shape priors sit in front of the model, because a per-token score cannot know that the
+word it likes is its sentence's only verb, or the object of a verb that is staying. They cost a
+quarter of the closure and remove nineteen of the twenty-one introduced grammatical defects,
+which is why the highest-scoring variant is not the one that ships. A prior holds one word back
+rather than refusing the phrase around it, so the rest of a run is still deleted. Each is registered as an ablation, so `manage.py experiment tagged`
 prints the trade rather than asserting it.
 
 ### What a local backend could write
@@ -307,12 +308,12 @@ composite does not:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5465 | 0.0031 | 0.7341 | 0.9022 |
+| kopi-linter | 0.5489 | 0.0032 | 0.7344 | 0.9089 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
 That table says the linter beats a 32B model, which is why it is not the headline. The
-score is delete precision earned on 574 changed paragraphs out of 1,490 and 1,004 words moved
-against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0031
+score is delete precision earned on 583 changed paragraphs out of 1,490 and 1,042 words moved
+against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0032
 against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
 every rule it has deletes.
 

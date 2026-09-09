@@ -13,8 +13,9 @@ FAMILY = "tagged"
 # the model returns a probability, so the dial already exists.
 _FLOOR = 0.5
 
-# What makes a preposition complete, taken from `eval.grammatical` so the gate
-# below refuses exactly the shape the defect detector counts.
+# What makes a preposition complete. The surviving governor is found by part of
+# speech and not by dependency, because a coordinated preposition ("and in
+# relation to") is labelled `conj` and a dependency test walks straight past it.
 _PREP_COMPLEMENTS = frozenset([
     "pobj",
     "pcomp",
@@ -31,6 +32,36 @@ _ATTACHED = frozenset([
     "nummod",
 ])
 
+# What a verb needs in order to keep standing once the words beside it go.
+_SUPPORTING = frozenset([
+    "aux",
+    "auxpass",
+    "expl",
+    "nsubj",
+    "nsubjpass",
+    "csubj",
+    "csubjpass",
+])
+
+# What a verb governs and cannot be left without.
+_GOVERNED = frozenset([
+    "dobj",
+    "dative",
+    "attr",
+    "oprd",
+])
+
+_VERBAL = frozenset([
+    "VERB",
+    "AUX",
+])
+
+# Holding one word back changes what the rest of the run leaves behind, so the
+# priors are asked again. Three passes settles every run in the corpus; the
+# bound is here so that a prior which keeps finding offenders stops rather than
+# runs on.
+_TRIM_PASSES = 3
+
 
 @dataclass(frozen=True)
 class Gates:
@@ -38,21 +69,30 @@ class Gates:
 
     A confident word is not a deletable word: the model scores each token on its
     own, so nothing in it knows that the token it likes is the only verb in its
-    sentence. Both gates below were written from measured defects rather than
-    from intuition, and each refuses the whole run rather than trimming it,
-    which is the conservative reading and costs some good deletions.
+    sentence. Every prior below was written from a measured defect rather than
+    from intuition, and each names one word the run may not take.
 
     Attributes:
-        keep_the_root: refuse a run that takes its own sentence's root with it,
-            which is what leaves a sentence with no predicate.
-        keep_prepositions_complete: refuse a run that removes a preposition's
-            last complement while the preposition itself survives.
-        keep_modifiers_attached: refuse a run that deletes a noun and leaves the
-            determiner or adjective that belonged to it standing on its own.
+        keep_the_root: hold back a word that is its own sentence's root, which is
+            what leaves a sentence with no predicate.
+        keep_prepositions_complete: hold back a complement whose preposition
+            survives and would be left governing nothing.
+        keep_modifiers_attached: hold back a noun whose determiner or adjective
+            survives and would be left standing on its own.
+        keep_verbs_supported: hold back an auxiliary or a subject whose verb
+            survives, which is what leaves "might enabling" or no subject at all.
+        keep_verbs_complete: hold back an object whose verb survives, which is
+            what leaves "provided to articulate relationships".
+        trim_refused_runs: delete what is left of a run once the held-back words
+            are taken out. With this off the whole run is dropped instead, which
+            costs every deletion that merely stood next to an offender.
     """
     keep_the_root: bool = True
     keep_prepositions_complete: bool = True
     keep_modifiers_attached: bool = True
+    keep_verbs_supported: bool = True
+    keep_verbs_complete: bool = True
+    trim_refused_runs: bool = True
 
 
 DEFAULT = Gates()
@@ -147,17 +187,23 @@ def _edit_for(doc, run: list) -> Edit:
     )
 
 
-def _takes_the_root(run: list) -> bool:
-    """Whether the run would delete the root of its own sentence.
+def _inside(run: list) -> set:
+    """Indices of every word the run would delete."""
+    return {item["token"].i for item in run}
+
+
+def _the_root(run: list) -> set:
+    """The run's own sentence root, where the run holds it.
 
     Compared by index rather than by identity, because spaCy builds a fresh
     ``Token`` object on every access and two of them are never the same object.
     """
+    held = set()
     for item in run:
         token = item["token"]
         if token.i == token.sent.root.i:
-            return True
-    return False
+            held.add(token.i)
+    return held
 
 
 def _still_complete(preposition, inside: set) -> bool:
@@ -168,40 +214,115 @@ def _still_complete(preposition, inside: set) -> bool:
     return False
 
 
-def _strands_a_preposition(run: list) -> bool:
-    """Whether the run leaves a surviving preposition with nothing to govern."""
-    inside = set()
-    for item in run:
-        inside.add(item["token"].i)
+def _last_complements(run: list) -> set:
+    """Complements whose surviving preposition would be left governing nothing."""
+    inside = _inside(run)
+    held = set()
     for item in run:
         token = item["token"]
         head = token.head
-        if token.dep_ not in _PREP_COMPLEMENTS or head.dep_ != "prep":
+        if token.dep_ not in _PREP_COMPLEMENTS or head.pos_ != "ADP":
             continue
         if head.i not in inside and not _still_complete(head, inside):
-            return True
-    return False
+            held.add(token.i)
+    return held
 
 
-def _orphans_a_modifier(run: list) -> bool:
-    """Whether the run deletes a word and leaves something that only modified it."""
-    inside = set()
+def _modified_words(run: list) -> set:
+    """Words a surviving determiner or adjective would be left attached to."""
+    inside = _inside(run)
+    held = set()
     for item in run:
-        inside.add(item["token"].i)
-    for item in run:
-        for child in item["token"].children:
+        token = item["token"]
+        for child in token.children:
             if child.dep_ in _ATTACHED and child.i not in inside:
-                return True
-    return False
+                held.add(token.i)
+    return held
 
 
-def _refused_by(run: list, gates: Gates) -> bool:
-    """Whether any shape prior the gates enable refuses this run."""
-    if gates.keep_the_root and _takes_the_root(run):
-        return True
-    if gates.keep_prepositions_complete and _strands_a_preposition(run):
-        return True
-    return gates.keep_modifiers_attached and _orphans_a_modifier(run)
+def _verb_support(run: list) -> set:
+    """Auxiliaries and subjects whose own verb survives the run."""
+    inside = _inside(run)
+    held = set()
+    for item in run:
+        token = item["token"]
+        if token.dep_ not in _SUPPORTING:
+            continue
+        if token.head.i not in inside and token.head.pos_ in _VERBAL:
+            held.add(token.i)
+    return held
+
+
+def _verb_objects(run: list) -> set:
+    """Objects and complements whose own verb survives the run."""
+    inside = _inside(run)
+    held = set()
+    for item in run:
+        token = item["token"]
+        if token.dep_ not in _GOVERNED:
+            continue
+        if token.head.i not in inside and token.head.pos_ in _VERBAL:
+            held.add(token.i)
+    return held
+
+
+def _held_back(run: list, gates: Gates) -> set:
+    """Every word in the run that an enabled shape prior refuses to delete."""
+    held = set()
+    if gates.keep_the_root:
+        held |= _the_root(run)
+    if gates.keep_prepositions_complete:
+        held |= _last_complements(run)
+    if gates.keep_modifiers_attached:
+        held |= _modified_words(run)
+    if gates.keep_verbs_supported:
+        held |= _verb_support(run)
+    if gates.keep_verbs_complete:
+        held |= _verb_objects(run)
+    return held
+
+
+def _without(run: list, held: set) -> list:
+    """The run's surviving words, regrouped into neighbouring spans."""
+    pieces = []
+    current = []
+    for item in run:
+        if item["token"].i in held:
+            if current:
+                pieces.append(current)
+                current = []
+        else:
+            current.append(item)
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def _trimmed(run: list, gates: Gates) -> list:
+    """What is left of a run once the words the priors hold back are taken out.
+
+    Holding a word back changes what the words beside it leave behind, so each
+    piece is put to the priors again until none of them objects.
+    """
+    pieces = [run]
+    for _ in range(_TRIM_PASSES):
+        kept = []
+        for piece in pieces:
+            held = _held_back(piece, gates)
+            kept.extend(_without(piece, held))
+        if kept == pieces:
+            return pieces
+        pieces = kept
+    return pieces
+
+
+def _admitted(run: list, gates: Gates) -> list:
+    """The spans of this run that may be deleted."""
+    if gates.trim_refused_runs:
+        return _trimmed(run, gates)
+    if _held_back(run, gates):
+        return []
+    return [run]
 
 
 def propose(doc, gates: Gates = DEFAULT):
@@ -212,7 +333,6 @@ def propose(doc, gates: Gates = DEFAULT):
     wanted = _wanted(doc, fitted)
     edits = []
     for run in _runs(wanted):
-        if _refused_by(run, gates):
-            continue
-        edits.append(_edit_for(doc, run))
+        for piece in _admitted(run, gates):
+            edits.append(_edit_for(doc, piece))
     return edits

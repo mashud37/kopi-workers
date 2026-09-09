@@ -112,7 +112,8 @@ METHODS = (
     Method(
         "tagged/no-gates", "tagged",
         _tagged(keep_the_root=False, keep_prepositions_complete=False,
-                keep_modifiers_attached=False),
+                keep_modifiers_attached=False, keep_verbs_supported=False,
+                keep_verbs_complete=False),
         "ablation: the model's own confidence and nothing else",
     ),
     Method(
@@ -126,6 +127,18 @@ METHODS = (
     Method(
         "tagged/no-modifier-gate", "tagged", _tagged(keep_modifiers_attached=False),
         "ablation: allows a noun to go while its determiner stays behind",
+    ),
+    Method(
+        "tagged/no-support-gate", "tagged", _tagged(keep_verbs_supported=False),
+        "ablation: allows an auxiliary or a subject to go while its verb stays",
+    ),
+    Method(
+        "tagged/no-object-gate", "tagged", _tagged(keep_verbs_complete=False),
+        "ablation: allows an object to go while the verb that governs it stays",
+    ),
+    Method(
+        "tagged/drop-whole-run", "tagged", _tagged(trim_refused_runs=False),
+        "ablation: one held-back word drops every deletion beside it",
     ),
 )
 

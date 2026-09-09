@@ -1,11 +1,15 @@
-# Plan and agenda
+# Plan and roadmap
 
 The one-line objective: **reproduce Opus's copy-editing deterministically, locally, and without a
 model.** Everything below is scored against that and nothing else.
 
-The measure is **closure**, defined in `good.md` §0: the per cent of the word-level distance from
-the original text to Opus's edit that the linter has closed. Doing nothing is 0%, reproducing the
-gold is 100%, and damage is negative. It is the only number this plan is written in.
+The measure is **closure**, defined in `good.md` section 0: the per cent of the word-level
+distance from the original text to Opus's edit that the linter has closed. Doing nothing is 0%,
+reproducing the gold is 100%, and damage is negative. It is the only number this plan is written
+in.
+
+**One roadmap, one numbering.** Section 4 is the whole of it. `constraints.md` records what each
+step measured and is an evidence log, not a queue; nothing is scheduled anywhere else.
 
 ---
 
@@ -16,19 +20,19 @@ Measured over all 1,490 gold paragraphs (`manage.py evaluate`):
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do-nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **1.0%** | 2.3% | 71.1% |
+| **kopi-linter** | **1.0%** | 2.3% | 72.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
-497 of 52,043 word-edits closed, 1,178 attempted. Held out: **0.9%** against 1.0% on train.
+540 of 52,043 word-edits closed, 1,219 attempted. Held out: **1.0%**, the same as train.
 
-**We are 1.0% of the way to Opus.** Corpus SARI says 0.5465 against a do-nothing 0.2433 and reads
+**We are 1.0% of the way to Opus.** Corpus SARI says 0.5489 against a do-nothing 0.2433 and reads
 like halfway. SARI pays for correct keeping, so a linter that touches a third of paragraphs
 collects most of its score for the two thirds it left alone.
 
 **Accuracy is fine and reach is still the entire problem.** Seven edits in ten land on something
 Opus also changed. That mechanism is applied to 2.3% of the work, up from 0.7% once the fitted
-keep-or-delete decision was wired in (C16, C17). Accuracy fell five points to buy three times the
-reach, which is the trade closure is designed to price and it came out positive.
+keep-or-delete decision was wired in. Accuracy fell four points to buy three times the reach,
+which is the trade closure is designed to price and it came out positive.
 
 **Qwen is below the break-even line**, changing more than Opus did at under 50% accuracy, so its
 output sits further from Opus's version than the untouched original. One honest caveat: closure
@@ -42,23 +46,22 @@ Closure decomposes exactly:
 
     closure = reach x (2 x accuracy - 1)
 
-At 50% accuracy closure is zero however much is attempted, which is the wrecking-ball result of
-C11 restated as arithmetic. At today's 76.6%, **every point of reach is worth 0.53 points of
-closure**. Hold accuracy above roughly 75% and buy reach; below 62% a point of reach is worth
+At 50% accuracy closure is zero however much is attempted, which is the wrecking-ball result
+restated as arithmetic. At today's accuracy, **every point of reach is worth about half a point
+of closure**. Hold accuracy above roughly 75% and buy reach; below 62% a point of reach is worth
 under a quarter of a point, which is where a family stops being worth shipping.
 
-**Watch the marginal accuracy, not the average.** The Phase 1 extension came in at 72.3% on its
-new work against a 78.1% base. That is still well above break-even, but a family whose marginal
-accuracy keeps sliding toward 50% is a family approaching its own ceiling, and the average will
-hide that for a long time.
+**Watch the marginal accuracy, not the average.** The relative-clause extension came in at 72.3%
+on its new work against a 78.1% base. That is still well above break-even, but a family whose
+marginal accuracy keeps sliding toward 50% is a family approaching its own ceiling, and the
+average will hide that for a long time.
 
 ## 3. What each family is worth
 
-Corrected 2026-07-26 (C1). Word movement is split by whether the target span is empty, per
-finding, rather than by classifying whole families. Closure is denominated in **edit operations**,
-of which the corpus holds 52,043; deleting a word costs one, so a family's reach ceiling is its
-dropped words over 52,043. The linter's own run confirms the conversion, spending 350 operations
-to remove 347 words.
+Word movement is split by whether the target span is empty, per finding, rather than by
+classifying whole families. Closure is denominated in **edit operations**, of which the corpus
+holds 52,043; deleting a word costs one, so a family's reach ceiling is its dropped words over
+52,043. The linter's own run confirms the conversion, spending 350 operations to remove 347 words.
 
 | Family | dropped | rewritten | reach if fully covered | closure at 76.6% | words per decision |
 |---|---:|---:|---:|---:|---:|
@@ -75,12 +78,11 @@ to remove 347 words.
 | **all deletion** | **25,662** | | **49.3%** | **26.2** | |
 | **all rewriting** | | **11,571** | **22.2%** | **11.8** | |
 
-Three things follow, and all three changed the plan.
+Three things follow, and all three set the order below.
 
 **Deletion reaches 49.3 points, not 26.** `clause` at 93% deletion and `voice` at 62% were both
 counted as generation families and are mostly Opus cutting. Only `phrase`, `support-verb` and
-`nominalisation` genuinely need words written. The generation spine is further deferrable than
-`constraints.md` claimed.
+`nominalisation` genuinely need words written, so writing is deferrable further than it looked.
 
 **Words per decision is the column to build against.** Every decision is a licence risk paid for
 in accuracy, so a precision-limited engine should prefer families that move the most words per
@@ -91,116 +93,156 @@ and `adjunct` is the family this project has spent most of its cycles on.
 measured edit distance. The remaining 28.5% is reordering and insertion that the evidence layer
 does not classify into families at all, and no family-by-family plan reaches it.
 
-## 4. Phases
+## 4. The roadmap
 
-Each phase names the closure it should buy and the condition that makes it fail. A phase that
-misses its number is a finding for `constraints.md`, not a target to relax.
+One chain. Each step takes the previous step's result as its input, states the closure it should
+buy, and states the result that kills it. A step that misses its number is a finding for
+`constraints.md`, not a target to relax.
 
-**Phase 1, harvest what is built.** *Done, and smaller than forecast.* Closure 0.2% to **0.3%**.
-The impure-span fix shipped at 72.3% marginal accuracy and probes at 41%; the three-times-larger
-lexical-verb extension was refused at 0.6%, declined by Opus 169 times to 1 (C13). The family is
-close to exhausted, because 96% of its gold word movement is Opus dropping the clause rather than
-reducing it. The forecast of 1.5-3% was wrong for a reason worth keeping: it read a family's
-*size* off the evidence table without asking what transformation those words belonged to.
+```mermaid
+flowchart TD
+    D["steps 1 to 7, done<br/>closure 1.0%, held out 1.0%"] --> S8["8 choose the operating point"]
+    S8 --> S9["9 the hand-checked damage set"]
+    S9 --> S10["10 make selection safe"]
+    S10 --> S11["11 the phrase head"]
+    S11 --> S12["12 a frozen encoder for syntax"]
+    S12 --> S13["13 document-level allocation"]
+    S13 --> S14["14 sentence dropping"]
+    S14 --> S15["15 clause and voice deletion"]
+    S15 --> S16["16 the constrained decoder"]
+    classDef done fill:#e6f4ea,stroke:#34a853,color:#1a1a1a;
+    classDef open fill:#e8f0fe,stroke:#4285f4,color:#1a1a1a;
+    class D done;
+    class S8,S9,S10,S11,S12,S13,S14,S15,S16 open;
+```
 
-**Phase 2, `sentence` dropping with a document-level allocator.** Promoted past `adjunct`. The
-biggest family, pure deletion, and by far the best words-per-decision ratio. Dropping a sentence
-is a discourse decision a paragraph cannot make alone, so it needs the C12b allocator, and that
-is the work rather than the licence.
-Target **4% to 8%**. Fails if allocation cannot beat a length-proportional quota, in which case
-the ceiling is wherever Phase 3 lands.
+**1. Build the measurement layer first.** *Done.* Bead alignment, the span taxonomy, the
+attestation probe, and closure with its three anchors re-derived on every run. This is why every
+step below can fail rather than merely finish.
 
-**Phase 3, the adjunct licence.** The second-largest deletion family. C9 to C12 established what
-does not work: a per-category drop rate cannot license, ranking is 1.88x random but only orders,
-and a per-paragraph budget forces uniform cutting.
-Target **3% to 5%**. Fails if accuracy on adjuncts cannot clear 70%, in which case the family is
-recorded as unreachable.
+**2. Scope the repair layer to edit joins.** *Done, C6.* Worth +0.067 SARI and +0.20 delete
+precision on its own, purely by making the linter stop editing text no rule had asked to change.
+More than any transformation rule has bought since.
 
-**Phase 4, `clause` and `voice` deletion.** Both newly reclassified as mostly-deletion by C1, and
-neither has been probed. Attestation probe first, per C13.
+**3. Harvest the relative-clause family.** *Done, C13.* Closure 0.2% to 0.3% at 72.3% marginal
+accuracy. The three-times-larger lexical-verb extension was refused before it was built, because
+Opus declines it 169 times to 1. Attestation now precedes every family.
+
+**4. Make the corpus honest.** *Done, C14.* 1,490 distinct gold slots and not 1,523, dedupe
+matching its own docstring, and a document-level split: 20 documents and 1,257 slots to train, 5
+documents and 233 slots held out. Nothing learned could be believed before this.
+
+**5. Ask whether a local executor can write, before building one.** *Done, C15.* Hand each gold
+span to a backend and score the wording alone. Plain code closes 0.2% of the rewriting gap against
+28.8% for deleting the span blind, so hand-written realisation is finished; a closed vocabulary of
+970 induced phrases closes 52.6% and reproduces Opus exactly on 64.6% of rewriting spans, holding
+on 2,916 held-out spans. That result licensed steps 11 and 16 and killed everything between them.
+
+**6. Fit and wire the keep-or-delete decision.** *Done, C16 and C17.* A logistic regression over
+parse and frequency features per source word, three measured shape priors in front of it, and the
+rule registered. Closure 0.4% to **1.0%**, held out 0.15% to **0.9%**, at 89.2% attestation, the
+highest of any rule here. The ablation refuted the length-in-disguise worry: length alone fires on
+zero of 31,464 held-out words, and the lift is lexical first, syntactic second. Ungated the rule
+scores higher and introduces eighteen grammatical defects against one, so the priors are the
+result and not the overhead.
+
+**7. Trim refused runs instead of dropping them.** *Done, C18, and it missed its target by
+fifteen times.* Held out **0.9% to 1.0%**, against the 2% projected, because 839 of the 1,079
+refused runs are a single word and have nothing beside the offender to release. The premise was
+wrong rather than the build: the projected-to-measured gap is in single-word refusals, so it
+belongs to the model wanting words the priors will never allow, not to how the run is arbitrated.
+Two priors were added on the way, because trimming around a held-back root deletes the words
+holding the root up, and the parser hides both shapes afterwards.
+
+**8. Choose the operating point instead of inheriting it.** Proposals start at 0.50 and the bands
+admit at 0.70 and 0.80, so most of what the model proposes is never seen and its cost is
+unmeasured. Raise the floor, then set each band threshold from the operating table rather than
+from `lint/bands._DEFAULT_THRESHOLD`, which gates this family by accident.
+Target: the same closure for less work. Any large movement is a defect found, not a gain.
+
+**9. The hand-checked damage set.** About 100 paragraphs judged against G1 to G3 by hand.
+**Blocking for everything after it**, because closure rewards agreement with one editor and a rule
+that is right about Opus and wrong about English raises it. The three precision readings for the
+shipped rule are 86% (ceiling), 76.1% (closure) and 41% (probe); they measure different things and
+only a hand check says which is nearest to damage. Triage by the "attested by neither" class.
+Fails if hand judgement cannot be made repeatably, in which case quality has no measure and
+nothing that writes words may ship.
+
+**10. Make selection safe before a third producer ships.** Three defects, all latent while one
+learned family is registered and all live the moment another is: selection lets an unlicensed
+ranked guess outweigh a licensed edit, `_trim` drops edits that were not causing the breach, and
+`requirements.txt` pins nothing while every gate reads `dep_`, `tag_` and `pos_` from an unpinned
+parser model. Register the fix for each as an ablation.
+Target: no closure movement, and a pinned run that reproduces today's headline byte for byte.
+
+**11. The phrase head.** The other half of the tag: 7.1% of source words carry a phrase against
+26.3% that are deletions, and step 5 showed the vocabulary needed is closed, 975 phrases covering
+62.6% of what held-out documents ask for. This is the first thing here that writes words, and the
+first SARI `add` column above zero.
+Target **2% to 4%**. Fails if writing a phrase cannot hold the accuracy the deletion half reached,
+in which case deletion is the whole of what this approach buys.
+
+**12. A frozen encoder aimed at syntax.** The step 6 ablation says a bag of lemma one-hots
+represents the syntactic half worst, and a learned deletion lexicon is the transfer risk that
+comes with it. Freeze a small pretrained encoder, mark the span, fit a linear head, score on the
+same held-out documents.
+Target: beat the one-hot baseline on held-out closure. Fails otherwise, and the lexicon is
+recorded as the ceiling of this feature set.
+
+**13. Document-level allocation.** Given a document and a requested reduction, choose which
+paragraphs absorb it. The first thing in this project that cannot be decided one paragraph at a
+time, and nothing in the code can express it yet.
+Target: beat a length-proportional quota. Fails otherwise, and step 14 is unreachable.
+
+**14. Sentence dropping.** The biggest family, pure deletion, 18.1 words per decision. Dropping a
+sentence is a discourse decision, which is why it waits for step 13 rather than for a licence.
+Target **4% to 8%**.
+
+**15. `clause` and `voice` deletion.** Both reclassified as mostly deletion and neither probed.
+Attestation probe first, per step 3.
 Target **2% to 4%**, taking the running total to roughly 10% to 17%.
 
-**Phase 5, the generation spine.** *Split in two by C15, which measured it before building it.*
-The oracle-execution probe hands a backend a span Opus changed and asks for the wording, so the
-question "can a local executor perform this" is answered apart from "can it decide where".
+**16. A constrained decoder for `phrase` and `voice` only.** 92.5% of what the vocabulary cannot
+reach sits in those two families and `phrase` alone is 84.7%. A small local model, greedy, given a
+closed task and never a paragraph, running only where step 11's tagger declined. Last, because
+eight rewriting spans in ten are not paraphrase and a model spent on them is a model spent on the
+easy part. Unmeasured until an endpoint exists: the decoder backend reports unavailable on this
+machine, so the failing half of `manage.py execute --reproduce` has never been exercised.
 
-- **Phase 5a, the edit tagger.** *Half done, and it moved the headline.* The keep-or-delete half
-  is fitted, gated and registered: closure 0.4% to **1.0%**, held out 0.15% to **0.9%**, at 89.2%
-  attestation, which is the highest of any rule here (C16, C17). What remains is the phrase half.
-  A closed vocabulary of 975 phrases induced from the training documents covers 62.6% of what the
-  held-out documents need, so the tag set exists and nothing yet writes from it.
-  Target **2% to 4%** for the phrase head, on the grounds that 7.1% of source words carry a
-  phrase against 26.3% that are deletions. Fails if writing a phrase cannot hold the accuracy the
-  deletion half reached, in which case deletion is the whole of what this approach buys.
-- **Phase 5b, a constrained decoder for `phrase` and `voice` only.** 92.5% of what the tagger
-  ceiling cannot reach sits in those two families; `phrase` alone is 84.7%. Does not start until
-  5a has a real score rather than a ceiling, because eight rewriting spans in ten are not
-  paraphrase and a model spent on them is a model spent on the easy part.
+**Terminal estimate: 30% to 50% closure**, dominated by whether generation accuracy clears 70% and
+whether deletion accuracy holds near 80% as coverage grows. Basis: the family table above with
+per-step accuracy assumptions stated; estimates only. The residual is the 28.5% of edit distance
+no family accounts for, the head-changing paraphrase core, and the fact that Opus is one sample of
+a stochastic editor, so 100% is not available to anyone including Opus on a second pass.
 
-Plain code is finished here: the `template` backend closes **0.2%** of the rewriting gap against
-28.8% for deleting the span blind, which is C1 restated at span level with the ceiling attached.
-
-**Terminal estimate: 30% to 50% closure**, dominated by whether generation accuracy clears 70%
-and whether deletion accuracy holds near 80% as coverage grows. Basis: the family table above
-with per-phase accuracy assumptions stated; estimates only. The residual is the 28.6% of edit
-distance no family accounts for, the head-changing paraphrase core, and the fact that Opus is one
-sample of a stochastic editor, so 100% is not available to anyone including Opus on a second pass.
-
-## 5. Agenda
-
-Ordered. Each item states what it should move, so it can fail.
-
-1. ~~**Phase 1 harvest.**~~ Done. 0.2% to 0.3%.
-2. ~~**Attestation probe as a subcommand**~~ (C13). Built: `manage.py probe <generator>`.
-3. **Retro-probe section 3** before scheduling anything from it. Cheap, one parse pass per
-   family, and C13 says to expect at least one more family to die the way the lexical-verb
-   reduction did. Do this before Phase 2, not after.
-4. **C5, the hand-checked damage set.** ~100 paragraphs judged against G1 to G3 by hand.
-   **Blocking**, because closure rewards agreement with one editor and a rule that is right about
-   Opus and wrong about English raises it. The three available precision readings for the shipped
-   rule are 86% (ceiling), 76.1% (closure) and 41% (probe); they measure different things, and
-   only a hand check says which is nearest to damage.
-5. **C12b, document-level allocation.** Given a document and a requested reduction, choose which
-   paragraphs absorb it. Prerequisite for Phase 2 and the first thing here that cannot be decided
-   one paragraph at a time.
-6. **Phase 2, sentence dropping.**
-7. **C12a**, the high-precision restraint gate, folded into Phase 3 where it belongs.
-8. **Phase 4 probes.**
-9. ~~**Oracle-execution probe**~~ (C15). Built: `manage.py execute`. Ran ahead of the queue
-   because it is the cheapest falsification of the whole generation tier and it refuses a
-   backend for an afternoon's work. It refused one and it justified another.
-10. ~~**Phase 5a, the edit tagger.**~~ Half done, as C16 and C17. The keep-or-delete decision is
-    fitted, gated by three measured shape priors, and registered. Closure 0.4% to 1.0%, held out
-    0.15% to 0.9%, and the train-to-held-out gap is 0.1 points, which is what finally answers
-    C14. The phrase half is next and is item 12.
-11. **Trim refused runs instead of dropping them.** Three quarters of the gap between C16's 4.5%
-    projected and C17's measured 0.9% is a shape prior refusing a whole run because one word in
-    it is the sentence root. Cheapest remaining move and needs no new evidence.
-12. **The phrase head**, then a frozen encoder aimed at syntax, which the C16 ablation identifies
-    as the half a bag of one-hots represents worst.
-13. **Phase 5b, the decoder**, scoped to `phrase` and `voice`, last.
-
-## 6. How this plan fails
+## 5. How this plan fails
 
 Stated in advance so it is recognisable when it happens.
 
-- **Accuracy collapses as reach grows.** The likeliest failure, and Phase 1 already showed the
+- **Accuracy collapses as reach grows.** The likeliest failure, and step 3 already showed the
   shape: marginal 72.3% against an average of 78.1%. If marginal accuracy tracks toward 50% the
   approach caps out near where it is now.
-- **Closure and quality come apart.** Closure rewards agreement with one editor. If the linter
-  starts matching Opus's idiosyncrasies rather than improving prose, the hand-checked damage set
-  is what catches it, which is why item 3 is blocking.
-- **Family sizes keep overstating opportunity.** Phase 1's forecast was wrong by 5x because the
-  evidence table names the construction involved, not the transformation applied. C13 is the
-  general form of that error and the attestation probe is the general fix. Expect at least one
-  more queued family to die the way the lexical-verb reduction did.
-- **The unclassified 28.5% turns out to be where the work is.** Nothing in this plan addresses
+- **Closure and quality come apart.** Closure rewards agreement with one editor. Step 6 is the
+  proof that this is not theoretical: ranked on closure alone, the variant that wrecks the grammar
+  wins. Step 9 is what catches the general case, which is why it blocks.
+- **Family sizes keep overstating opportunity.** Step 3's forecast was wrong by 5x because the
+  evidence table names the construction involved, not the transformation applied. The attestation
+  probe is the general fix and it has already refused one family.
+- **The learned lexicon does not transfer.** 5,924 of the 6,136 fitted columns are lemma one-hots,
+  so what step 6 learned is largely a deletion lexicon for this corpus's vocabulary. Untested on
+  prose from another field, and step 12 is the answer if it fails.
+- **The unclassified 28.5% turns out to be where the work is.** Nothing in this roadmap addresses
   reordering and insertion, and no measurement has yet asked what is in there.
 
-## 7. Standing rules
+## 6. Standing rules
 
 - `method.md` governs every increment: analyse, plan, build, evaluate, then analyse again.
-- **Probe attestation before building a family.** Linguistic validity does not predict it (C13).
+- **Probe attestation before building a family.** Linguistic validity does not predict it.
 - Report closure with reach and accuracy beside it. The composite alone hides which half is broken.
 - Never quote SARI as the headline. It is diagnostic, kept for the `add`/`keep`/`delete` split.
 - A number that moves for a reason nobody can name is a defect, not a result.
+- **Commit a finished step.** This roadmap is the one place in the workspace where committing is
+  not the user's job. Once a step is verified and its result is written into section 4, commit it
+  with `Re p<step> <tag>`: the step number, the word `part` if only half of it is done, and at
+  most three words naming what it covers. For example `Re p3 part 1 classifier`. Nothing else goes
+  in the message, and nothing unrelated goes in the commit.

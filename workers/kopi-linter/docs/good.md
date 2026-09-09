@@ -208,11 +208,17 @@ run and scored in one command, "we tried X" means "we shipped X".
 
 **Point 4 outranks the master metric, and this is not hypothetical.** Ranked on closure alone,
 the best variant of the fitted deletion rule is the one with no shape priors at all: it scores
-1.13% against the gated rule's 0.78% and introduces **eighteen** grammatical defects against
-one (C17). Closure charges one word-operation for deleting a sentence's only verb and a reader
+1.13% against the gated rule's 0.85% and introduces **twenty-one** grammatical defects against
+two (C17, C18). Closure charges one word-operation for deleting a sentence's only verb and a reader
 charges the whole paragraph, so the ordering it produces is wrong and the defect count and the
 case bank are what correct it. Where the closure column and the defect column disagree, the
 defect column decides.
+
+**A case can also refuse the safest variant**, and one now does. Dropping a whole run because
+one word in it is unsafe damages nothing, so no damage case reaches it; what disqualifies it is a
+case asserting that the words beside the offender should still go. That is a coverage condition
+living in a bank built for damage conditions, and it is worth only 0.07 closure points (C18), so
+it is stated here rather than left to be inferred from the table.
 
 **A backend that writes a replacement clears a different bar**, because it is scored at a site
 somebody else chose. It must beat the `delete` anchor's span closure on the family it claims,

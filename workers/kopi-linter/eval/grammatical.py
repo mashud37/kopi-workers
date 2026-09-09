@@ -7,11 +7,27 @@ from collections import Counter
 _VERBAL = frozenset(["VERB", "AUX"])
 _NOMINAL = frozenset(["NOUN", "PROPN", "PRON"])
 _PREP_COMPLEMENTS = frozenset(["pobj", "pcomp", "prep", "advmod"])
+_SUBJECTS = frozenset(["nsubj", "nsubjpass", "csubj", "csubjpass", "expl"])
 
 
 def _no_root_predicate(sent) -> bool:
     """A clause-length sentence whose root is not a verb has lost its predicate."""
     return len(sent) > 4 and sent.root.pos_ not in _VERBAL
+
+
+def _subjectless_verb(sent) -> bool:
+    """A verb-rooted sentence with nothing standing as its subject.
+
+    The shape left behind when a deletion takes an expletive or a subject noun
+    and the verb it belonged to stays. Imperatives and fragments match it too,
+    which is why it is only meaningful through :func:`introduced`.
+    """
+    if sent.root.pos_ not in _VERBAL:
+        return False
+    for child in sent.root.children:
+        if child.dep_ in _SUBJECTS:
+            return False
+    return True
 
 
 def _dangling_prep(token) -> bool:
@@ -63,6 +79,8 @@ def defects(doc) -> Counter:
     for sent in doc.sents:
         if _no_root_predicate(sent):
             found["no_root_predicate"] += 1
+        if _subjectless_verb(sent):
+            found["subjectless_verb"] += 1
     for token in doc:
         for name, detector in _TOKEN_DEFECTS:
             if detector(token):

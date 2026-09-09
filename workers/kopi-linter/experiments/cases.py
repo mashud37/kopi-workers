@@ -314,6 +314,40 @@ TAGGED = (
         "fire case a rule that proposes nothing passes every case above",
         span="Furthermore",
     ),
+    Case(
+        "She underlines that social media content feeds are highly commercialised "
+        "spaces.",
+        "tagged", "fire",
+        "the run is 'underlines that' and only 'underlines' is unsafe, so refusing the "
+        "whole run throws away a deletion nothing objected to",
+        observed=True,
+        span="that",
+        survives="underlines",
+    ),
+    Case(
+        "TikTok sharing practices might be enabling of social interaction.",
+        "tagged", "refuse",
+        "trimming the root out of 'be enabling' leaves the auxiliary of a verb that "
+        "stayed: 'might enabling'",
+        observed=True,
+        span="be",
+    ),
+    Case(
+        "Sharing this content provided opportunities to articulate relationships.",
+        "tagged", "refuse",
+        "takes the object of a verb that stayed: 'provided to articulate'",
+        observed=True,
+        span="opportunities",
+    ),
+    Case(
+        "Put differently, there are many forms of activity that people practice in "
+        "their everyday lives, and in relation to TikTok.",
+        "tagged", "refuse",
+        "trimming the root out of 'there are' deletes the subject of a verb that "
+        "stayed, leaving no subject at all",
+        observed=True,
+        span="there",
+    ),
 )
 
 ALL = RELATIVE + REALISATION + ADJUNCT + TAGGED

@@ -44,7 +44,7 @@ Status vocabulary, used strictly:
 
 | Family | Status | Fired | Attestation |
 |---|---|---|---|
-| `tagged` deletion, fitted per token | running | 650 | **ceiling 89.2%**, the highest in the engine |
+| `tagged` deletion, fitted per token | running | 690 | **ceiling 89.9%**, the highest in the engine |
 | `relative-clause` reduction (whiz-deletion) | running | 114 | **ceiling 89%**, previously misreported as 100% |
 | `support-verb` collapse | withdrawn | 2 | disagreed twice; 20% base rate did not support firing |
 | `adjunct` PP-drop, structural licence | built, rejected | 647 | **2%** ceiling; over-fires, see constraints C9 |
@@ -116,8 +116,10 @@ The licence and the execution asked as one question, per token.
 
 | Component | Technique | Status | Measured at |
 |---|---|---|---|
-| `rule_tagged.py` | Per-word score, neighbouring words grouped into one span, probability carried as the edit's confidence | running | 114 fired on 233 held-out paragraphs, 87% attested |
-| `rule_tagged.py` | Three shape priors, each registered as an ablation and each measured | running | 18 introduced defects down to **1** |
+| `rule_tagged.py` | Per-word score, neighbouring words grouped into one span, probability carried as the edit's confidence | running | 115 fired on 233 held-out paragraphs, 89% attested |
+| `rule_tagged.py` | Five shape priors, each registered as an ablation and each measured | running | 21 introduced defects down to **2** |
+| `rule_tagged.py` | A prior holds one word back and the rest of the run is still deleted | running | 190 words released of 2,681 proposed, worth 0.07 closure points |
+| `grammatical.py` | `subjectless_verb`, for the shape a deleted expletive leaves | running | caught 1 real defect and 1 false positive on a reparsed long sentence |
 | `grammatical.py` | `orphaned_determiner`, keyed on the fine tag because the dependency layer relabels the damage away | running | 3 to 0; see C17 |
 
 ## 9. Headline numbers, with their caveats
@@ -127,11 +129,11 @@ Corpus SARI over 1,490 gold paragraphs:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5465 | 0.0031 | 0.7341 | 0.9022 |
+| kopi-linter | 0.5489 | 0.0032 | 0.7344 | 0.9089 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
-Read with section 5.4 of `good.md`: the linter changes **574 of 1,490 paragraphs (38.5%)** and
-moves **1,004 words against Opus's 22,816**. It passes a 32B model on the composite while doing
+Read with section 5.4 of `good.md`: the linter changes **583 of 1,490 paragraphs (39.1%)** and
+moves **1,042 words against Opus's 22,816**. It passes a 32B model on the composite while doing
 under five percent of the work, which is the clearest possible argument for never reporting the
 composite alone.
 
@@ -139,8 +141,8 @@ Closure by split, which is the number that says whether any of this generalises:
 
 | Split | Paragraphs | Closure | Reach | Accuracy |
 |---|---:|---:|---:|---:|
-| train | 1,257 | 1.0% | 2.3% | 71.3% |
-| test (held out) | 233 | **0.9%** | 2.3% | 70.2% |
+| train | 1,257 | 1.0% | 2.3% | 72.3% |
+| test (held out) | 233 | **1.0%** | 2.3% | 71.4% |
 
 The tagger is fitted on the train documents and scores the same on documents it never saw, which
 is the point of the row. It also answers C14: the held-out side used to rest on 14 edits and

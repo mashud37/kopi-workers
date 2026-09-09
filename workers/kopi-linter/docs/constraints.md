@@ -782,7 +782,7 @@ and it settles that no further work on hand-written realisation is worth doing.
 words written twice or more in the training documents, plus the inflection changes a tagger
 generates rather than looks up. With perfect tag choice that vocabulary reproduces Opus exactly
 on 64.6% of rewriting spans and closes 52.6% of the rewriting gap. It reads the gold and is a
-ceiling, not a system score, but it is the ceiling that decides whether Phase 3 is worth
+ceiling, not a system score, but it is the ceiling that decides whether the tagger is worth
 building, and it is nearly twice the delete anchor.
 
 **It transfers.** The vocabulary is counted on training documents only and scored on both sides:
@@ -1068,83 +1068,82 @@ Opus deleted *and wrote something*, and DELETE without its phrase is only half t
 
 ---
 
-## Ordering
+## C18. The refused runs are one word long, so trimming them buys almost nothing
 
-Derived from the constraints rather than from the family sizes, which is the change from
-`typology.md` section 6.
+**Evidence.** Roadmap step 7 said three quarters of the gap between C16's 4.5% projected closure
+and C17's 0.9% measured was a shape prior refusing a whole run because one word in it was
+unsafe, and that trimming the run instead would recover most of it. The rule now holds the
+offending word back and deletes the rest of the run around it. Counted over the same 233
+held-out paragraphs:
 
-**Done.**
+| | runs | words |
+|---|---:|---:|
+| runs the model proposes | 2,213 | 2,681 |
+| runs no prior objects to | 1,134 | |
+| runs with a held-back word | 1,079 | |
+| of those, one word long | **839** | |
+| words trimming releases | 151 | **190** |
 
-1. ~~**C6**, scope the repair layer.~~ Resolved. Worth +0.067 SARI and +0.20 delete precision on
-   its own, purely by making the linter stop editing text no rule had asked to change.
-2. ~~**C4**, verify the grammaticality check.~~ Closed as unreachable. Both attempts failed and
-   the reason generalises: the parser normalises the evidence away.
-3. ~~**C3**, the licence-model comparison on `adjunct`.~~ Answered, as **C9**: neither structural
-   nor induced per-category licensing works, and the reason is architectural.
+**Seventy-eight per cent of refused runs are a single word.** There is nothing beside the
+offender to release, so the whole-run refusal was never where the gap was. What trimming
+recovers is 190 words of 2,681, and after the band thresholds that is seven more edits:
 
-4. ~~**C9**, band as budget rather than threshold.~~ Built and measured, as **C11**: the budget
-   half works, the licence half is untouched, and a ranked family without a licence is a
-   better-ordered wrecking ball. No adjunct method is registered.
-5. ~~**C5**, multi-reference agreement.~~ Corrected and much reduced. There is no three-way
-   agreement involving Opus anywhere in the corpus; the only second reference is the weaker
-   model. Usable for triage, not for scoring.
+| Method, 233 held-out paragraphs | Cases | Closure | Reach | Fired | Ceiling | Defects |
+|---|---|---:|---:|---:|---:|---:|
+| `tagged/drop-whole-run`, what shipped | 8/9 | 0.78% | 1.81% | 108 | 88% | 1 |
+| **`tagged/deletions`**, trimmed | 9/9 | **0.85%** | 1.92% | 115 | 89% | 2 |
+| `tagged/no-gates` | 1/9 | 1.13% | 2.62% | 162 | 85% | 21 |
 
-**Next.**
+**The step missed its target by fifteen times**: 0.9% to 2% was projected and 0.85% was
+measured, corpus closure 1.0% either way with the held-out side moving from 0.9% to 1.0%. The
+projected-to-measured gap is therefore not an arbitration failure. It is the priors refusing
+single words the model is confident about, which means closing it needs a model that stops
+wanting them rather than an engine that argues about the run.
 
-6. ~~**C11a**, calibrate the ranked budget to the measured median.~~ Built. Fixed three of the
-   four argument failures on its own: the quota was the problem, not the licence.
-7. ~~**C11b**, a distributional argument-versus-adjunct licence.~~ Built. Fixed the fourth and
-   cut introduced defects, and it is the first licence here that is a fact about the language
-   rather than about one teacher. Together the two took the case score from 2/7 to 5/7 and the
-   attestation ceiling from 3% to 6%, and `adjunct` still stays unregistered.
+**Trimming exposed two defects the refusal had been hiding.** Deleting around a held-back root
+takes the words that hold the root up: "might be enabling" loses "be", and "there are" loses
+"there". Neither is visible afterwards, because the parser rereads "might enabling" with
+"enabling" as a well-formed root, which is C4 for the third time. Both are refused at proposal
+time now rather than detected after it, by two priors written from the observed cases:
 
-8. ~~**C12**, a per-paragraph spend decision.~~ Measured. By F1 the paragraph's own candidates
-   carry no signal about whether the editor cut it, and the best swept feature is length in
-   disguise. On precision, which is the metric that matters here, firing only where a strong
-   candidate exists gives a 1.24x lift on 47% of paragraphs.
+- `keep_verbs_supported`, holding back an auxiliary or a subject whose verb survives.
+- `keep_verbs_complete`, holding back an object whose verb survives ("provided to articulate").
 
-9. ~~**Phase 1**, harvest the relative-clause family.~~ Built, as **C13**. The impure-span fix
-   took closure from 0.2% to 0.3% at 72.3% marginal accuracy; the fifteen-times-larger
-   lexical-verb extension was refused on 1.1% attestation. The family is now close to exhausted:
-   96% of its gold word movement is Opus dropping the clause, not reducing it.
+With both, the defect count is back to 2, one of which pre-dates this change and one of which is
+a false positive: `subjectless_verb`, added here for the expletive shape the parser does still
+show, fires on a 40-word sentence that reparsed with a relative clause as its root. A detector
+this shallow costs one false positive per 233 paragraphs, which is the price of seeing the real
+one at all.
 
-**Next.**
+**Two smaller things the run turned up.**
 
-10. ~~**C14**, the corpus correction and a held-out split.~~ Resolved. The corpus is 1,490
-    slots and not 1,523, `induce` and `probe` read the train split only, and `evaluate`
-    reports both sides. The held-out side carries too few edits to referee a method, so
-    comparison needs k-fold over documents before any learned method is admitted.
-11. ~~**C15**, the oracle-execution probe, before anything is built to generate.~~ Resolved.
-    Plain code closes 0.2% of the rewriting gap; a 970-phrase vocabulary induced from the
-    training documents closes 52.6% of it and holds on 2,916 held-out spans. Item 16 below is
-    no longer one thing.
-12. **C12a**, wire the high-precision gate as a restraint rule and re-measure the attestation
-    ceiling. Cheap, and the result is already in hand.
-13. **C5**, the hand-checked damage set, now the only route to measuring precision rather than
-    bounding it, and now blocking: closure rewards agreement with one editor, so a rule that is
-    right about Opus and wrong about English raises it. Triage with "attested by neither" first.
-14. **`sentence` dropping**, promoted past `adjunct` by C1's corrected table. 8,212 words, 100%
-    deletion, and 18.1 words per decision against `adjunct`'s 3.3. For a precision-limited engine
-    the right family is the one that moves the most words per licence risk taken. Needs C12b.
-15. **C12b**, allocation as a document-level problem: given a document and a requested reduction,
-    choose which paragraphs absorb it. The first thing in this project that cannot be decided one
-    paragraph at a time, and `typology.md` D6 now confirmed rather than assumed.
-16. ~~**The edit tagger**, measured before it is wired.~~ Resolved as **C16**: 26.3% of source
-    words are deletions, and a logistic regression over parse features reaches 61.0% precision
-    at a projected 2.7% closure, against 25.2% for guessing. The wall C9 to C12 hit was the
-    feature set.
-17. ~~**Wire the token classifier in and measure real closure**, with the threshold as the band
-    dial.~~ Resolved as **C17**. Registered, 0.9% held out against 1.0% train, five times the
-    shipped rule at 87% attestation. The shortfall from C16's 4.5% is what three shape priors
-    cost, and they are not optional: ungated the rule scores higher and introduces eighteen
-    grammatical defects.
-18. **Trim refused runs rather than dropping them**, which is most of the shortfall in item 17
-    and needs no new evidence, only care about where a run ends.
-19. **The phrase head**, then a frozen encoder, in that order, each against the C16 baseline. The
-    ablation says to aim the encoder at syntax, which is the half a bag of one-hots represents
-    worst.
-20. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
-    cannot hold. Last, and only once the tagger has a real score rather than a ceiling.
+- **The preposition prior was keyed on the wrong attribute.** It found the surviving governor by
+  `dep_ == "prep"`, so a coordinated preposition ("and in relation to", labelled `conj`) walked
+  past it. Keyed on `pos_ == "ADP"` now. This was already true before trimming.
+- **The modifier prior has gone quiet.** `tagged/no-modifier-gate` now scores identically to the
+  shipped rule on every column and passes every case, because the object prior holds back the
+  same words. It stays registered, and it is doing nothing measurable on this corpus.
 
-C2 is not a task. It is the rule for judging all of the above: report proposals generated, not
-edits arbitrated.
+**Strategy.** Trimming ships because it is free at worst and the case bank disqualifies dropping
+the whole run, but it is not a route to reach. The gap C16 projected is in the single-word
+refusals, and the ways to reach it are a better model rather than a better arbitration.
+
+**Experiments.**
+1. ~~*Trim refused runs instead of dropping them.*~~ Built, and measured at 0.07 closure points.
+2. *Ask what the 839 single-word refusals are.* A prior that refuses 839 of 2,213 proposed runs
+   is either catching a model that is wrong about those words or blocking a family of edits Opus
+   does make. Which of the two is the question C16's operating table cannot answer and the
+   attestation probe can.
+3. *Retire or re-aim the modifier prior* once something distinguishes it from the object prior.
+
+---
+
+## Where the queue lives
+
+There is no queue here. This file records what each measurement established, in the order it was
+established, and the roadmap that acts on it is section 4 of `plan.md`. Steps 1 to 6 there are
+done and carry the constraint that closed them; steps 7 to 16 are open and each names the result
+that would kill it.
+
+C2 is not a task either. It is the rule for judging all of the above: report proposals generated,
+not edits arbitrated.
