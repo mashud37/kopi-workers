@@ -53,7 +53,7 @@ def _measurement_parsers(sub) -> None:
     executor.add_argument("--reproduce", action="store_true", help="check two runs write the same bytes")
 
     tagger = sub.add_parser(
-        "tag", help="Read the gold corpus as an edit-tagging problem"
+        "tag", help="Fit the keep-or-delete decision the linter uses"
     )
     tagger.add_argument("-n", "--limit", type=int, help="stop after this many paragraphs")
 

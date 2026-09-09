@@ -206,6 +206,14 @@ To join `lint/registry.py`:
 Point 5 is what `experiments/` exists to make cheap. Until several approaches to a family can be
 run and scored in one command, "we tried X" means "we shipped X".
 
+**Point 4 outranks the master metric, and this is not hypothetical.** Ranked on closure alone,
+the best variant of the fitted deletion rule is the one with no shape priors at all: it scores
+1.13% against the gated rule's 0.78% and introduces **eighteen** grammatical defects against
+one (C17). Closure charges one word-operation for deleting a sentence's only verb and a reader
+charges the whole paragraph, so the ordering it produces is wrong and the defect count and the
+case bank are what correct it. Where the closure column and the defect column disagree, the
+defect column decides.
+
 **A backend that writes a replacement clears a different bar**, because it is scored at a site
 somebody else chose. It must beat the `delete` anchor's span closure on the family it claims,
 since dropping the span is free and already implemented, and it must be byte-reproducible under
@@ -247,3 +255,14 @@ both. What it needs is a check.
 Unproven as of C15: the control needs a local model server and there is none on this machine, so
 the failing half of the check has not been exercised. The thread-count axis arrives with the
 first encoder and not before, because nothing in the tier currently multiplies a matrix.
+
+**A fitted model is now in the shipped lint path** (C17), so the second promise stopped being
+free. `rules/rule_tagged.py` sums a weight per matching column, and float addition is
+order-dependent, so the guarantee rests on the iteration order of two dictionaries: the feature
+dictionary, whose keys are written in one place in source order, and `tagging/weights.py`, a dict
+literal. Both are insertion-ordered in CPython and neither is built from a set or a hash-ordered
+sequence, which is the mistake `evidence/align.py` already had to fix once. Checked rather than
+argued: linting 60 held-out paragraphs under three values of `PYTHONHASHSEED` gives one SHA-256.
+
+Scikit-learn is a fitting dependency, not a runtime one. `manage.py tag` writes plain numbers and
+the engine reads them, so the linter's output does not move when the library version does.

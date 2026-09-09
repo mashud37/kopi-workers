@@ -5,6 +5,7 @@ ceiling against Opus, and introduced grammatical defects.
 from collections import Counter
 from dataclasses import dataclass, field
 
+from eval import closure
 from eval.grammatical import introduced
 from eval.harness import _attested
 from eval.sari import corpus_sari
@@ -27,6 +28,9 @@ class MethodReport:
     defect_paragraphs: int = 0
     defects: Counter = field(default_factory=Counter)
     sari: dict = field(default_factory=dict)
+    closure: float = 0.0
+    reach: float = 0.0
+    accuracy: float = 0.0
 
     @property
     def clean(self) -> bool:
@@ -125,6 +129,10 @@ def run_corpus(method, samples, nlp, on_progress=None) -> MethodReport:
             report.defects.update(net)
         triples.append((sample.original, result.edited, sample.edit))
     report.sari = corpus_sari(triples)
+    measured = closure.measure(triples)
+    report.closure = measured.closure
+    report.reach = measured.reach
+    report.accuracy = measured.accuracy
     return report
 
 

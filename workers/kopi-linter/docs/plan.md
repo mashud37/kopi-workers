@@ -16,17 +16,19 @@ Measured over all 1,490 gold paragraphs (`manage.py evaluate`):
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do-nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **0.4%** | 0.7% | 76.6% |
+| **kopi-linter** | **1.0%** | 2.3% | 71.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
-186 of 52,043 word-edits closed, 350 attempted.
+497 of 52,043 word-edits closed, 1,178 attempted. Held out: **0.9%** against 1.0% on train.
 
-**We are 0.4% of the way to Opus.** Corpus SARI says 0.5218 against a do-nothing 0.2433 and reads
-like halfway. SARI pays for correct keeping, so a linter that touches 10% of paragraphs collects
-most of its score for the 90% it left alone.
+**We are 1.0% of the way to Opus.** Corpus SARI says 0.5465 against a do-nothing 0.2433 and reads
+like halfway. SARI pays for correct keeping, so a linter that touches a third of paragraphs
+collects most of its score for the two thirds it left alone.
 
-**Accuracy is fine and reach is the entire problem.** Three edits in four land on something Opus
-also changed. That mechanism is applied to 0.7% of the work.
+**Accuracy is fine and reach is still the entire problem.** Seven edits in ten land on something
+Opus also changed. That mechanism is applied to 2.3% of the work, up from 0.7% once the fitted
+keep-or-delete decision was wired in (C16, C17). Accuracy fell five points to buy three times the
+reach, which is the trade closure is designed to price and it came out positive.
 
 **Qwen is below the break-even line**, changing more than Opus did at under 50% accuracy, so its
 output sits further from Opus's version than the untouched original. One honest caveat: closure
@@ -122,11 +124,14 @@ Target **2% to 4%**, taking the running total to roughly 10% to 17%.
 The oracle-execution probe hands a backend a span Opus changed and asks for the wording, so the
 question "can a local executor perform this" is answered apart from "can it decide where".
 
-- **Phase 5a, the edit tagger.** A closed vocabulary of 970 phrases induced from the training
-  documents, plus generated inflection, has a ceiling of **52.6%** of the rewriting gap and
-  holds on held-out documents. CPU-feasible, cannot write outside its own tag set, and its
-  per-token threshold is the band dial. Fails if a fitted tagger cannot beat the delete anchor's
-  28.8%, which would put the whole gap in the tag decision rather than the vocabulary.
+- **Phase 5a, the edit tagger.** *Half done, and it moved the headline.* The keep-or-delete half
+  is fitted, gated and registered: closure 0.4% to **1.0%**, held out 0.15% to **0.9%**, at 89.2%
+  attestation, which is the highest of any rule here (C16, C17). What remains is the phrase half.
+  A closed vocabulary of 975 phrases induced from the training documents covers 62.6% of what the
+  held-out documents need, so the tag set exists and nothing yet writes from it.
+  Target **2% to 4%** for the phrase head, on the grounds that 7.1% of source words carry a
+  phrase against 26.3% that are deletions. Fails if writing a phrase cannot hold the accuracy the
+  deletion half reached, in which case deletion is the whole of what this approach buys.
 - **Phase 5b, a constrained decoder for `phrase` and `voice` only.** 92.5% of what the tagger
   ceiling cannot reach sits in those two families; `phrase` alone is 84.7%. Does not start until
   5a has a real score rather than a ceiling, because eight rewriting spans in ten are not
@@ -164,8 +169,16 @@ Ordered. Each item states what it should move, so it can fail.
 9. ~~**Oracle-execution probe**~~ (C15). Built: `manage.py execute`. Ran ahead of the queue
    because it is the cheapest falsification of the whole generation tier and it refuses a
    backend for an afternoon's work. It refused one and it justified another.
-10. **Phase 5a, the edit tagger**, now the best-evidenced item on this list.
-11. **Phase 5b, the decoder**, scoped to `phrase` and `voice`, last.
+10. ~~**Phase 5a, the edit tagger.**~~ Half done, as C16 and C17. The keep-or-delete decision is
+    fitted, gated by three measured shape priors, and registered. Closure 0.4% to 1.0%, held out
+    0.15% to 0.9%, and the train-to-held-out gap is 0.1 points, which is what finally answers
+    C14. The phrase half is next and is item 12.
+11. **Trim refused runs instead of dropping them.** Three quarters of the gap between C16's 4.5%
+    projected and C17's measured 0.9% is a shape prior refusing a whole run because one word in
+    it is the sentence root. Cheapest remaining move and needs no new evidence.
+12. **The phrase head**, then a frozen encoder aimed at syntax, which the C16 ablation identifies
+    as the half a bag of one-hots represents worst.
+13. **Phase 5b, the decoder**, scoped to `phrase` and `voice`, last.
 
 ## 6. How this plan fails
 

@@ -36,6 +36,7 @@ Status vocabulary, used strictly:
 | `registry.py` | Failures surfaced, never swallowed | running | added after a broken rule looked identical to a quiet one |
 | `select.py` | Weighted interval scheduling, exact DP with `bisect` predecessors, over conflicting proposals | running | exact; untested against a greedy baseline |
 | `bands.py` | Per-family confidence thresholds over one rule set, not four rule sets | running | thresholds hand-set, not induced |
+| `bands.py` | Family threshold read as a real probability, from the fitted tagger | running | `tagged` gated by the default row, not by a chosen one |
 | `guard.py` | Citation set, number preservation, band floor, non-empty | running | all four passed on a known-broken output |
 | `guard.py` | Quoted spans protected from rule proposals | running | did not protect against the realiser until 2026-07-26 |
 
@@ -43,6 +44,7 @@ Status vocabulary, used strictly:
 
 | Family | Status | Fired | Attestation |
 |---|---|---|---|
+| `tagged` deletion, fitted per token | running | 650 | **ceiling 89.2%**, the highest in the engine |
 | `relative-clause` reduction (whiz-deletion) | running | 114 | **ceiling 89%**, previously misreported as 100% |
 | `support-verb` collapse | withdrawn | 2 | disagreed twice; 20% base rate did not support firing |
 | `adjunct` PP-drop, structural licence | built, rejected | 647 | **2%** ceiling; over-fires, see constraints C9 |
@@ -104,34 +106,45 @@ The licence and the execution asked as one question, per token.
 | `vocabulary.py` | LaserTagger-shape tags: keep or delete each source word, plus a phrase written before it | running | 205,800 words, 0 paragraphs unalignable |
 | `vocabulary.py` | Phrase vocabulary induced from training documents, coverage curve against held-out need | running | 975 phrases cover 62.6%; 27 cover 25.2% |
 | `features.py` | 17 parse and frequency features per word, no embeddings | running | 6,136 columns after one-hot |
-| `fit.py` | Logistic regression over keep-or-delete, scored on held-out documents | running | **61.0%** precision at 0.60, against 25.2% guessing |
-| `fit.py` | Projected closure per threshold, so the operating point is chosen in the project's own metric | running | best 2.7%, an upper bound |
+| `fit.py` | Logistic regression over keep-or-delete, scored on held-out documents | running | **64.9%** precision at 0.60, against 25.2% guessing |
+| `fit.py` | Projected closure per threshold, so the operating point is chosen in the project's own metric | running | best 4.5%, an upper bound |
+| `fit.py` | Feature-group ablation, each group removed and each on its own | running | length alone fires on 0 of 31,464 words |
+| `model.py` | Weights written out as a generated module and scored with a dot product, so the engine reads no scikit-learn | running | 6,136 columns, round-trips exactly |
 | | Phrase head | **missing**; only the keep-or-delete half is fitted |
-| | Tags wired into `lint/registry.py` | **missing**; nothing yet proposes an edit from a tag |
 
-## 8. Headline numbers, with their caveats
+## 8. The tagger as a rule (`rules/rule_tagged.py`)
+
+| Component | Technique | Status | Measured at |
+|---|---|---|---|
+| `rule_tagged.py` | Per-word score, neighbouring words grouped into one span, probability carried as the edit's confidence | running | 114 fired on 233 held-out paragraphs, 87% attested |
+| `rule_tagged.py` | Three shape priors, each registered as an ablation and each measured | running | 18 introduced defects down to **1** |
+| `grammatical.py` | `orphaned_determiner`, keyed on the fine tag because the dependency layer relabels the damage away | running | 3 to 0; see C17 |
+
+## 9. Headline numbers, with their caveats
 
 Corpus SARI over 1,490 gold paragraphs:
 
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5218 | 0.0019 | 0.7307 | 0.8329 |
+| kopi-linter | 0.5465 | 0.0031 | 0.7341 | 0.9022 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
-Read with section 5.4 of `good.md`: the linter changes **153 of 1,490 paragraphs (10.3%)** and
-moves **347 words against Opus's 22,816**. It passes a 32B model on the composite while doing
-about one percent of the work, which is the clearest possible argument for never reporting the
+Read with section 5.4 of `good.md`: the linter changes **574 of 1,490 paragraphs (38.5%)** and
+moves **1,004 words against Opus's 22,816**. It passes a 32B model on the composite while doing
+under five percent of the work, which is the clearest possible argument for never reporting the
 composite alone.
 
 Closure by split, which is the number that says whether any of this generalises:
 
-| Split | Paragraphs | Edits applied | Closure | Accuracy |
+| Split | Paragraphs | Closure | Reach | Accuracy |
 |---|---:|---:|---:|---:|
-| train | 1,257 | 149 | 0.39% | 77.3% |
-| test (held out) | 233 | 14 | 0.15% | 68.3% |
+| train | 1,257 | 1.0% | 2.3% | 71.3% |
+| test (held out) | 233 | **0.9%** | 2.3% | 70.2% |
 
-The held-out row rests on 14 edits and cannot separate 68% from 77%. It is reported because
-it has to be, and it is not yet evidence of anything (`constraints.md` C14).
+The tagger is fitted on the train documents and scores the same on documents it never saw, which
+is the point of the row. It also answers C14: the held-out side used to rest on 14 edits and
+could not separate 68% from 77%, and it now carries hundreds.
 
-The `add` column is the whole remaining gap and none of the families that would fill it exist.
+The `add` column is still the whole remaining gap, and the phrase head is the first thing that
+would touch it.

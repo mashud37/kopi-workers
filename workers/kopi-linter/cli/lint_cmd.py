@@ -38,7 +38,7 @@ def _write(path: Path, results: list, band_name: str) -> Path:
         if not result.applied and not result.reason:
             continue
         lines.append(f"## Paragraph {i}")
-        lines.extend(f"- {edit.note}  `{edit.rule}` (confidence {edit.confidence})"
+        lines.extend(f"- {edit.note}  `{edit.rule}` (confidence {edit.confidence:.2f})"
                      for edit in result.applied)
         if result.reason:
             lines.append(f"- rejected, paragraph left unchanged: {result.reason}")

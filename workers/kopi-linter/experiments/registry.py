@@ -6,9 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
-from rules import probe_lexical_relative, rule_adjunct, rule_relative
+from rules import probe_lexical_relative, rule_adjunct, rule_relative, rule_tagged
 from rules.rule_adjunct import Licence
 from rules.rule_relative import Gates
+from rules.rule_tagged import Gates as TaggedGates
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,10 @@ def _relative(**overrides) -> Callable:
 
 def _adjunct(**overrides) -> Callable:
     return partial(rule_adjunct.propose, licence=Licence(**overrides))
+
+
+def _tagged(**overrides) -> Callable:
+    return partial(rule_tagged.propose, gates=TaggedGates(**overrides))
 
 
 METHODS = (
@@ -98,6 +103,29 @@ METHODS = (
     Method(
         "adjunct/backoff-strict", "adjunct", _adjunct(model="backoff", minimum=20),
         "same, but four times the evidence before a rate is trusted",
+    ),
+    Method(
+        "tagged/deletions", "tagged", _tagged(),
+        "the fitted keep-or-delete model, asked per token instead of per category",
+        baseline=True,
+    ),
+    Method(
+        "tagged/no-gates", "tagged",
+        _tagged(keep_the_root=False, keep_prepositions_complete=False,
+                keep_modifiers_attached=False),
+        "ablation: the model's own confidence and nothing else",
+    ),
+    Method(
+        "tagged/no-root-gate", "tagged", _tagged(keep_the_root=False),
+        "ablation: allows a run to take its sentence's root with it",
+    ),
+    Method(
+        "tagged/no-prep-gate", "tagged", _tagged(keep_prepositions_complete=False),
+        "ablation: allows a preposition to lose its last complement",
+    ),
+    Method(
+        "tagged/no-modifier-gate", "tagged", _tagged(keep_modifiers_attached=False),
+        "ablation: allows a noun to go while its determiner stays behind",
     ),
 )
 

@@ -3,15 +3,17 @@
 
 def _summary_table(reports, baseline: float) -> list:
     lines = [
-        "| Method | Cases | SARI | vs nothing | Fired | Ceiling | Changed | Words | Defects |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|",
+        "| Method | Cases | Closure | Reach | Accuracy | SARI | vs nothing | Fired | "
+        "Ceiling | Changed | Words | Defects |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for r in reports:
         passed = r.cases_run - len(r.case_failures)
         mark = "" if r.clean else " **X**"
         name = f"**{r.name}**" if r.baseline else r.name
         lines.append(
-            f"| {name} | {passed}/{r.cases_run}{mark} | {r.sari['sari']:.4f} | "
+            f"| {name} | {passed}/{r.cases_run}{mark} | **{r.closure:.2%}** | "
+            f"{r.reach:.2%} | {r.accuracy:.1%} | {r.sari['sari']:.4f} | "
             f"{r.sari['sari'] - baseline:+.4f} | {r.fired} | {r.ceiling:.0%} | "
             f"{r.changed} | {r.words_removed} | {r.defect_paragraphs} |"
         )
@@ -81,6 +83,11 @@ def render(family: str, reports: list, baseline: float, corpus: dict,
         "disqualified whatever its corpus score, because the case describes text it damages. "
         "Ceiling is an upper bound on precision, not precision.",
         "",
+        "Closure is the master number and the verdict rests on it: SARI cannot go negative "
+        "when a method damages a paragraph, so a method can raise SARI while making the text "
+        "worse. Both are reported, and where they disagree the closure column is the one to "
+        "read.",
+        "",
     ]
     lines += _summary_table(reports, baseline)
     lines += ["", "## SARI components", ""]
@@ -92,10 +99,12 @@ def render(family: str, reports: list, baseline: float, corpus: dict,
     for r in reports:
         if not r.clean:
             verdict = f"**disqualified** ({len(r.case_failures)} case failures)"
-        elif r.sari["sari"] <= baseline:
-            verdict = "no gain over doing nothing"
+        elif r.closure < 0:
+            verdict = f"**damages the text** ({r.closure:.2%} closure)"
+        elif r.closure == 0:
+            verdict = "changes nothing that counts"
         else:
-            verdict = "admissible"
+            verdict = f"admissible, closes {r.closure:.2%}"
         lines.append(f"- `{r.name}`: {verdict}. {r.note}")
     lines.append("")
     lines += _failures_section(reports)

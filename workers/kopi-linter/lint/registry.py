@@ -2,12 +2,13 @@
 a bug rather than silently swallowed and mistaken for one with nothing to
 propose.
 """
-from rules import rule_relative
+from rules import rule_relative, rule_tagged
 
 # Active rules. A rule joins this tuple only once `manage.py evaluate` shows it
 # agreeing with the gold editor; it leaves again when it stops.
 RULES = (
     ("relative", rule_relative.propose),
+    ("tagged", rule_tagged.propose),
 )
 
 # Withdrawn, kept for the record and for a later attempt.

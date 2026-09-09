@@ -21,15 +21,16 @@ running on localhost. Nothing here talks to a third party.
 ## Status
 
 Early, and deliberately measured rather than advertised. The evidence layer, the linting
-engine and the experiment harness all run. One transformation family is live
-(relative-clause reduction); a second (`adjunct`) has three competing licence models under
-comparison and none of them is registered yet. The execution tier is probed but not built:
-`manage.py execute` has measured what a backend could write at a known site, and nothing yet
-writes one during a lint. The tagging layer is measured but not wired: `manage.py tag` fits a
-keep-or-delete decision per word, and no rule reads it.
+engine and the experiment harness all run. Two transformation families are live: relative-clause
+reduction, and a fitted keep-or-delete decision that scores every word and proposes the ones the
+gold editor would cut. A third (`adjunct`) has three competing licence models under comparison
+and none of them is registered. The execution tier is probed but not built: `manage.py execute`
+has measured what a backend could write at a known site, and nothing yet writes one during a
+lint, so every edit the linter makes is still a deletion.
 
 Progress is tracked as a single per cent, **closure**, defined in
-[docs/good.md](docs/good.md) section 0 and standing at 0.4%. The work follows a fixed loop,
+[docs/good.md](docs/good.md) section 0 and standing at 1.0%, or 0.9% on documents the fitted
+model has never seen. The work follows a fixed loop,
 analyse then plan then build then evaluate then analyse again, set out in
 [docs/method.md](docs/method.md). Six documents carry the state:
 
@@ -80,7 +81,7 @@ rules/                  one module per transformation family, plus induced table
 grammar/                orthography (British/American), realise (surface repair)
 eval/                   sari, harness, grammatical: the gate every rule has to pass
 execute/                template, ceiling, decoder: backends that write a replacement span
-tagging/                vocabulary, features, fit: keep-or-delete decided per word
+tagging/                vocabulary, features, fit, model, weights: keep-or-delete per word
 experiments/            registry, cases, compare, report: method-versus-method comparison
 cli/                    argparse dispatch, menu, install, ui, progress
 docs/                   typology, approaches, constraints, good, method
@@ -113,7 +114,7 @@ also a direct subcommand.
 | Lint a document and write the edited text | `manage.py lint <file.md> [--band {clarity\|light\|firm\|aggressive}]` |
 | Ask whether Opus performs a transformation at all | `manage.py probe <generator> [-n N]` |
 | Ask whether a local backend can write the transformation | `manage.py execute [--backend NAME] [--family F] [-n N] [--transport {served\|local}] [--reproduce]` |
-| Read the corpus as an edit-tagging problem | `manage.py tag [-n N]` |
+| Fit the keep-or-delete decision the linter uses | `manage.py tag [-n N]` |
 | Compare every method for one family | `manage.py experiment <family> [-n N] [--split {all\|train\|test}]` |
 | Compare scoring functions for which phrase to drop first | `manage.py rank [-n N] [--split {all\|train\|test}]` |
 | Score the linter against Opus on the gold corpus | `manage.py evaluate [-n N] [--show]` |
@@ -137,6 +138,10 @@ executor perform this transformation* from *can it decide where*. `keep` and `de
 carried as anchors in every table, so a backend that has learned nothing shows up as zero
 rather than as a plausible number. `--reproduce` runs two passes over the same spans and
 checks they produce the same bytes, with a sampling decoder as the control that has to fail.
+
+`tag` fits the model the `tagged` rule reads and writes it to `tagging/weights.py` as plain
+numbers, so the engine scores a word with a dot product and never imports scikit-learn. Rerun
+it after the corpus changes; the rule uses whatever is committed until you do.
 
 `experiment` is the one to reach for once a family survives the probe: it runs every
 registered method for a family against the same licence cases and the same corpus, and
@@ -215,9 +220,11 @@ paragraphs where no rule had fired at all.
 
 Finally the guard checks the invariants (citations, numbers, the band ceiling) and, on
 failure, returns the paragraph untouched. A failed lint is always a no-op, never a partial
-edit. The guard is necessary and far from sufficient: it passed a sentence that had lost
-its main predicate, and [docs/constraints.md](docs/constraints.md) section C4 records why
-output-side grammaticality checking turned out not to be reachable.
+edit. The guard is necessary and far from sufficient: it passed a sentence that had lost its
+main predicate. Detecting that automatically is harder than it sounds, because a parser asked
+to analyse broken text produces a well-formed tree anyway, relabelling whatever it has to. The
+detectors that survive read the part-of-speech tags rather than the dependencies, which is the
+correction [docs/constraints.md](docs/constraints.md) C17 makes to C4.
 
 ## Results
 
@@ -229,23 +236,52 @@ paragraphs, against Opus's edit of the same paragraph at the same band:
 | System | closure | reach | accuracy |
 |---|---:|---:|---:|
 | do nothing | 0.0% | 0.0% | n/a |
-| **kopi-linter** | **0.4%** | 0.7% | 76.6% |
+| **kopi-linter** | **1.0%** | 2.3% | 71.1% |
 | served Qwen3-32B | -9.5% | 135.9% | 46.5% |
 
 `reach` is how much of Opus's work was attempted, `accuracy` how much of that landed, and
 `closure = reach x (2 x accuracy - 1)` exactly. At 50% accuracy closure is zero however much
-is attempted. The linter's licence mechanism works and is applied to almost nothing;
-reach is the whole problem. See [docs/plan.md](docs/plan.md) for what each family is worth.
+is attempted. The linter's licence mechanism works and is applied to a small fraction of the
+text; reach is still the whole problem. See [docs/plan.md](docs/plan.md) for what each family
+is worth.
 
-Split out, the held-out documents read 0.15% closure at 68.3% accuracy against the train
-split's 0.39% and 77.3%. **That gap is not a result.** It rests on 14 edits and 30 word
-operations, which is far too few to separate 68% from 77%, and the finding is the sample
-size rather than the number: at this reach the held-out side cannot referee a method
-(`docs/constraints.md` C14).
+Split out, the held-out documents read **0.9% closure at 70.2% accuracy** against the train
+split's 1.0% and 71.3%. The keep-or-delete model is fitted on the train documents only, so
+that near-identical pair is the point of the row rather than an aside: it scores the same on
+prose it has never seen. Earlier versions of this table could not say anything of the kind,
+because the held-out side rested on fourteen edits (`docs/constraints.md` C14).
 
 > Closure measures agreement with Opus, not quality. Qwen at -9.5% has not written worse
 > English, it has written different English, and it is quoted here as a reference point
 > rather than a verdict. Reconstructing Opus is this project's objective, not Qwen's.
+
+### How the linter decides what to cut
+
+`manage.py tag` reads the corpus as a tagging problem: every source word gets one tag, keep it
+or delete it, plus an optional phrase to write before it. That scheme covers 205,800 words with
+nothing unalignable, and **26.3% of source words are deletions**, so the decision is a 74/26
+classification with 174,231 training examples rather than the rare event it was taken for.
+
+A logistic regression over 17 parse and frequency features, fitted on the train documents and
+scored on held-out ones, gives a probability per word. The band threshold reads it directly, so
+the intensity dial and the model's operating point are the same number:
+
+| Threshold | Words fired on | Precision | Projected closure |
+|---:|---:|---:|---:|
+| 0.50 | 2,716 | 55.4% | 3.9% |
+| **0.60** | **1,118** | **64.9%** | **4.5%** |
+| 0.70 | 446 | 74.9% | 3.0% |
+| 0.80 | 165 | 87.3% | 1.7% |
+
+Guessing delete for every word scores 25.2%. Ablating the feature groups says the signal is
+lexical first and syntactic second: length features alone never reach the threshold on a single
+word in 31,464, so the model is largely a learned deletion lexicon.
+
+Three shape priors sit in front of the model, because a per-token score cannot know that the
+word it likes is its sentence's only verb. They cost about a third of the closure and remove
+seventeen of eighteen introduced grammatical defects, which is why the highest-scoring variant
+is not the one that ships. Each is registered as an ablation, so `manage.py experiment tagged`
+prints the trade rather than asserting it.
 
 ### What a local backend could write
 
@@ -271,12 +307,12 @@ composite does not:
 | System | SARI | add | keep | delete |
 |---|---:|---:|---:|---:|
 | do nothing | 0.2433 | 0.0000 | 0.7298 | 0.0000 |
-| kopi-linter | 0.5218 | 0.0019 | 0.7307 | 0.8329 |
+| kopi-linter | 0.5465 | 0.0031 | 0.7341 | 0.9022 |
 | served Qwen3-32B | 0.5125 | 0.2040 | 0.7111 | 0.6224 |
 
 That table says the linter beats a 32B model, which is why it is not the headline. The
-score is delete precision earned on 153 changed paragraphs out of 1,490 and 347 words moved
-against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0019
+score is delete precision earned on 574 changed paragraphs out of 1,490 and 1,004 words moved
+against Opus's 22,816, and precision over few deletions is easy. The `add` column, 0.0031
 against Qwen's 0.2040, is where the gap lives: the linter barely writes new words, because
 every rule it has deletes.
 

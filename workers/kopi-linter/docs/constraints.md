@@ -892,26 +892,63 @@ standard since the first pass and nobody had built:
 
 | Threshold | Words fired on | Precision | Recall | Projected closure |
 |---:|---:|---:|---:|---:|
-| 0.50 | 2,594 | 52.4% | 17.1% | 1.7% |
-| **0.60** | **920** | **61.0%** | **7.1%** | **2.7%** |
-| 0.70 | 332 | 67.5% | 2.8% | 1.6% |
-| 0.80 | 80 | 85.0% | 0.9% | 0.8% |
-| 0.90 | 25 | 100.0% | 0.3% | 0.3% |
+| 0.50 | 2,716 | 55.4% | 19.0% | 3.9% |
+| **0.60** | **1,118** | **64.9%** | **9.1%** | **4.5%** |
+| 0.70 | 446 | 74.9% | 4.2% | 3.0% |
+| 0.80 | 165 | 87.3% | 1.8% | 1.7% |
+| 0.90 | 35 | 97.1% | 0.4% | 0.4% |
+| 0.95 | 16 | 100.0% | 0.2% | 0.2% |
 
-Guessing delete for every word scores **25.2%**. So 0.60 is a **2.4x lift** and 0.80 is **3.4x**,
+Guessing delete for every word scores **25.2%**. So 0.60 is a **2.6x lift** and 0.80 is **3.5x**,
 against C10's hand-crafted ranking at 1.88x and C12's best gate at 1.24x. And unlike either of
 those it yields a *probability*, which is what C9 said a per-category rate could never be and
 what the band system has always needed.
 
-**The best operating point is 0.60, at a projected 2.7% closure.** The measured held-out closure
-today is 0.3%, so this is roughly **nine times the current reach at better accuracy**, from a
-model that took one afternoon and no GPU. Projected, not measured: it counts one deleted word as
-one word operation and ignores the repair a deletion forces and the guard that can reject a
-paragraph. Both only cost, so 2.7% is an upper bound.
+**The best operating point is 0.60, at a projected 4.5% closure.** The measured held-out closure
+before this was 0.15%, so it is thirty times the reach at better accuracy, from a model that took
+one afternoon and no GPU. Projected, not measured: it counts one deleted word as one word
+operation and ignores the repair a deletion forces and the guard that can reject a paragraph.
+Both only cost, so 4.5% is an upper bound, and C17 prices the gap.
 
-**The 0.90 and 0.95 rows are not reportable.** They rest on 25 words and 7 words, and 100%
-precision on 25 tokens is C14's lesson arriving a second time. The trustworthy range is 0.50 to
-0.70, where hundreds to thousands of tokens sit behind each figure.
+**The 0.90 and 0.95 rows are not reportable.** They rest on 35 words and 16 words, and 100%
+precision on 16 tokens is C14's lesson arriving a second time. The trustworthy range is 0.50 to
+0.80, where hundreds of tokens sit behind each figure.
+
+**The solver has to be allowed to converge.** The first version of this table capped lbfgs at 400
+iterations, where it needs about 2,400, and reported 61.0% precision at a projected 2.7%. That is
+not a rounding difference: a capped fit under-weights the badly scaled features unevenly, which
+is precisely the thing the ablation below is trying to measure, so the ablation would have been
+reading the solver rather than the features. Every figure in this constraint is from a converged
+fit.
+
+**The lift is lexical first, syntactic second, and not length at all.** C12 found that its best
+hand-swept feature was length in disguise, so the same fit was run over each slice of the columns,
+scored on the same held-out words at 0.60. `length` holds every feature that measures a size or a
+place, so that dropping it leaves a model with no way to count:
+
+| Features | Columns | Words fired on | Precision | Closure |
+|---|---:|---:|---:|---:|
+| everything | 6,136 | 1,118 | 64.9% | **4.5%** |
+| without length | 6,132 | 957 | 66.1% | 4.1% |
+| without syntax | 5,928 | 767 | 66.9% | 3.5% |
+| without lexical | 212 | 361 | 60.7% | 1.0% |
+| length only | 4 | **0** | 0.0% | 0.0% |
+| syntax only | 208 | 296 | 63.2% | 1.0% |
+| lexical only | 5,924 | 577 | 69.3% | 3.0% |
+
+**Length alone never reaches the threshold on a single word in 31,464.** C12's warning does not
+apply here, and removing the length features costs only 0.4 points. What carries the decision is
+word identity: dropping the lexical columns costs 3.5 of the 4.5 points, and dropping syntax
+costs 1.0. Neither alone reaches the pair, so the two are complementary rather than redundant.
+
+Read the precision column against the closure column before concluding that a smaller model is
+better. `lexical only` is the most *precise* row in the table and closes a third less, because it
+fires on half as many words. That is the trade closure exists to resolve and precision cannot.
+
+**What was learned is largely a deletion lexicon.** 5,924 of the 6,136 columns are lemma
+one-hots, so the model has substantially memorised which words this editor cuts. It is scored on
+documents it never saw, so it generalises across documents in this corpus; whether it generalises
+to another discipline's vocabulary is untested and is the obvious way for it to fail.
 
 **The phrase vocabulary is genuinely closed, and flat.** Fitted on the training documents,
 measured against what the held-out documents need:
@@ -941,13 +978,93 @@ and only then an encoder.
 
 **Experiments.**
 1. ~~*Tag the corpus and fit the baseline.*~~ Built: `manage.py tag`.
-2. *Ablate the length features.* `position` and `sentence_length` are in the feature set, and
-   C12 found that the best hand-swept feature was "length in disguise". If the lift survives
-   their removal it is syntactic; if it does not, this is C12 again wearing a coat.
-3. *Wire it in and measure real closure.* The 2.7% is an upper bound and the gap between it and
-   the measured number is the cost of realisation and the guard, which nothing has yet priced.
+2. ~~*Ablate the length features.*~~ Done, above. Length alone fires on nothing, and the lift is
+   lexical first and syntactic second. C12's warning does not carry over.
+3. ~~*Wire it in and measure real closure.*~~ Done, as **C17**. 0.9% held out against the 4.5%
+   upper bound; the shortfall is what the shape priors and the guard cost.
 4. *Then the encoder.* The plan staged CPU-frozen embeddings after the linear baseline precisely
-   so this comparison would exist. It now does, and the baseline is the thing to beat.
+   so this comparison would exist. It now does, and the baseline is the thing to beat. The
+   ablation says where to aim it: syntax is the half a bag of one-hots represents worst.
+5. *Test the lexicon on prose from another field.* The model is mostly lemma weights fitted on
+   one thesis corpus, so the failure mode to look for is a vocabulary that does not transfer.
+
+---
+
+## C17. A confident word is not a deletable word, and closure alone would not have said so
+
+**Evidence.** `rules/rule_tagged.py` puts C16's model into the engine as an ordinary rule. It
+scores every word, groups neighbouring wanted words into one span, and proposes each span as a
+deletion carrying the model's own probability as its confidence. Nothing else changed: selection,
+the bands, realisation and the guard are untouched, and the band threshold is now a real dial
+over a real probability rather than a hand-set number.
+
+Measured on the 233 held-out paragraphs, against the shipped rule on the same paragraphs:
+
+| Method | Closure | Reach | Accuracy | Fired | Attested | Changed | Defects |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `relative/all-gates`, shipped | 0.15% | 0.40% | 68.3% | 14 | 79% | 14 | 1 |
+| **`tagged/deletions`** | **0.78%** | 1.89% | 70.6% | 114 | **87%** | 83 | 1 |
+
+**Five times the closure of the shipped rule, at a higher attestation rate, for the same single
+introduced defect.** On the whole corpus with both rules registered, closure goes from 0.4% to
+**1.0%**, and the split that matters goes from 0.15% to **0.9%** against 1.0% on train. A gap of
+0.1 points between documents the model was fitted on and documents it has never seen is the
+strongest generalisation evidence in this project, and it retires C14's complaint that the
+held-out side is too thin to referee anything: it now carries hundreds of edits, not fourteen.
+
+**The first version was worth 1.13% and was not admissible.** Ungated, the model deletes the only
+verb in a sentence. Three shape priors were written from the measured defects, and each was
+registered as an ablation so it had to earn its place:
+
+| Method | Closure | Fired | Defects | Cases |
+|---|---:|---:|---:|---|
+| `tagged/no-gates` | **1.13%** | 162 | 18 | 1/5 |
+| `tagged/no-root-gate` | 0.97% | 145 | 12 | 4/5 |
+| `tagged/no-modifier-gate` | 0.87% | 122 | 5 | 4/5 |
+| `tagged/no-prep-gate` | 0.81% | 118 | 5 | 3/5 |
+| `tagged/deletions` | 0.78% | 114 | **1** | **5/5** |
+
+**Closure is monotonically *worse* as the rule gets safer, and the safest rule is the only
+admissible one.** Ranked on the master metric alone, the ablation with 18 introduced defects
+wins. This is `good.md` section 0 stated as a measurement rather than as a worry: closure charges
+one word-operation for deleting a sentence's only verb, and a reader charges the whole paragraph.
+The defect count and the case bank are what stop the metric picking the wrecking ball, and the
+five cases are all observed failures, which is the kind that is worth keeping.
+
+**Why it is a constraint.** Every learned proposer from here on will be confident about tokens
+whose removal breaks the sentence, because a per-token model has no way to know that the word it
+likes is the sentence's only predicate. The shape priors are not a patch on this model; they are
+the standing cost of asking a per-token question, and any successor pays it too.
+
+**And the parser hides one whole damage class.** `_orphaned_determiner` was first written the
+obvious way, as a determiner whose head is not a noun. It scored zero on text that reads "told me
+the in relation to speaking", because faced with a determiner that has lost its noun the parser
+does not leave a broken dependency: it relabels the word a pronoun and makes it the direct
+object. The tag stays `DT`; the dependency does not survive. Keyed on the tag, the detector finds
+exactly the damage and the gate removes it, 3 to 0.
+
+This is **C4 arriving from the other side**. C4 concluded that a statistical parser normalises
+damage away and closed output-side validation as unreachable. It is reachable; what is
+unreachable is the *dependency* layer, which is trained to produce a well-formed tree from
+whatever it is given. The tag layer is not, and B5's point stands that C4 generalised one failure
+into a closed question.
+
+**Strategy.** The gap between 4.5% projected and 0.9% measured is now priced, and roughly three
+quarters of it is the shape priors refusing runs. Refusing a whole run because one word in it is
+the sentence root throws away the rest of the run, so trimming the run instead of dropping it is
+the cheapest remaining move. After that, the phrase head: half these refusals are cases where
+Opus deleted *and wrote something*, and DELETE without its phrase is only half the tag.
+
+**Experiments.**
+1. ~~*Wire it in and measure.*~~ Built: `rules/rule_tagged.py`, registered.
+2. *Trim refused runs instead of dropping them.* Three quarters of the projected-to-measured gap
+   is here. A run that contains the sentence root should lose the root, not the run.
+3. *Raise the floor and re-measure.* Proposals start at 0.50 and the band admits at 0.70 or 0.80,
+   so most of what the model proposes is never seen. Whether the low proposals cost anything at
+   all is unmeasured.
+4. *Set the band thresholds from the operating table.* `lint/bands._DEFAULT_THRESHOLD` currently
+   gates this family by accident rather than by choice, and C16's table is the evidence for
+   choosing.
 
 ---
 
@@ -1016,10 +1133,17 @@ Derived from the constraints rather than from the family sizes, which is the cha
     words are deletions, and a logistic regression over parse features reaches 61.0% precision
     at a projected 2.7% closure, against 25.2% for guessing. The wall C9 to C12 hit was the
     feature set.
-17. **Wire the token classifier in and measure real closure**, with the threshold as the band
-    dial. The 2.7% is an upper bound and the shortfall is what realisation and the guard cost.
-18. **The phrase head**, then a frozen encoder, in that order, each against the C16 baseline.
-19. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
+17. ~~**Wire the token classifier in and measure real closure**, with the threshold as the band
+    dial.~~ Resolved as **C17**. Registered, 0.9% held out against 1.0% train, five times the
+    shipped rule at 87% attestation. The shortfall from C16's 4.5% is what three shape priors
+    cost, and they are not optional: ungated the rule scores higher and introduces eighteen
+    grammatical defects.
+18. **Trim refused runs rather than dropping them**, which is most of the shortfall in item 17
+    and needs no new evidence, only care about where a run ends.
+19. **The phrase head**, then a frozen encoder, in that order, each against the C16 baseline. The
+    ablation says to aim the encoder at syntax, which is the half a bag of one-hots represents
+    worst.
+20. **A constrained decoder for `phrase` and `voice`**, the 92.5% of the residual a vocabulary
     cannot hold. Last, and only once the tagger has a real score rather than a ceiling.
 
 C2 is not a task. It is the rule for judging all of the above: report proposals generated, not

@@ -12,6 +12,7 @@ _PACKAGES = [
     ("nltk", "WordNet, for derivational morphology"),
     ("textstat", "syllable counts"),
     ("lemminflect", "inflection, for realisation after a tree edit"),
+    ("sklearn", "refitting the keep-or-delete model; linting reads the saved weights"),
 ]
 
 

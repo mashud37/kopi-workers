@@ -4,3 +4,4 @@ nltk
 textstat
 lemminflect
 PyYAML
+scikit-learn

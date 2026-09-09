@@ -6,6 +6,36 @@ from functools import lru_cache
 _RARE_ZIPF = 3.0
 _MAX_DEPTH = 20
 
+# What kind of evidence each feature is, so an ablation can ask whether a lift is
+# syntactic or is sentence length wearing a coat (`docs/constraints.md` C12).
+# Everything that measures a size or a place counts as length here, deliberately:
+# dropping the group has to leave a model with no way to count.
+GROUPS = {
+    "length": (
+        "position",
+        "sentence_length",
+        "subtree",
+        "depth",
+    ),
+    "syntax": (
+        "pos",
+        "dep",
+        "tag",
+        "head_pos",
+        "head_dep",
+        "previous_pos",
+        "next_pos",
+    ),
+    "lexical": (
+        "lemma",
+        "zipf",
+        "rare",
+        "is_stop",
+        "is_punct",
+        "is_alpha",
+    ),
+}
+
 
 @lru_cache(maxsize=100_000)
 def _zipf(word: str) -> float:

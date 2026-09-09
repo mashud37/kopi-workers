@@ -271,7 +271,52 @@ ADJUNCT = (
     ),
 )
 
-ALL = RELATIVE + REALISATION + ADJUNCT
+TAGGED = (
+    Case(
+        "As Lull (1990: 41) has theorised for the case of television, media technologies "
+        "provide people with a variety of opportunities to fulfil certain social roles "
+        "and ideals.",
+        "tagged", "refuse",
+        "deletes the sentence's only predicate, leaving 'media technologies people with'",
+        observed=True,
+        span="provide",
+    ),
+    Case(
+        "As Lull (1990: 41) has theorised for the case of television, media technologies "
+        "provide people with a variety of opportunities to fulfil certain social roles "
+        "and ideals.",
+        "tagged", "refuse",
+        "takes the last complement of 'of' and leaves the preposition dangling",
+        observed=True,
+        span="opportunities",
+    ),
+    Case(
+        "Sunder, for example, told me the following in relation to speaking about TikTok "
+        "with his parents.",
+        "tagged", "refuse",
+        "leaves 'in relation to' with nothing to govern",
+        observed=True,
+        span="speaking",
+    ),
+    Case(
+        "Sunder, for example, told me the following in relation to speaking about TikTok "
+        "with his parents.",
+        "tagged", "refuse",
+        "takes the noun and strands its determiner: 'told me the in relation to'",
+        observed=True,
+        span="following",
+    ),
+    Case(
+        "Furthermore, the participants in this study were recruited through a single "
+        "online community.",
+        "tagged", "fire",
+        "a sentence-initial connective is the family's clearest deletion, and without a "
+        "fire case a rule that proposes nothing passes every case above",
+        span="Furthermore",
+    ),
+)
+
+ALL = RELATIVE + REALISATION + ADJUNCT + TAGGED
 
 
 def for_family(family: str) -> tuple:

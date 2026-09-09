@@ -102,7 +102,7 @@ Detect critical pairs (two rules whose left-hand sides overlap), and either orde
 explicitly or add the joining rule. Cheap insurance that makes "deterministic" true rather
 than aspirational.
 
-### 1.7 Edit-as-tagging [S, measured ceiling]
+### 1.7 Edit-as-tagging [S, half built and running]
 
 The line of work that solved this exact shape, and the one this catalogue was missing.
 LaserTagger (Malmi, Krause, Rothe, Mirylenka and Severyn, 2019) induces a closed vocabulary of
@@ -127,9 +127,18 @@ Opus exactly on 64.6% of rewriting spans and closes 52.6% of the rewriting gap w
 choice. It holds on held-out documents, 65.1% against 67.0%. What it cannot reach is one family:
 `phrase` is 84.7% of the residual, and `phrase` with `voice` is 92.5% of it.
 
+**The keep-or-delete half is built and registered** (**C16**, **C17**). A logistic regression
+over 17 parse and frequency features reaches 64.9% precision against 25.2% for guessing, and as
+a rule it takes held-out closure from 0.15% to 0.9% at 89.2% attestation. Two things the
+catalogue did not anticipate came out of building it. The signal is lexical rather than
+syntactic, so what was learned is mostly a deletion lexicon and the transfer risk is a different
+field's vocabulary. And a per-token score has no way to know the word it likes is its sentence's
+only verb, so the tag decision needs shape priors in front of it whatever model produces it.
+
 Falsified if a fitted tagger over held-out documents cannot beat the delete anchor's 28.8%
 rewriting closure, which would say the ceiling is unreachable in practice and the gap is all in
-the tag decision rather than in the vocabulary.
+the tag decision rather than in the vocabulary. Not yet tested: that anchor is a span-level
+figure about *rewriting*, and only the deletion half exists.
 
 ---
 

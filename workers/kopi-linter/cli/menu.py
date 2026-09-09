@@ -19,7 +19,7 @@ _ACTIONS = [
     ("lint", "Lint a document and write the edited text", lint_cmd.run),
     ("probe", "Ask whether Opus performs a transformation, before building it", probe_cmd.run),
     ("execute", "Probe whether a local backend can perform the gold edits", execute_cmd.run),
-    ("tag", "Read the gold corpus as an edit-tagging problem", tag_cmd.run),
+    ("tag", "Fit the keep-or-delete decision the linter uses", tag_cmd.run),
     ("experiment", "Compare every method for one transformation family", experiment_cmd.run),
     ("rank", "Compare scoring functions for which phrase to drop first", rank_cmd.run),
     ("evaluate", "Score the linter against Opus on the gold corpus", eval_cmd.run),

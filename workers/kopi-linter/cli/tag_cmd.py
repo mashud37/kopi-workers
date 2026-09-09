@@ -99,6 +99,7 @@ def _write(result: dict, samples: int, scored: dict) -> Path:
     ]
     lines += _curve(train, test)
     lines += _report_model(scored)
+    lines += _report_ablation(scored)
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
 
@@ -133,11 +134,37 @@ def _report_model(scored: dict) -> list:
     return lines
 
 
+def _report_ablation(scored: dict) -> list:
+    """Which features earned the lift, as report lines."""
+    from tagging import fit
+
+    lines = [
+        "## Which features earned it",
+        "",
+        "Each row is the same fit over a different slice of the columns, scored on the same "
+        f"held-out words at threshold {fit.OPERATING:.2f}. `length` holds every feature that "
+        "measures a size or a place, because the question this answers is whether the lift is "
+        "syntactic or is sentence length wearing a coat, and a length-free model has to have "
+        "no way to count at all.",
+        "",
+        "| Features | Columns | Words fired on | Precision | Closure | Best closure |",
+        "|---|---:|---:|---:|---:|---:|",
+    ]
+    for row in scored["ablation"]:
+        lines.append(
+            f"| {row['label']} | {row['columns']} | {row['fired']} | "
+            f"{row['precision']:.1%} | {row['closure']:.1%} | {row['best']:.1%} |"
+        )
+    lines.append("")
+    return lines
+
+
 def run(limit: int | None = None) -> None:
     from tagging import vocabulary
 
     ui.step("Tag")
-    ui.info("plan: load corpus, load parser, tag every word, report distribution and coverage")
+    ui.info("plan: load corpus, load parser, tag every word, report distribution and "
+            "coverage, fit keep-or-delete, ablate the features, save the weights")
     loaded = _corpus(limit)
     samples, held_out = loaded["samples"], loaded["held_out"]
     ui.ok(f"{len(samples)} gold paragraphs, {len(held_out)} documents held out")
@@ -166,21 +193,27 @@ def run(limit: int | None = None) -> None:
     print(_write(result, len(samples), scored))
 
 
+def _fitting(index: int, total: int, label: str) -> None:  # lint-style: ignore FN004
+    ui.info(f"[{index}/{total}] fitting {label}")
+
+
 def _fit(samples, nlp, held_out: set) -> dict:
-    """Fit the keep-or-delete decision and report each operating point."""
-    from tagging import fit
+    """Fit the keep-or-delete decision, ablate it, and save the weights."""
+    from tagging import fit, model
 
     bar = BatchProgress(len(samples), "building features")
     data = fit.dataset(samples, nlp, held_out, on_progress=bar.on_item)
     bar.finish()
-    sp = StepSpinner("fitting keep-or-delete")
-    sp.start()
-    try:
-        scored = fit.fit_and_score(data)
-    finally:
-        sp.done()
+    ui.ok(f"{len(data['train']['labels'])} training words, "
+          f"{len(data['test']['labels'])} held out, {data['gap']} word-edits to close")
+    scored = fit.fit_and_score(data, on_progress=_fitting)
     ui.info(f"guessing delete everywhere scores {scored['baseline']:.1%} precision")
     for point in scored["points"]:
         ui.info(f"at {point['threshold']:.2f}: precision {point['precision']:6.1%}  "
                 f"recall {point['recall']:6.1%}  projected closure {point['closure']:6.1%}")
+    for row in scored["ablation"]:
+        ui.info(f"{row['label']:16s} {row['columns']:6d} columns  "
+                f"precision {row['precision']:6.1%}  closure {row['closure']:6.1%}")
+    saved = model.write(scored["intercept"], scored["weights"])
+    ui.ok(f"{saved['columns']} weights written to {saved['path'].name}")
     return scored

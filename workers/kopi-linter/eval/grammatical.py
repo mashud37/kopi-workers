@@ -33,10 +33,27 @@ def _stranded_aux(token) -> bool:
     return token.dep_ in ("aux", "auxpass") and token.head.pos_ not in _VERBAL
 
 
+def _orphaned_determiner(token) -> bool:
+    """A determiner the parser had to reread as a pronoun, which is what it does
+    when the noun that determiner belonged to has been deleted.
+
+    Keyed on the fine tag rather than on the dependency on purpose. Faced with
+    "told me the in relation to", the parser does not leave a determiner without
+    a noun; it relabels the word a pronoun and makes it the direct object, so
+    every dependency-side test for this damage reads clean. The tag stays ``DT``.
+
+    Demonstratives ("that", "these") are genuine pronouns and match this too, so
+    the detector is only meaningful through :func:`introduced`, which subtracts
+    what the original already had.
+    """
+    return token.tag_ == "DT" and token.pos_ == "PRON" and token.head.pos_ in _VERBAL
+
+
 _TOKEN_DEFECTS = (
     ("dangling_prep", _dangling_prep),
     ("orphan_predicate", _orphan_predicate),
     ("stranded_aux", _stranded_aux),
+    ("orphaned_determiner", _orphaned_determiner),
 )
 
 

@@ -33,7 +33,8 @@ def _score_each(methods, samples, nlp) -> list:
         bar.finish()
         last = reports[-1]
         state = "clean" if last.clean else f"{len(last.case_failures)} case failures"
-        ui.ok(f"{method.name}: SARI {last.sari['sari']:.4f}, {last.fired} fired, {state}")
+        ui.ok(f"{method.name}: closure {last.closure:.2%}, SARI {last.sari['sari']:.4f}, "
+              f"{last.fired} fired, {state}")
     return reports
 
 
