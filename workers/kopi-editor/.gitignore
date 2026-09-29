@@ -30,3 +30,4 @@ adapter/*
 # Editor / OS
 .env
 .DS_Store
+.claude/
