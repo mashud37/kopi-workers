@@ -26,6 +26,10 @@ def load_config() -> dict:
     if env_key:
         config.setdefault("api", {})["anthropic_key"] = env_key
 
+    env_model = os.getenv("KOPI_PRESENTER_MODEL")
+    if env_model:
+        config.setdefault("llm", {})["model"] = env_model
+
     return config
 
 
