@@ -1,0 +1,33 @@
+# Training + eval stack: heavy, GPU/CUDA-specific. Install ONLY on the training
+# box, never as a core dependency (learning.md §3.5, dependencies.md). Imported
+# lazily inside train/ and eval/, so generate + build work without any of this.
+#
+# EVERY version is pinned exactly and the install runs WITHOUT `pip -U`. This is
+# deliberate: the install layers onto a prebuilt CUDA image (Vertex
+# pytorch-gpu.2-4 / HF pytorch:2.4.0-cuda12.4) and the two crashes that burned
+# real GPU budget both came from partial, uncontrolled upgrades of that image:
+#
+#   1. torch 2.4 (image default) lacks nn.Module.set_submodule, which the
+#      transformers bitsandbytes 4-bit path calls when loading Qwen3 ->
+#      "AttributeError: 'Qwen3ForCausalLM' object has no attribute 'set_submodule'".
+#      Fixed by torch>=2.5; we pin 2.6.0.
+#   2. Bumping torch with `pip -U` left the image's torchvision 0.19.0 stranded
+#      (torch/torchvision share a compiled ABI) -> "operator torchvision::nms
+#      does not exist", which crashes the transformers import chain.
+#      Fixed by pinning torchvision to the EXACT match for torch 2.6.0 (0.21.0)
+#      so the pair is replaced together.
+#
+# torch<->torchvision is the one pair that MUST move in lockstep; the rest is a
+# coherent stack that knows Qwen3 (transformers>=4.51) and exposes the trl API
+# this code uses (SFTConfig.max_length, SFTTrainer.processing_class). Re-pin all
+# of these together if you ever bump one, never with `-U`.
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+torchvision==0.21.0
+transformers==4.53.2
+trl==0.20.0
+peft==0.15.2
+accelerate==1.6.0
+bitsandbytes==0.46.0
+datasets==3.6.0
+pyyaml

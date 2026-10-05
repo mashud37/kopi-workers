@@ -1,0 +1,90 @@
+# Non-secret configuration for the distillation pipeline.
+# Tune sampling/budget here; credentials come from kopi-editor's env.yaml (no
+# secrets file of our own, see secrets.example.yaml).
+
+teacher:
+  # Leave blank to reuse the Anthropic model already chosen in kopi-editor settings.
+  opus_model: claude-opus-4-8     # the gold editor we distil from
+  lang: british
+
+# Corpus for the optional `generate` EXPANSION step (the primary source is `mine`,
+# which reads kopi-editor's existing edit bundles, no config needed).
+corpus:
+  text_dir: ../../pepa-worker/pepa-prep/output/text   # relative to this repo root
+  min_paragraph_words: 40                # match kopi-editor's edit threshold
+  max_paragraphs_per_paper: 6            # spread across authors, don't overfit one paper
+
+# Each sampled paragraph is generated at one band so the student learns the
+# intensity dial (the band is encoded in the system prompt). Weights = sampling mix.
+bands:
+  clarity:    {reduction_ratio: 0.00, weight: 0.34}   # no reduction: teaches restraint
+  firm:       {reduction_ratio: 0.08, weight: 0.33}
+  aggressive: {reduction_ratio: 0.18, weight: 0.33}
+
+# Cost guard. Opus is billed per token; start small, scale with --max-paragraphs.
+# A whole-corpus run is ~$1000+ and unnecessary: LoRA needs a few thousand pairs.
+sample:
+  papers: 80
+  max_paragraphs: 400        # hard cap per `generate` run; override with a flag
+  seed: 7
+
+# Split fractions, applied BY PAPER (never by paragraph) before any data is touched.
+split:
+  val: 0.10
+  test: 0.15
+
+# QLoRA hyperparameters (learning.md §3.3). Train on the FULL-PRECISION base: bnb
+# 4-bit (nf4) quantises these bf16 weights on load, and `merge` reloads them at bf16.
+# AWQ is the *serving* format only (kopi-editor serves Qwen/Qwen3-32B-AWQ), so you
+# cannot stack QLoRA on an already-AWQ checkpoint, and the merge would fail on it.
+train:
+  base_model: Qwen/Qwen3-32B  # full-precision base; AWQ is serve-side only
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: all-linear
+  epochs: 2
+  learning_rate: 0.0001
+  max_seq_len: 2048
+  load_in_4bit: true         # QLoRA: 4-bit frozen base
+
+# Cloud-training target (train-cloud). The laptop only ever holds the small adapter;
+# the big base is pulled fresh onto the box, never stored here. `backend` selects who
+# runs the job, set it (and the per-backend block) via `python manage.py cloud-setup`.
+# Billing is Opus-owned: a run is a few GPU-hours.
+cloud:
+  backend: vertex                     # vertex | hf: `cloud-setup --backend hf` switches
+
+  # Vertex AI: bucket + region are training-specific; PROJECT is reused from
+  # kopi-editor's env.yaml (or KOPI_PROJECT). Note Vertex GPU quota starts at 0 and a
+  # grant can take ~2 business days; the hf backend has no such wait.
+  region: us-central1                 # pick for A100 availability; need not match the serving region
+  bucket: ""                          # gs:// bucket for staging code+data and the output adapter (no gs:// prefix)
+  machine_type: a2-ultragpu-1g        # 1x A100 80GB: fits a 32B 4-bit QLoRA tune comfortably
+  accelerator_type: NVIDIA_A100_80GB
+  accelerator_count: 1
+  boot_disk_gb: 200                   # must hold the ~62GB base download + CUDA pip layer + HF cache (default disk is 100GB)
+  timeout_seconds: 21600              # hard cap (6h) so a hung job can't bill indefinitely
+  # Vertex's own prebuilt PyTorch+CUDA GPU container; we pip-install the train extras
+  # on top at job start (no image to build or maintain). Bump the tag as Vertex does.
+  container_uri: us-docker.pkg.dev/vertex-ai/training/pytorch-gpu.2-4.py310:latest
+
+  # Held-out eval on Vertex (evaluate-cloud): CPU only; the served Qwen does ALL
+  # inference, so no GPU and no big download here. Reuses the bucket/region/project
+  # above; scoring (spaCy + embeddings) runs on the laptop in pull-eval, never here.
+  eval:
+    machine_type: n1-standard-4       # CPU box; the loop is pure HTTP to the served Qwen
+    timeout_seconds: 7200             # 2h cap (held-out set x 2 calls + cold start)
+    # container_uri defaults to a CPU PyTorch image (cloud/eval_job.py _CPU_IMAGE).
+    # Do NOT point this at the GPU training image: Vertex rejects it with no accelerator.
+    # container_uri: ""               # optional override; blank = the CPU default
+
+  # Hugging Face Jobs: on-demand GPU, no quota queue, pre-paid credits. Data + adapter
+  # live in PRIVATE per-run HF repos. flavor = `hf jobs hardware` name. a100-large is
+  # the highest dependable QLoRA flavor (sm_80); h200 is faster but pricier, and
+  # rtx-pro-6000 (Blackwell sm_120) needs a bnb build that supports it.
+  hf:
+    flavor: a100-large                # a100-large | h200 | rtx-pro-6000 | l4x1
+    namespace: ""                     # HF user/org for the Job + repos; blank = your account
+    timeout: 6h                       # job auto-stops after this
+    image: ""                         # optional Docker image; blank = a CUDA PyTorch default
