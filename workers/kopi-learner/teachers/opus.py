@@ -5,10 +5,12 @@ marked cacheable to cut cost across a run.
 import editor
 from cli import config
 
-_MAX_TOKENS = 1024
+_MAX_TOKENS = 4096
 
-# USD per 1M tokens (input, output); cached 2026-06, mirrors kopi-editor/cli/api.py.
+# USD per 1M tokens (input, output); cached 2026-10, mirrors kopi-editor/cli/api.py.
 _PRICING = {
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
     "claude-opus-4-8": (5.0, 25.0),
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-haiku-4-5": (1.0, 5.0),
