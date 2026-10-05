@@ -16,8 +16,8 @@ api:
 llm:
   # ── Model selection ────────────────────────────────────────
   # claude-haiku-4-5-20251001   cheapest; ~$0.02–0.03/deck    ← default
-  # claude-sonnet-4-6            balanced; ~$0.09–0.12/deck
-  # claude-opus-4-7              highest quality; ~$0.45–0.55/deck
+  # claude-sonnet-5-5            balanced
+  # claude-opus-5-5              highest quality
   #
   # Recommendation for manuscript length:
   #   < 3 000 words / outlines → Haiku (excellent results)
@@ -25,8 +25,8 @@ llm:
   #   > 8 000 words / complex  → Sonnet strongly recommended
   model: "claude-haiku-4-5-20251001"
 
-  # Max output tokens: full manuscript decks need ~5–6k; 8 192 leaves headroom
-  max_tokens: 8192
+  # Max output tokens: full manuscript decks need ~5–6k plus the model's thinking
+  max_tokens: 16000
 
 defaults:
   # Used when the manuscript does not state these explicitly.

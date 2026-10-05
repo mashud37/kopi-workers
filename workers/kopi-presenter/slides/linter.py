@@ -102,7 +102,7 @@ def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
     api_key = config.get("api", {}).get("anthropic_key", "")
     model = config.get("llm", {}).get("model", "claude-haiku-4-5-20251001")
 
-    max_tokens = config.get("llm", {}).get("max_tokens", 8192)
+    max_tokens = config.get("llm", {}).get("max_tokens", 16000)
     client = anthropic.Anthropic(api_key=api_key)
     error_list = "\n".join(f"- {e}" for e in errors)
 
@@ -120,7 +120,7 @@ def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
-        raw = response.content[0].text.strip()
+        raw = "".join(block.text for block in response.content if block.type == "text").strip()
         raw = re.sub(r"^```(?:json)?\s*\n?", "", raw, flags=re.MULTILINE)
         raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
         return json.loads(raw.strip())
