@@ -42,7 +42,8 @@ def run(file, lang=None):
     edited, changelog, diff = written["edited"], written["report"], written["diff"]
     final = state["counts"].get("final", words)
     ui.ok(f"removed {words - final} words; final {final}")
-    ui.ok(f"edited text: {edited}")
-    ui.ok(f"change log:  {changelog}")
+    ui.ok(f"edited text:  {edited}")
+    ui.ok(f"side by side: {written['side_by_side']}")
+    ui.ok(f"change log:   {changelog}")
     if diff:
-        ui.ok(f"diff:        {diff}")
+        ui.ok(f"diff:         {diff}")

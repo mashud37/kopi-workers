@@ -97,7 +97,7 @@ def _finalize_text(state, lang, llm):
     return state
 
 
-def _report_summary(state, original, edited, report_path, diff):
+def _report_summary(state, original, written):
     """Print the run's word-count delta and where the outputs were written."""
     final = state["counts"].get("final", original)
     final_int = final if isinstance(final, int) else original
@@ -106,10 +106,11 @@ def _report_summary(state, original, edited, report_path, diff):
     delta = final_int - original
     ui.ok(f"edited {acc} paragraph(s), {rej} kept unchanged; "
           f"{original} -> {final_int} words ({delta:+d})")
-    ui.ok(f"edited text: {edited}")
-    ui.ok(f"report:      {report_path}")
-    if diff:
-        ui.ok(f"diff:        {diff}")
+    ui.ok(f"edited text:  {written['edited']}")
+    ui.ok(f"side by side: {written['side_by_side']}")
+    ui.ok(f"report:       {written['report']}")
+    if written["diff"]:
+        ui.ok(f"diff:         {written['diff']}")
 
 
 def run(file, reduction=None, lang=None, llm=None, verbose=False):
@@ -160,6 +161,4 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
         state.get("original_text", text), state.get("final_text", text),
     )
     written = write_outputs(state, path, run_dir, comparison=comparison)
-    edited, report_path, diff = written["edited"], written["report"], written["diff"]
-
-    _report_summary(state, original, edited, report_path, diff)
+    _report_summary(state, original, written)

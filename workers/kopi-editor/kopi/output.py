@@ -191,14 +191,62 @@ def _write_diff(state: dict, source_path: Path, diff_path: Path) -> Path | None:
     return diff_path
 
 
+def _table_cell(paragraphs: list[str]) -> str:
+    """Paragraphs as one markdown table cell: line breaks become spaces and a pipe is escaped."""
+    text = " ¶ ".join(" ".join(paragraph.split()) for paragraph in paragraphs)
+    return text.replace("|", "\\|")
+
+
+def _side_by_side_rows(original: str, final: str) -> list[str]:
+    """One table row per paragraph, original beside edited, paired by matching unchanged paragraphs.
+
+    Unchanged paragraphs say so in the edited column, so the changed ones stand out.
+    """
+    before = [part for part in original.split("\n\n") if part.strip()]
+    after = [part for part in final.split("\n\n") if part.strip()]
+    rows = []
+    matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
+    for tag, start_a, end_a, start_b, end_b in matcher.get_opcodes():
+        old_part = before[start_a:end_a]
+        new_part = after[start_b:end_b]
+        if tag == "equal":
+            for paragraph in old_part:
+                rows.append(f"| {_table_cell([paragraph])} | _unchanged_ |")
+        elif tag == "replace" and len(old_part) == len(new_part):
+            for paragraph, edited in zip(old_part, new_part):
+                rows.append(f"| {_table_cell([paragraph])} | {_table_cell([edited])} |")
+        else:
+            left = _table_cell(old_part) if old_part else "_new_"
+            right = _table_cell(new_part) if new_part else "_removed_"
+            rows.append(f"| {left} | {right} |")
+    return rows
+
+
+def _write_side_by_side(state: dict, source_path: Path, path: Path) -> Path | None:
+    """Write the original and edited paragraphs side by side as a markdown table, for review and copying."""
+    original = state.get("original_text", "")
+    final = state.get("final_text", "")
+    if not (original and final):
+        return None
+    lines = [
+        f"# {source_path.name}: original and edited",
+        "",
+        "| Original | Edited |",
+        "|---|---|",
+    ]
+    lines += _side_by_side_rows(original, final)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8-sig")
+    return path
+
+
 def write_outputs(
     state: dict, source_path: Path, out_dir: Path = None, comparison: list[str] | None = None
 ) -> dict:
-    """Write the edited text, the report, the review sheet and the diff.
+    """Write the edited text, the report, the review sheet, the side-by-side table and the diff.
 
     Returns:
-        Mapping with `edited`, `report` and `diff`; `diff` is None when the edit
-        changed nothing.
+        Mapping with `edited`, `report`, `side_by_side` and `diff`; `diff` is None when the
+        edit changed nothing.
     """
     stem = source_path.stem
     out_dir = Path(out_dir) if out_dir is not None else source_path.parent
@@ -212,6 +260,7 @@ def write_outputs(
     log_path = out_dir / (f"{stem}_report.md" if comparison else f"{stem}_changelog.md")
     diff_path = out_dir / f"{stem}.diff"
     review_path = out_dir / f"{stem}_review.md"
+    side_by_side_path = out_dir / f"{stem}_side-by-side.md"
 
     edited_path.write_text(state["final_text"], encoding="utf-8-sig")
     # Also write the extracted source as text, so it can be diffed side-by-side
@@ -240,6 +289,7 @@ def write_outputs(
     return {
         "edited": edited_path,
         "report": log_path,
+        "side_by_side": _write_side_by_side(state, source_path, side_by_side_path),
         "diff": _write_diff(state, source_path, diff_path),
     }
 
