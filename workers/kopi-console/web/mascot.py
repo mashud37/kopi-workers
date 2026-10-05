@@ -1,33 +1,39 @@
-"""Draw the kopi mascot, a green copy-editing pencil, as pixel-art SVG, and hold its tips.
+"""Draw the kopi mascot, a leaning blue pencil with big eyes, as pixel-art SVG, and hold its tips.
 Every page shows kopi in its corner, where it gives these tips.
 """
+import hashlib
+
 from markupsafe import Markup
 
 KOPI = [
-    "........................",
-    "...........oooooo.......",
-    "..........oppppppo......",
-    "..........oppppppo......",
-    ".........oooooooo.......",
-    ".........oGhGGhGo.......",
-    ".........oooooooo.o.....",
-    ".........olbbbbbo.o.....",
-    ".........olbbbbbo.o.....",
-    "........olEbbEbo.o......",
-    ".......oolebbeboo.......",
-    "......o.okbbbbko........",
-    "......o.olboobbo........",
-    "......o.olbbbbbo........",
-    ".......olbbbbbo.........",
-    ".......otttTTto.........",
-    "........ottTTo..........",
-    ".......o.otTo.o.........",
-    ".......o.oqqo.o.........",
-    ".......o..oo..o.........",
-    ".......o......o.........",
-    "......oo......oo........",
-    "........................",
-    "........................",
+    "............ooooooooo.......",
+    "...........opppppppppo......",
+    "...........ooooooooooo......",
+    "...........oGGGGGGGhho......",
+    "..........ooooooooooo.......",
+    "..........olbbbbbbbbo.......",
+    "..........oloobbboobo.o.....",
+    "..........olbbbbbbbbo.o.....",
+    ".........olwwwbwwwbo..o.....",
+    ".........olwEEbwEEbo..o.....",
+    ".........olweebweebo.o......",
+    ".........olwwwbwwwboo.......",
+    "........olbbbbbbbboo........",
+    "........olbbboobbbo.........",
+    ".......oolbbbbbbbbo.........",
+    "......o.olbbbbbbbbo.........",
+    "......oolbbbbbbbbo..........",
+    "......oolbbbbbbbbo..........",
+    ".......otttttTTTTo..........",
+    "........ottttTTTo...........",
+    "........otttTTo.............",
+    ".........ottTo.o............",
+    ".........ooqqo.o............",
+    ".........o.oo..o............",
+    ".........o.....o............",
+    ".........o.....o............",
+    ".........o.....o............",
+    "........oo.....oo...........",
 ]
 
 COLOURS = {
@@ -35,16 +41,18 @@ COLOURS = {
     "p": "#f6aea9",
     "G": "#dadce0",
     "h": "#9aa0a6",
-    "b": "#5bb974",
-    "l": "#a8dab5",
-    "k": "#fbd3cf",
+    "b": "#8ab4f8",
+    "l": "#d2e3fc",
+    "w": "#ffffff",
     "e": "#1f1f1f",
     "E": "#1f1f1f",
     "t": "#f6d7a7",
     "T": "#e3b97a",
-    "q": "#1e8e3e",
-    "w": "#ffffff",
+    "q": "#1a73e8",
 }
+
+# Changes whenever the drawing does, so a browser fetches the new tab icon instead of its cached one.
+VERSION = hashlib.sha1("".join(KOPI).encode()).hexdigest()[:8]
 
 # The lead ("q") is "ink", which blinks while a job runs, as if the pencil were writing.
 PARTS = {

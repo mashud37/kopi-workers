@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}kopi{% endblock %}</title>
-<link rel="icon" type="image/svg+xml" href="{{ url_for('console.favicon') }}">
+<link rel="icon" type="image/svg+xml" href="{{ url_for('console.favicon', v=mascot_version) }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='console.css') }}">
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
@@ -33,7 +33,7 @@
 
 <div class="buddy" data-buddy>
   <div class="bubble" data-bubble role="status" hidden><span data-bubble-text></span><button type="button" class="text" data-tuck>Tuck away</button></div>
-  <button type="button" class="buddy-button" data-buddy-button aria-label="kopi: a tip for this page">{{ draw_mascot(3) }}</button>
+  <button type="button" class="buddy-button" data-buddy-button aria-label="kopi: a tip for this page">{{ draw_mascot(2.5) }}</button>
 </div>
 <script type="application/json" id="tips">{{ tips | tojson }}</script>
 
