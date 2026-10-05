@@ -418,7 +418,6 @@ th[aria-sort="ascending"] .sort-link, th[aria-sort="descending"] .sort-link { co
 @keyframes blink { 0% { opacity: 0; } 93% { opacity: 1; } 96% { opacity: 0; } }
 @keyframes hop { 0% { transform: translateY(0); } 96% { transform: translateY(-1px); } 98% { transform: translateY(0); } }
 @keyframes bounce { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
-@keyframes write { 0% { opacity: 1; } 50% { opacity: 0.15; } }
 
 
 /* ---- Documents and files ---- */
@@ -540,7 +539,6 @@ dialog.dialog[open]::backdrop { animation: fade-in 0.22s ease; }
 .buddy.look .eye, .buddy.look .lid { animation: look-around 1.8s steps(1, end); }
 .buddy.walk .buddy-button { animation: walk 4.2s steps(28, end); }
 .buddy.walk .figure { animation: bounce 0.3s steps(1, end) 14; }
-body.busy .buddy .ink rect { animation: write 1.4s steps(1, end) infinite; animation-delay: calc(var(--i) * 110ms); }
 .buddy.asleep .lid { opacity: 1; animation: none; }
 .buddy.asleep .buddy-button::before { content: "z"; position: absolute; top: -6px; left: 2px; color: var(--text-tertiary); font: 500 13px var(--mono); animation: snore 2.4s steps(4, end) infinite; }
 .buddy.tucked .buddy-button { transform: translateY(40px); transition: transform 0.3s steps(4, end); }
