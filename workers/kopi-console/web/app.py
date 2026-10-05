@@ -13,7 +13,7 @@ from flask import Flask, abort, current_app, request
 from cli import ui
 from registry import APPS
 from settings import SETTINGS
-from web import jobs, routes
+from web import jobs, mascot, routes
 
 FOLDER = Path(__file__).resolve().parent
 LOCAL_HOSTS = [
@@ -39,12 +39,14 @@ def check_request():
 
 
 def template_values():
-    """Values every template can use: the token, the apps, the running count and the log interval."""
+    """Values every template can use: the token, the apps, the running count, the log interval and the mascot."""
     return {
         "token": current_app.config["CONSOLE_TOKEN"],
         "apps": APPS,
         "running": jobs.running_count(),
         "poll_ms": SETTINGS["poll_ms"],
+        "draw_mascot": mascot.svg,
+        "tips": {"pages": mascot.TIPS, "greeting": mascot.GREETING},
     }
 
 

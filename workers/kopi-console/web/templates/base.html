@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}kopi{% endblock %}</title>
+<link rel="icon" type="image/svg+xml" href="{{ url_for('console.favicon') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='console.css') }}">
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
@@ -16,7 +17,8 @@
     {% for each in apps %}
     <a href="{{ url_for('console.app_page', name=each.name) }}"{% if request.path == url_for('console.app_page', name=each.name) %} aria-current="page"{% endif %}>{{ each.name.removeprefix("kopi-") | capitalize }}</a>
     {% endfor %}
-    <span class="badge" data-running{% if not running %} hidden{% endif %}><span class="visually-hidden">running: </span>{{ running }}</span>
+    <a href="{{ url_for('console.jobs_page') }}"{% if request.path.startswith("/jobs") %} aria-current="page"{% endif %}>Jobs<span class="badge" data-running{% if not running %} hidden{% endif %}><span class="visually-hidden">running: </span>{{ running }}</span></a>
+    <a href="{{ url_for('console.keys_page') }}"{% if request.path.startswith("/keys") %} aria-current="page"{% endif %}>Keys</a>
   </nav>
   <button type="button" class="icon theme-toggle" data-theme-toggle aria-label="Theme" title="Theme: follow the system, light, or dark">
     <svg class="icon-svg theme-system" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></svg>
@@ -28,6 +30,12 @@
 <main id="content" tabindex="-1">
 {% block content %}{% endblock %}
 </main>
+
+<div class="buddy" data-buddy>
+  <div class="bubble" data-bubble role="status" hidden><span data-bubble-text></span><button type="button" class="text" data-tuck>Tuck away</button></div>
+  <button type="button" class="buddy-button" data-buddy-button aria-label="kopi: a tip for this page">{{ draw_mascot(3) }}</button>
+</div>
+<script type="application/json" id="tips">{{ tips | tojson }}</script>
 
 {% with messages = get_flashed_messages() %}{% if messages %}<div class="snackbar" role="status"><span>{{ messages | join(" ") }}</span><button type="button" class="text" data-dismiss>Close</button></div>{% endif %}{% endwith %}
 
@@ -42,6 +50,7 @@
   </form>
 </dialog>
 
+<script src="{{ url_for('static', filename='buddy.js') }}"></script>
 <script src="{{ url_for('static', filename='console.js') }}"></script>
 </body>
 </html>

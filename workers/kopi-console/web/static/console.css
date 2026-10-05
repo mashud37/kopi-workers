@@ -415,12 +415,10 @@ th[aria-sort="ascending"] .sort-link, th[aria-sort="descending"] .sort-link { co
 .mascot { display: block; flex: none; overflow: visible; }
 .mascot .lid { opacity: 0; animation: blink 6s steps(1, end) infinite; }
 .mascot .figure { animation: hop 11s steps(1, end) infinite; }
-.mascot-kopi .twin { animation: copy 7s steps(1, end) infinite; }
 @keyframes blink { 0% { opacity: 0; } 93% { opacity: 1; } 96% { opacity: 0; } }
 @keyframes hop { 0% { transform: translateY(0); } 96% { transform: translateY(-1px); } 98% { transform: translateY(0); } }
 @keyframes bounce { 0% { transform: translateY(0); } 50% { transform: translateY(-1px); } }
 @keyframes write { 0% { opacity: 1; } 50% { opacity: 0.15; } }
-@keyframes copy { 0% { transform: translate(0, 0); } 72% { transform: translate(1px, -1px); } 86% { transform: translate(0, 0); } }
 
 
 /* ---- Documents and files ---- */

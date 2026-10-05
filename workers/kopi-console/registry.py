@@ -5,8 +5,6 @@ from pathlib import Path
 
 FAMILY = Path(__file__).resolve().parent.parent
 
-LANGS = ("british", "american")
-EDITOR_BACKENDS = ("cloud", "local", "api", "skip")
 LINTER_BANDS = ("clarity", "firm", "aggressive")
 
 EDITOR_COMMANDS = [
@@ -24,18 +22,15 @@ EDITOR_COMMANDS = [
         "help": "Careful edit by rules alone, no model",
         "fields": [
             {"name": "file", "type": "input", "help": "Document"},
-            {"name": "--lang", "type": "choice", "choices": LANGS, "help": "Spelling"},
         ],
     },
     {
         "name": "edit",
         "kind": "heavy",
-        "help": "Full plain-language edit through the model backend",
+        "help": "Full plain-language edit by the model chosen in Settings",
         "fields": [
             {"name": "file", "type": "input", "help": "Document"},
             {"name": "reduction", "type": "int", "optional": True, "help": "Words to remove, as a guide"},
-            {"name": "--lang", "type": "choice", "choices": LANGS, "help": "Spelling"},
-            {"name": "--llm", "type": "choice", "choices": EDITOR_BACKENDS, "help": "Model backend"},
         ],
     },
     {
@@ -89,6 +84,7 @@ APPS = [
         "blurb": "Copy-edit a Word document: diagnose it, proofread it, or edit it with a model",
         "script": "manage.py",
         "accepts": [".docx"],
+        "keys": ["ANTHROPIC_API_KEY"],
         "commands": EDITOR_COMMANDS,
     },
     {
@@ -96,6 +92,7 @@ APPS = [
         "blurb": "Edit a text file by rules alone, fully local",
         "script": "manage.py",
         "accepts": [".md", ".txt"],
+        "keys": [],
         "commands": LINTER_COMMANDS,
     },
     {
@@ -103,6 +100,7 @@ APPS = [
         "blurb": "Turn a manuscript or outline into a styled slide deck and a PDF",
         "script": "run.py",
         "accepts": [".docx", ".txt", ".md"],
+        "keys": ["ANTHROPIC_API_KEY"],
         "commands": PRESENTER_COMMANDS,
     },
 ]

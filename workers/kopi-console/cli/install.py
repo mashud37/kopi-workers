@@ -1,18 +1,28 @@
-"""Check that Flask is installed and that each kopi app sits beside the console.
+"""Check that the console's packages are installed and that each kopi app sits beside it.
 The console needs both before `python manage.py` can open the web page.
 """
 from registry import APPS, app_folder
 
 from . import ui
 
+MODULES = [
+    "flask",
+    "markdown",
+    "docx",
+]
+
 
 def run():
     ui.step("Checking kopi-console")
-    try:
-        import flask  # noqa: F401
-        ui.ok("flask is installed")
-    except ImportError:
-        ui.error("flask is missing, run: pip install -r requirements.txt")
+    missing = []
+    for module in MODULES:
+        try:
+            __import__(module)
+            ui.ok(f"{module} is installed")
+        except ImportError:
+            missing.append(module)
+    if missing:
+        ui.error(f"{', '.join(missing)} missing, run: pip install -r requirements.txt")
         return 1
     for app in APPS:
         script = app_folder(app) / app["script"]

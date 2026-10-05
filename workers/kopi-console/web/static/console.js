@@ -1,6 +1,8 @@
 const confirmDialog = document.getElementById("confirm");
 const uploadForm = document.querySelector("[data-upload]");
 const LEADING_SYMBOLS = /^[\s▶✓✗⚠·─]+/;
+const COUNTER = /(\d+)\s*\/\s*(\d+)/g;
+const SECONDS_PER_MINUTE = 60;
 
 const THEME_NAMES = {
   system: "Theme: follows the system",
@@ -38,6 +40,14 @@ document.addEventListener("click", function (event) {
   }
   if (event.target.closest("[data-theme-toggle]")) {
     cycleTheme();
+  }
+  const opener = event.target.closest("[data-open]");
+  if (opener) {
+    document.getElementById(opener.dataset.open).showModal();
+  }
+  const closer = event.target.closest("[data-close]");
+  if (closer) {
+    closer.closest("dialog").close();
   }
   const runClose = event.target.closest("[data-run-close]");
   if (runClose) {
@@ -224,6 +234,71 @@ function showLatestLine(panel, data) {
   }
 }
 
+function latestCounter(lines) {
+  let found = null;
+  for (const line of lines) {
+    for (const match of line.matchAll(COUNTER)) {
+      const done = Number(match[1]);
+      const total = Number(match[2]);
+      if (total > 1 && done <= total) {
+        found = {done: done, total: total};
+      }
+    }
+  }
+  return found;
+}
+
+function timeLeft(panel, counter) {
+  const now = Date.now();
+  if (!panel.dataset.paceTime || counter.done < Number(panel.dataset.paceDone)) {
+    panel.dataset.paceTime = now;
+    panel.dataset.paceDone = counter.done;
+    return "";
+  }
+  const doneSince = counter.done - Number(panel.dataset.paceDone);
+  if (doneSince < 1) {
+    return "";
+  }
+  const secondsEach = (now - Number(panel.dataset.paceTime)) / 1000 / doneSince;
+  const seconds = Math.round(secondsEach * (counter.total - counter.done));
+  if (seconds < SECONDS_PER_MINUTE) {
+    return ` · about ${Math.max(seconds, 1)}s left`;
+  }
+  return ` · about ${Math.round(seconds / SECONDS_PER_MINUTE)} min left`;
+}
+
+function showProgress(panel, data) {
+  const box = panel.querySelector("[data-progress]");
+  const counter = latestCounter(data.lines.concat([data.partial]));
+  if (counter === null) {
+    return;
+  }
+  box.hidden = false;
+  let text = `${counter.done} of ${counter.total}`;
+  if (data.status === "running") {
+    text += timeLeft(panel, counter);
+  }
+  panel.querySelector("[data-progress-count]").textContent = text;
+  panel.querySelector("[data-progress-bar]").style.width = `${(100 * counter.done) / counter.total}%`;
+}
+
+async function refreshFiles() {
+  const files = document.querySelector("[data-files]");
+  if (!files) {
+    return;
+  }
+  try {
+    const response = await fetch(window.location.href);
+    const page = new DOMParser().parseFromString(await response.text(), "text/html");
+    const fresh = page.querySelector("[data-files]");
+    if (fresh) {
+      files.innerHTML = fresh.innerHTML;
+    }
+  } catch (error) {
+    return;
+  }
+}
+
 function showState(panel, data) {
   const status = panel.querySelector("[data-status]");
   let statusText = data.label;
@@ -232,12 +307,25 @@ function showState(panel, data) {
   }
   status.textContent = statusText;
   status.className = "status status-" + data.status;
+  const before = panel.dataset.last;
+  panel.dataset.last = data.status;
+  if (before === undefined && data.status === "running") {
+    buddyMood("running");
+  }
+  if (before === "running" && data.status !== "running") {
+    buddyMood(data.status);
+    refreshFiles();
+  }
+  showProgress(panel, data);
   panel.querySelector("[data-elapsed]").textContent = data.elapsed;
   showLatestLine(panel, data);
 
-  const rowDot = panel.closest("details").querySelector("[data-dot]");
-  rowDot.className = "dot dot-" + data.status;
-  rowDot.hidden = false;
+  const row = panel.closest("details");
+  if (row) {
+    const rowDot = row.querySelector("[data-dot]");
+    rowDot.className = "dot dot-" + data.status;
+    rowDot.hidden = false;
+  }
 
   const stop = panel.querySelector('[data-fetch="stop"]');
   stop.hidden = data.cancel_url === null;
@@ -245,7 +333,7 @@ function showState(panel, data) {
     stop.action = data.cancel_url;
   }
   panel.querySelector("[data-run-close]").hidden = data.status === "running";
-  if (data.status === "cancelled") {
+  if (data.status === "cancelled" && !panel.closest(".run-page")) {
     closeRun(panel);
     showMessage("Stopped.");
     return;
@@ -273,6 +361,31 @@ function closeRun(panel) {
 
 for (const panel of document.querySelectorAll(".run")) {
   followRun(panel);
+}
+
+async function keepRegionFresh(region) {
+  let delay = Number(region.dataset.live);
+  while (delay > 0) {
+    await wait(delay);
+    let page;
+    try {
+      const response = await fetch(window.location.href);
+      page = new DOMParser().parseFromString(await response.text(), "text/html");
+    } catch (error) {
+      return;
+    }
+    const fresh = page.querySelector("[data-region]");
+    if (!fresh) {
+      return;
+    }
+    region.innerHTML = fresh.innerHTML;
+    delay = Number(fresh.dataset.live || 0);
+  }
+}
+
+const liveRegion = document.querySelector("[data-live]");
+if (liveRegion) {
+  keepRegionFresh(liveRegion);
 }
 
 

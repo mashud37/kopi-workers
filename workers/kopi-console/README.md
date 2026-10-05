@@ -1,4 +1,4 @@
-# kopi-console
+# kopi-console <img src="docs/logo.png" align="right" height="120" alt="" />
 
 One local web page for the kopi apps: kopi-editor, kopi-linter and kopi-presenter. Each app has its
 own page where you drop a file, fill in a command's form, and watch it run. The console runs each
@@ -35,6 +35,7 @@ kopi-console/
 ├── registry.py    the apps, their commands and form fields, the files each takes
 ├── settings.py    host, port, upload limit, log interval
 ├── cli/           styled terminal output and the install check
+├── docs/          the logo
 └── web/           Flask app, routes, jobs, file handling, templates and styles
 ```
 

@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from registry import app_folder, get_app, get_command
+from web import keys, options
 
 STATUS_LABEL = {
     "running": "Running",
@@ -98,6 +99,8 @@ def start_job(app_name, command_name, values):
 
     argv = build_argv(app, command, form_flags(app, command, values))
     environment = dict(os.environ)
+    environment.update(options.environment_for(app_name))
+    environment.update(keys.environment_for(app_name))
     environment.update(CHILD_ENVIRONMENT)
     try:
         process = subprocess.Popen(argv, cwd=str(app_folder(app)), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment)
@@ -236,7 +239,13 @@ def elapsed_text(job):
 
 
 def summary_row(job):
-    """The fields a run panel shows for one job."""
+    """The fields a run panel or the jobs list shows for one job, with the last line's status symbols removed."""
+    last_line = ""
+    for line in reversed(job["lines"]):
+        text = line.strip().lstrip("▶✓⚠·✗─ ")
+        if text:
+            last_line = text
+            break
     return {
         "id": job["id"],
         "app": job["app"],
@@ -247,6 +256,7 @@ def summary_row(job):
         "started_at": job["started_at"],
         "elapsed": elapsed_text(job),
         "exit_code": job["exit_code"],
+        "last_line": last_line,
     }
 
 
@@ -288,6 +298,14 @@ def shown_job(app_name, command_name):
         if newest is None or newest["status"] == "cancelled" or newest["dismissed"]:
             return None
         return summary_row(newest)
+
+
+def list_jobs():
+    """Every job, newest first."""
+    with LOCK:
+        rows = [summary_row(job) for job in JOBS.values()]
+    rows.reverse()
+    return rows
 
 
 def running_count():

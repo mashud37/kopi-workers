@@ -1,27 +1,18 @@
-"""List, receive and hand out the files in each app's input and output folders.
-The app pages show these lists, and dropped files land in the input folder.
+"""Find, receive and open the files in each app's input and output folders, never reaching outside them.
+The app pages, the folder browser and the viewer use these.
 """
 import os
 import subprocess
-from datetime import datetime
 from pathlib import Path
 
 from registry import app_folder
 from settings import SETTINGS
+from web import documents
 
-FOLDERS = [
-    "input",
-    "output",
-]
-SHOWN_AS_TEXT = [
-    ".md",
-    ".txt",
-    ".json",
-    ".jsonl",
-    ".csv",
-]
-TIME_FORMAT = "%d %b %H:%M"
-BYTES_PER_KILOBYTE = 1024
+FOLDERS = {
+    "input": "Input",
+    "output": "Output",
+}
 
 
 def folder_path(app, folder):
@@ -35,41 +26,54 @@ def folder_path(app, folder):
     return app_folder(app) / folder
 
 
-def listing(app, folder, accepted=None):
-    """The files directly in a folder, newest first, each with its name, time and size.
-
-    Args:
-        accepted: suffixes to keep, such as [".docx"]; None keeps every file.
-    """
-    path = folder_path(app, folder)
-    if not path.is_dir():
-        return []
-    files = []
-    for entry in path.iterdir():
-        if not entry.is_file() or entry.name.startswith((".", "~$")):
-            continue
-        if accepted is not None and entry.suffix.lower() not in accepted:
-            continue
-        files.append(entry)
-    files.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
-
-    rows = []
-    for entry in files[:SETTINGS["files_shown"]]:
-        stat = entry.stat()
-        rows.append({
-            "name": entry.name,
-            "when": datetime.fromtimestamp(stat.st_mtime).strftime(TIME_FORMAT),
-            "size": f"{max(1, stat.st_size // BYTES_PER_KILOBYTE):,} KB",
-        })
-    return rows
-
-
-def find_file(app, folder, file_name):
-    """The full path of a file directly in one of the app's folders, or None when there is none."""
-    path = folder_path(app, folder) / file_name
-    if path.name != file_name or not path.is_file():
+def inside_folder(app, folder, relative):
+    """The full path of something inside one of the app's folders, or None when the path leads outside it."""
+    try:
+        base = folder_path(app, folder).resolve()
+    except ValueError:
+        return None
+    path = (base / relative).resolve()
+    if path != base and base not in path.parents:
         return None
     return path
+
+
+def resolve_file(app, folder, relative):
+    """The full path of a file inside one of the app's folders, or None when there is no such file."""
+    path = inside_folder(app, folder, relative)
+    if path is None or not path.is_file():
+        return None
+    return path
+
+
+def resolve_folder(app, folder, relative):
+    """The full path of a sub-folder inside one of the app's folders, or None when there is none."""
+    path = inside_folder(app, folder, relative)
+    if path is None or not path.is_dir():
+        return None
+    return path
+
+
+def card_rows(app, folder):
+    """The newest files and sub-folders directly in a folder, for the card on the app page."""
+    listing = documents.folder_listing(folder_path(app, folder), "", "", 1)
+    return {
+        "rows": listing["rows"][:SETTINGS["files_shown"]],
+        "total": listing["total"],
+    }
+
+
+def input_choices(app):
+    """The files in the app's input folder that it can read, newest first, for the run forms."""
+    folder = folder_path(app, "input")
+    if not folder.is_dir():
+        return []
+    found = []
+    for entry in folder.iterdir():
+        if entry.is_file() and not entry.name.startswith((".", "~$")) and entry.suffix.lower() in app["accepts"]:
+            found.append(entry)
+    found.sort(key=lambda entry: entry.stat().st_mtime, reverse=True)
+    return [entry.name for entry in found]
 
 
 def save_upload(app, upload):
@@ -89,10 +93,16 @@ def save_upload(app, upload):
     return file_name
 
 
-def open_folder(app, folder):
-    """Open one of the app's folders in the system's file manager."""
-    path = folder_path(app, folder)
-    path.mkdir(exist_ok=True)
+def open_folder(app, folder, relative):
+    """Open one of the app's folders, or a sub-folder of it, in the system's file manager.
+
+    Raises:
+        ValueError: the path is not a folder inside the app's folders.
+    """
+    folder_path(app, folder).mkdir(exist_ok=True)
+    path = resolve_folder(app, folder, relative)
+    if path is None:
+        raise ValueError("That folder is not there.")
     if os.name == "nt":
         os.startfile(path)
     else:

@@ -1,19 +1,26 @@
 {% extends "base.html" %}
 {% block title %}{{ app.name }} · kopi{% endblock %}
 
-{% macro file_card(folder, label, rows) %}
+{% macro file_card(folder, label, card) %}
 <section class="card files" aria-labelledby="files-{{ folder }}">
-  <header><h3 class="title" id="files-{{ folder }}">{{ label }}</h3><span class="meta">{{ rows | length }} shown</span></header>
-  {% if rows %}
+  <header><h3 class="title" id="files-{{ folder }}">{{ label }}</h3><span class="meta">{{ card.total }} item{% if card.total != 1 %}s{% endif %}</span></header>
+  {% if card.rows %}
   <ul>
-    {% for row in rows %}
-    <li><a class="entry" href="{{ url_for('console.app_file', name=app.name, folder=folder, file_name=row.name) }}"><span class="file-name">{{ row.name }}</span><span class="meta">{{ row.when }} · {{ row.size }}</span></a></li>
+    {% for row in card.rows %}
+    <li>
+      {% if row.is_folder %}
+      <a class="entry" href="{{ url_for('console.browse_page', name=app.name, folder=folder, **{'in': row.relative}) }}"><span class="file-name">{{ row.name }}/</span><span class="meta">{{ row.when }}</span></a>
+      {% else %}
+      <a class="entry" href="{{ url_for('console.view_page', name=app.name, folder=folder, relative=row.relative) }}"><span class="file-name">{{ row.name }}</span><span class="meta">{{ row.when }}</span></a>
+      {% endif %}
+    </li>
     {% endfor %}
   </ul>
   {% else %}
   <p class="meta files-empty">Empty</p>
   {% endif %}
   <div class="files-actions">
+    <a class="button text" href="{{ url_for('console.browse_page', name=app.name, folder=folder) }}">Show all and search</a>
     <form method="post" action="{{ url_for('console.app_open', name=app.name, folder=folder) }}">
       <input type="hidden" name="token" value="{{ token }}">
       <button class="text">Open folder</button>
@@ -29,6 +36,12 @@
     <h1>{{ app.name }}</h1>
     <p class="supporting">{{ app.blurb }}</p>
   </div>
+  {% if key_sources %}
+  {% set assigned = key_sources | selectattr("key") | map(attribute="key") | unique | list %}
+  <div class="actions">
+    <a class="chip chip-link" href="{{ url_for('console.keys_page') }}">{% if assigned %}Key: {{ assigned | join(", ") }}{% else %}Key: the app's own file{% endif %}</a>
+  </div>
+  {% endif %}
 </div>
 
 <form method="post" action="{{ url_for('console.app_upload', name=app.name) }}" enctype="multipart/form-data" data-upload data-accepts="{{ app.accepts | join(',') }}">
@@ -36,6 +49,19 @@
   <label class="drop-zone"><span>Drop {{ app.accepts | join(", ") }} files here, or anywhere on this page. Or click to choose them.</span><input type="file" name="file" multiple accept="{{ app.accepts | join(',') }}" class="visually-hidden" data-pick-files></label>
   <div class="snackbar copy-progress" role="status" data-copy-status hidden><span class="copy-count"></span><span class="copy-name"></span><span class="copy-bar"><span></span></span></div>
 </form>
+
+{% if settings %}
+<h2 class="section-title">Settings</h2>
+<form class="card model-card" method="post" action="{{ url_for('console.app_settings', name=app.name) }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  <div class="fields">
+    {% for field in settings %}
+    {% include "_setting.html" %}
+    {% endfor %}
+  </div>
+  <div class="form-actions"><button class="filled">Save</button></div>
+</form>
+{% endif %}
 
 <h2 class="section-title">Commands</h2>
 <div class="list">
@@ -60,7 +86,7 @@
             <span>{{ field.help }}{% if required %} *{% endif %}</span>
             {% if field.type == "input" %}
             <select name="{{ field.name }}" required>
-              {% for row in inputs %}<option>{{ row.name }}</option>{% else %}<option value="">Drop a file first</option>{% endfor %}
+              {% for name in inputs %}<option>{{ name }}</option>{% else %}<option value="">Drop a file first</option>{% endfor %}
             </select>
             {% elif field.type == "choice" %}
             <select name="{{ field.name }}">
@@ -90,8 +116,8 @@
 </div>
 
 <h2 class="section-title">Files</h2>
-<div class="grid two">
-  {{ file_card("input", "Input", inputs) }}
-  {{ file_card("output", "Output", outputs) }}
+<div class="grid two" data-files>
+  {{ file_card("output", "Output", cards.output) }}
+  {{ file_card("input", "Input", cards.input) }}
 </div>
 {% endblock %}

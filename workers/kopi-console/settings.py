@@ -2,6 +2,7 @@
 The web modules and manage.py import SETTINGS.
 """
 import os
+from pathlib import Path
 
 # ---- Defaults ----
 # KOPI_CONSOLE_<KEY> in the environment overrides each of these.
@@ -29,6 +30,7 @@ NUMERIC = [
 ]
 
 ENV_PREFIX = "KOPI_CONSOLE_"
+STORE_FOLDER = "kopi-workers"
 
 
 # ---- Functions ----
@@ -47,6 +49,12 @@ def load():
     for key, options in ALLOWED.items():
         if settings[key] not in options:
             raise SystemExit(f"Setting '{key}' must be one of {options}, not '{settings[key]}'.")
+
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        settings["store_folder"] = Path(appdata) / STORE_FOLDER
+    else:
+        settings["store_folder"] = Path.home() / ".config" / STORE_FOLDER
     return settings
 
 
