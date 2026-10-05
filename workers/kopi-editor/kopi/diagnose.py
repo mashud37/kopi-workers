@@ -140,8 +140,8 @@ def _redundancy_estimate(text: str, nlp) -> dict:
     content = _content_lemmas(spans)
     idf = step_redundancy._build_idf(content)
     sim = _similarity_matrix(content, idf)
-    pairs = step_redundancy._select_redundant(sentences, content, sim, idf,
-                                              sim_threshold=0.55, overlap_threshold=0.40)
+    thresholds = {"similarity": 0.55, "overlap": 0.40}
+    pairs = step_redundancy._select_redundant(sentences, content, sim, idf, thresholds)
 
     words = sum(p["savings"] for p in pairs)
     touched = set()

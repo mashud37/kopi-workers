@@ -10,13 +10,17 @@ from pathlib import Path
 from cli import config, ui
 
 _WORKERS = 4
-_MAX_TOKENS = 1024
+_MAX_TOKENS = 4096
+_EFFORT = "low"
 _HEARTBEAT_SECONDS = 5
 
 # Published Anthropic list prices, USD per 1M tokens (input, output). Cached
-# 2026-06; update if rates change. Prompt-cache writes bill at 1.25x the input
+# 2026-10; update if rates change. Prompt-cache writes bill at 1.25x the input
 # rate, reads at 0.10x (applied in _cost()).
 _PRICING = {
+    "claude-fable-5-1":  (10.0, 50.0),
+    "claude-opus-5-5":   (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
     "claude-fable-5":    (10.0, 50.0),
     "claude-opus-4-8":   (5.0, 25.0),
     "claude-opus-4-7":   (5.0, 25.0),
@@ -55,13 +59,16 @@ def _edit_one(client, text: str, instructions, style: dict) -> dict:
     from kopi.llm import _system_for, _build_user_message
 
     system = _system_for(style["lang"], style["mode"])
-    resp = client.messages.create(
-        model=style["model"],
-        max_tokens=_MAX_TOKENS,
-        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user",
-                   "content": _build_user_message(text, instructions, style["floor"])}],
-    )
+    request = {
+        "model": style["model"],
+        "max_tokens": _MAX_TOKENS,
+        "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
+        "messages": [{"role": "user",
+                      "content": _build_user_message(text, instructions, style["floor"])}],
+    }
+    if not style["model"].startswith("claude-haiku"):
+        request["output_config"] = {"effort": _EFFORT}
+    resp = client.messages.create(**request)
     out = "".join(b.text for b in resp.content if b.type == "text").strip()
     return {"text": out, "usage": resp.usage}
 

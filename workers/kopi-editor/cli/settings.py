@@ -4,7 +4,7 @@ from cli import config, ui
 
 # Known Anthropic model IDs, cheapest first. No default is baked in: the user
 # picks one here, so the cost of the choice is always deliberate.
-_ANTHROPIC_MODELS = ["claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-8"]
+_ANTHROPIC_MODELS = ["claude-haiku-4-5", "claude-sonnet-5-5", "claude-opus-5-5"]
 
 
 def run():
