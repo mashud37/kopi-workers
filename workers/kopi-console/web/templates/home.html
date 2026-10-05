@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}kopi{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="heading">
+    <h1>kopi</h1>
+    <p class="supporting">Pick an app, drop a file on its page, and run a command.</p>
+  </div>
+</div>
+<div class="grid">
+  {% for app in apps %}
+  <a class="card" href="{{ url_for('console.app_page', name=app.name) }}">
+    <span class="title">{{ app.name }}</span>
+    <span class="supporting">{{ app.blurb }}</span>
+    <span class="meta">Takes {{ app.accepts | join(", ") }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

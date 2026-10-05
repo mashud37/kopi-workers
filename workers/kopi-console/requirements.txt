@@ -1,0 +1,2 @@
+# Runtime dependencies, one per line, pin only when behaviour-critical.
+flask

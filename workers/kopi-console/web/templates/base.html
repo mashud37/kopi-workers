@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}kopi{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='console.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body{% if running %} class="busy"{% endif %}>
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+  <a class="brand" href="{{ url_for('console.home') }}">kopi</a>
+  <nav class="tabs" aria-label="Main">
+    <a href="{{ url_for('console.home') }}"{% if request.path == "/" %} aria-current="page"{% endif %}>Home</a>
+    {% for each in apps %}
+    <a href="{{ url_for('console.app_page', name=each.name) }}"{% if request.path == url_for('console.app_page', name=each.name) %} aria-current="page"{% endif %}>{{ each.name.removeprefix("kopi-") | capitalize }}</a>
+    {% endfor %}
+    <span class="badge" data-running{% if not running %} hidden{% endif %}><span class="visually-hidden">running: </span>{{ running }}</span>
+  </nav>
+  <button type="button" class="icon theme-toggle" data-theme-toggle aria-label="Theme" title="Theme: follow the system, light, or dark">
+    <svg class="icon-svg theme-system" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18V4a8 8 0 0 1 0 16z"/></svg>
+    <svg class="icon-svg theme-light" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.22 5.64l1.42-1.42 2.12 2.12-1.42 1.42zm12.02 12.02 1.42-1.42 2.12 2.12-1.42 1.42zM4.22 18.36l2.12-2.12 1.42 1.42-2.12 2.12zM16.24 6.34l2.12-2.12 1.42 1.42-2.12 2.12z"/></svg>
+    <svg class="icon-svg theme-dark" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+  </button>
+</header>
+
+<main id="content" tabindex="-1">
+{% block content %}{% endblock %}
+</main>
+
+{% with messages = get_flashed_messages() %}{% if messages %}<div class="snackbar" role="status"><span>{{ messages | join(" ") }}</span><button type="button" class="text" data-dismiss>Close</button></div>{% endif %}{% endwith %}
+
+<dialog id="confirm" class="dialog" aria-labelledby="confirm-text">
+  <form method="dialog">
+    <h2 id="confirm-text"></h2>
+    <p id="confirm-detail" class="supporting"></p>
+    <div class="actions">
+      <button value="cancel" class="text">Cancel</button>
+      <button value="ok" id="confirm-button" class="filled">Run</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="{{ url_for('static', filename='console.js') }}"></script>
+</body>
+</html>

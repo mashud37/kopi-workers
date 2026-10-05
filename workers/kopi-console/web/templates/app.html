@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ app.name }} · kopi{% endblock %}
+
+{% macro file_card(folder, label, rows) %}
+<section class="card files" aria-labelledby="files-{{ folder }}">
+  <header><h3 class="title" id="files-{{ folder }}">{{ label }}</h3><span class="meta">{{ rows | length }} shown</span></header>
+  {% if rows %}
+  <ul>
+    {% for row in rows %}
+    <li><a class="entry" href="{{ url_for('console.app_file', name=app.name, folder=folder, file_name=row.name) }}"><span class="file-name">{{ row.name }}</span><span class="meta">{{ row.when }} · {{ row.size }}</span></a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="meta files-empty">Empty</p>
+  {% endif %}
+  <div class="files-actions">
+    <form method="post" action="{{ url_for('console.app_open', name=app.name, folder=folder) }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="text">Open folder</button>
+    </form>
+  </div>
+</section>
+{% endmacro %}
+
+{% block content %}
+<div class="drop-hint" aria-hidden="true"><span>Drop {{ app.accepts | join(", ") }} files to add them</span></div>
+<div class="page-head">
+  <div class="heading">
+    <h1>{{ app.name }}</h1>
+    <p class="supporting">{{ app.blurb }}</p>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('console.app_upload', name=app.name) }}" enctype="multipart/form-data" data-upload data-accepts="{{ app.accepts | join(',') }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  <label class="drop-zone"><span>Drop {{ app.accepts | join(", ") }} files here, or anywhere on this page. Or click to choose them.</span><input type="file" name="file" multiple accept="{{ app.accepts | join(',') }}" class="visually-hidden" data-pick-files></label>
+  <div class="snackbar copy-progress" role="status" data-copy-status hidden><span class="copy-count"></span><span class="copy-name"></span><span class="copy-bar"><span></span></span></div>
+</form>
+
+<h2 class="section-title">Commands</h2>
+<div class="list">
+  {% for command in app.commands %}
+  {% set job = latest[command.name] %}
+  <details class="row-item"{% if loop.first or (job and job.status == "running") %} open{% endif %}>
+    <summary>
+      <span class="name">{{ command.name }}</span>
+      <span class="supporting">{{ command.help }}</span>
+      <span class="dot{% if job %} dot-{{ job.status }}{% endif %}" data-dot role="img" aria-label="{% if job %}{{ job.label }}{% endif %}"{% if not job %} hidden{% endif %}></span>
+    </summary>
+    <div class="row-body">
+      <form method="post" action="{{ url_for('console.app_run', name=app.name, command_name=command.name) }}" data-fetch="run" data-slot="run-{{ command.name }}"{% if command.kind == "heavy" %} data-confirm="Run {{ app.name }} {{ command.name }}?" data-confirm-detail="This may call a paid model."{% endif %}>
+        <input type="hidden" name="token" value="{{ token }}">
+        {% set entries = command.fields | rejectattr("type", "equalto", "bool") | list %}
+        {% set switches = command.fields | selectattr("type", "equalto", "bool") | list %}
+        {% if entries %}
+        <div class="fields">
+          {% for field in entries %}
+          {% set required = not field.name.startswith("-") and not field.optional %}
+          <label class="field">
+            <span>{{ field.help }}{% if required %} *{% endif %}</span>
+            {% if field.type == "input" %}
+            <select name="{{ field.name }}" required>
+              {% for row in inputs %}<option>{{ row.name }}</option>{% else %}<option value="">Drop a file first</option>{% endfor %}
+            </select>
+            {% elif field.type == "choice" %}
+            <select name="{{ field.name }}">
+              <option value="">Default</option>
+              {% for choice in field.choices %}<option>{{ choice }}</option>{% endfor %}
+            </select>
+            {% elif field.type == "int" %}
+            <input type="number" min="0" name="{{ field.name }}"{% if required %} required{% endif %}>
+            {% else %}
+            <input type="text" name="{{ field.name }}"{% if required %} required{% endif %}>
+            {% endif %}
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+        {% for field in switches %}
+        <label class="check"><input type="checkbox" name="{{ field.name }}"><span>{{ field.help }}</span></label>
+        {% endfor %}
+        <div class="form-actions"><button class="filled">Run</button></div>
+      </form>
+      <div class="run-slot" id="run-{{ command.name }}">
+        {% if job %}{% with run = job, log_url = url_for('console.job_log', job_id=job.id) %}{% include "_run.html" %}{% endwith %}{% endif %}
+      </div>
+    </div>
+  </details>
+  {% endfor %}
+</div>
+
+<h2 class="section-title">Files</h2>
+<div class="grid two">
+  {{ file_card("input", "Input", inputs) }}
+  {{ file_card("output", "Output", outputs) }}
+</div>
+{% endblock %}
