@@ -1,0 +1,49 @@
+"""Apply the safe mechanical fixes with no model call (fillers, padding, cliches, long
+words, grammar), writing the edited text and a change log to `output/`.
+"""
+from cli import config, ui, common
+
+
+def run(file, lang=None):
+    from kopi.progress import StepSpinner
+
+    lang = lang or config.get("LANG")
+
+    path = common.resolve_docx(file)
+    ui.step(f"Proofing {path.name}")
+
+    sp = StepSpinner("loading document")
+    sp.start()
+    try:
+        loaded = common.load_text(file)
+        path, text, words = loaded["path"], loaded["text"], loaded["words"]
+    finally:
+        sp.done()
+    ui.info(f"{words} words | conservative deterministic edit (no LLM)")
+
+    from kopi.pipeline import prepare, finalize
+    from kopi.proof import proof
+    from kopi.output import write_outputs
+
+    ui.info("  · 1/3  Diagnose document")
+    ui.info("  · 2/3  Apply deterministic edits")
+    ui.info("  · 3/3  Write outputs")
+
+    # No word target for proofing: pass the current length so the final check
+    # reports "at target" rather than a spurious shortfall.
+    state = prepare(text, words, lang)
+    state["run_info"] = {"backend": "skip", "model": None}
+    proof(state)
+    finalize(state)
+
+    from datetime import datetime
+    run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
+    written = write_outputs(state, path, run_dir)
+    edited, changelog, diff = written["edited"], written["report"], written["diff"]
+    final = state["counts"].get("final", words)
+    ui.ok(f"removed {words - final} words; final {final}")
+    ui.ok(f"edited text:  {edited}")
+    ui.ok(f"side by side: {written['side_by_side']}")
+    ui.ok(f"change log:   {changelog}")
+    if diff:
+        ui.ok(f"diff:         {diff}")

@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+venv/
+
+# Local runtime state (calibration log, etc.)
+.kopi/
+
+# Manuscripts and generated artifacts — keep the folders, ignore contents
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+
+# Local config (committed template is env.yaml.example)
+env.yaml
+env.vllm.yaml
+env.ollama.yaml
+
+# Staged QLoRA adapter baked into the vLLM image at deploy time — keep the folder,
+# ignore the (large, generated) adapter files copied in from kopi-learner.
+adapter/*
+!adapter/.gitkeep
+
+# Editor / OS
+.env
+.DS_Store
+.claude/

@@ -1,0 +1,18 @@
+substitutions:
+  _KOPI_MODEL: qwen2.5:7b
+  _IMAGE: europe-west1-docker.pkg.dev/kopi-editor/kopi-editor-reg-322/kopi-editor
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - KOPI_MODEL=${_KOPI_MODEL}
+      - -t
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+timeout: 2400s

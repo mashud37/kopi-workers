@@ -1,0 +1,50 @@
+"""Unit tests for the diagnosis helpers and the LLM prompt builder. These pure
+functions need neither spaCy nor a model; `diagnose()` itself is covered by
+the route smoke tests.
+"""
+from kopi import diagnose
+from kopi.llm import _build_user_message, _system_for
+
+
+def test_unnecessary_words_detects_fillers_and_padding():
+    text = "It is worth noting that the fact that this matters, in this regard."
+    found = diagnose._unnecessary_words(text)
+    assert found["hits"] >= 1
+    assert found["savings"] >= 1
+
+
+def test_plain_hits_detects_cliches_and_long_words():
+    # "utilise" is a long-word substitution; "sheds light on" is a cliché.
+    assert diagnose._plain_hits("We utilise this method.") >= 1
+    assert diagnose._plain_hits("This sheds light on the question.") >= 1
+    assert diagnose._plain_hits("A plain ordinary sentence.") == 0
+
+
+def test_paragraph_instructions_always_includes_plain_language():
+    feats = {"n_sents": 2, "mean_sent_len": 10, "passive_sents": 0}
+    asked = diagnose._paragraph_instructions("A clean short paragraph.", feats, False)
+    assert "plain-language" in asked["tags"]
+    assert any("Plain language" in i for i in asked["instructions"])
+
+
+def test_paragraph_instructions_flags_wordiness_redundancy_passive():
+    para = "It is worth noting that the fact that this is the case matters here."
+    feats = {"n_sents": 3, "mean_sent_len": 40, "passive_sents": 2}  # long + passive
+    asked = diagnose._paragraph_instructions(para, feats, is_redundant=True)
+    assert {"wordiness", "redundancy", "long-sentence", "passive"} <= asked["tags"]
+    assert len(asked["instructions"]) >= 4
+
+
+def test_build_user_message_without_notes_is_just_the_paragraph():
+    para = "The paragraph text to edit."
+    assert _build_user_message(para) == para
+
+
+def test_build_user_message_with_notes_fences_instructions():
+    para = "The paragraph text to edit."
+    msg = _build_user_message(para, ["Remove hedges and padding.", "Prefer active voice."])
+    assert para in msg
+    assert "Remove hedges and padding." in msg
+    assert "do not repeat" in msg.lower()
+    # The system prompt forbids echoing the notes (leak guard).
+    assert "never repeat" in _system_for().lower()
