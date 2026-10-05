@@ -1,4 +1,4 @@
-# kopi-learner
+# kopi-learner <img src="docs/logo.png" align="right" height="120" alt="" />
 
 Trains the Qwen3 model behind kopi-editor to make Opus-like editing decisions: holding back when no
 cut is asked for, and cutting cleanly when one is. Opus's edits are the examples; the result is a
