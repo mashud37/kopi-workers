@@ -1,0 +1,24 @@
+# Secrets
+config.local.yaml
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Generated decks
+output/*
+!output/.gitkeep
+
+# Source manuscripts
+input/*
+!input/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+.claude/
