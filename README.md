@@ -1,4 +1,4 @@
-# kopi-workers <img src="kopi-console/docs/logo.png" align="right" height="120" alt="" />
+# kopi-workers <img src="docs/logo.png" align="right" height="120" alt="" />
 
 Copy-editing and presentation tools for academic prose. kopi-editor edits a manuscript, kopi-linter
 measures how much of that editing rules alone can do, kopi-learner trains the served editor on
@@ -25,7 +25,7 @@ flowchart LR
 Each tool installs from its own folder:
 
 ```powershell
-cd kopi-editor
+cd workers/kopi-editor
 pip install -r requirements.txt
 python manage.py install
 ```
@@ -34,4 +34,4 @@ python manage.py install
 
 | Action | Command |
 |---|---|
-| Open a tool's menu | `cd <tool>; python manage.py` |
+| Open a tool's menu | `cd workers/<tool>; python manage.py` |

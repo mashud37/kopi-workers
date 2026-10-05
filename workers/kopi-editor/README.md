@@ -1,4 +1,4 @@
-# kopi-editor <img src="docs/logo.png" align="right" height="120" alt="" />
+# kopi-editor
 
 Copy-edits an academic `.docx` into plainer prose while keeping the argument, voice, citations and
 quotations intact. Diagnosis runs locally; only the paragraphs sent for editing leave the machine,

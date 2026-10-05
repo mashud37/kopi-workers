@@ -1,4 +1,4 @@
-# kopi-linter <img src="docs/logo.png" align="right" height="120" alt="" />
+# kopi-linter
 
 Measures how much plain-language editing of academic prose can be done by rules alone, with no
 model call, and does that much. The target is Opus's own edits: every rule is learned from them and

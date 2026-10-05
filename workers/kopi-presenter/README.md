@@ -1,4 +1,4 @@
-# kopi-presenter <img src="docs/logo.png" align="right" height="120" alt="" />
+# kopi-presenter
 
 Turns a manuscript or outline into a styled PowerPoint deck and a PDF in one command. Only the text
 sent to the model leaves the machine.
