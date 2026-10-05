@@ -1,0 +1,25 @@
+<div class="run" data-log="{{ log_url }}" data-poll="{{ poll_ms }}">
+  <div class="run-head">
+    <span class="status status-{{ run.status }}" data-status>{{ run.label }}</span>
+    <span class="meta mono">{{ run.shown }}</span>
+    <span class="meta elapsed" data-elapsed>{{ run.elapsed }}</span>
+    <form method="post" data-fetch="stop" data-confirm="Stop this run?" data-confirm-button="Stop" hidden>
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="text danger">Stop</button>
+    </form>
+    <button type="button" class="text" data-run-close="{{ log_url[:-4] }}/dismiss"{% if run.status == "running" %} hidden{% endif %}>Close</button>
+  </div>
+  <p class="run-now" data-now role="status" hidden></p>
+  <div class="items" data-progress hidden>
+    <div class="items-head"><span class="items-count" data-progress-count></span><span class="items-bar"><span data-progress-bar></span></span></div>
+  </div>
+  <details class="log-details" open>
+    <summary>Log</summary>
+    <pre class="log" data-lines><span class="pending" data-pending></span></pre>
+  </details>
+  <form class="answer" method="post" data-fetch="answer" hidden>
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="text" name="text" autocomplete="off" aria-label="Answer" placeholder="Answer, then press Enter">
+    <button class="tonal">Send</button>
+  </form>
+</div>

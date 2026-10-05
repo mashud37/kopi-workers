@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icon %}
+{% block title %}{{ document.name }} · kopi{% endblock %}
+{% block content %}
+{% set raw_url = url_for('console.app_file', name=app.name, folder=folder, relative=relative) %}
+<nav class="crumbs-nav" aria-label="Breadcrumb">
+  <ol>
+    <li><a href="{{ url_for('console.app_page', name=app.name) }}">{{ app.name }}</a></li>
+    <li><a href="{{ url_for('console.browse_page', name=app.name, folder=folder) }}">{{ folder_label }}</a></li>
+    {% if parent %}<li><a href="{{ url_for('console.browse_page', name=app.name, folder=folder, **{'in': parent}) }}">{{ parent }}</a></li>{% endif %}
+    <li aria-current="page">{{ document.name }}</li>
+  </ol>
+</nav>
+
+<div class="page-head">
+  <div class="heading">
+    <h1 class="document-title">{{ document.name }}</h1>
+    <p class="meta document-meta">{{ document.size }} · changed {{ document.modified }}</p>
+  </div>
+  <div class="actions">
+    <a class="button text" href="{{ raw_url }}" target="_blank" rel="noopener">{{ icon.open_new() }}{% if document.kind in ["docx", "other"] %}Download{% else %}Open on its own<span class="visually-hidden"> (new tab)</span>{% endif %}</a>
+  </div>
+</div>
+
+{% if document.cut %}<p class="notice">This file is long, so only its first part is shown here. Open it on its own to see all of it.</p>{% endif %}
+
+{% if document.kind == "markdown" %}
+<article class="card document prose">{{ document.html | safe }}</article>
+{% elif document.kind in ["text", "json", "docx"] %}
+<pre class="card document plain">{{ document.text }}</pre>
+{% elif document.kind == "pdf" %}
+<iframe class="document-frame" src="{{ raw_url }}" title="{{ document.name }}"></iframe>
+{% elif document.kind == "image" %}
+<div class="card document"><img src="{{ raw_url }}" alt="{{ document.name }}"></div>
+{% else %}
+<div class="empty">
+  <h2>No preview for this kind of file</h2>
+  <p class="supporting">Download it, or open its folder.</p>
+</div>
+{% endif %}
+{% endblock %}

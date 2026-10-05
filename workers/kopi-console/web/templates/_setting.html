@@ -1,0 +1,6 @@
+<label class="field"><span>{{ field.label }}</span>
+  <select name="{{ field.variable }}">
+    <option value="">From the app's own file</option>
+    {% for value, label in field.choices.items() %}<option value="{{ value }}"{% if value == field.value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+</label>
