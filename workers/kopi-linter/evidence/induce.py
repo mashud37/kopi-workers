@@ -1,0 +1,100 @@
+"""Find light-verb constructions (like `make use of`) in the gold originals,
+check whether the edit collapsed them, and write a collapse-rate table.
+Morphology alone cannot tell idioms from compositional uses.
+"""
+from collections import Counter, defaultdict
+
+_LIGHT_VERBS = frozenset([
+    "make",
+    "take",
+    "give",
+    "have",
+    "do",
+    "conduct",
+    "perform",
+    "provide",
+    "offer",
+    "undertake",
+    "carry",
+    "engage",
+    "reach",
+    "hold",
+    "place",
+    "put",
+])
+_MINIMUM_TO_RANK = 3
+_MINIMUM_TO_SHIP = 4
+
+_TABLE_HEADER = '''"""Support-verb collapse rates induced from the train split of the gold corpus.
+Regenerate with ``python manage.py induce``; never edit this file by hand.
+"""
+
+# Each entry is `"<light verb> <noun lemma>": (collapse rate, times seen)`, the
+# rate being the share of occurrences whose noun did not survive into the gold
+# edit. It is used directly as the rule's confidence, so a construction the gold
+# editor usually leaves alone cannot clear a band threshold, and a construction
+# absent from the table has no evidence behind it and is refused.
+#
+# The rate is an upper bound: a noun also disappears when the editor rewrote or
+# dropped the whole sentence for unrelated reasons.
+
+COLLAPSE_RATE = {
+'''
+
+
+def survey(samples, nlp, on_progress=None) -> dict:
+    """How the gold editor treated each light-verb construction it met.
+
+    Args:
+        samples: gold :class:`evidence.load.Sample` records.
+        nlp: a loaded spaCy pipeline.
+        on_progress: called with (index, total, sample).
+
+    Returns:
+        ``{"seen", "collapsed", "kept", "modified"}``. ``collapsed`` counts the
+        times the noun disappeared from the edit (the construction was resolved
+        away); ``kept`` counts the times it survived; ``modified`` counts how
+        often the noun carried its own adjectival modifiers, which is what makes
+        a collapse destroy content.
+    """
+    seen, collapsed, kept = Counter(), Counter(), Counter()
+    modified = defaultdict(int)
+    total = len(samples)
+    for i, sample in enumerate(samples, 1):
+        if on_progress:
+            on_progress(i, total, sample)
+        edit_lemmas = {t.lemma_.lower() for t in nlp(sample.edit)}
+        for verb in nlp(sample.original):
+            if verb.pos_ not in ("VERB", "AUX") or verb.lemma_.lower() not in _LIGHT_VERBS:
+                continue
+            direct_objects = [child for child in verb.children
+                               if child.dep_ == "dobj" and child.pos_ == "NOUN"]
+            for noun in direct_objects:
+                modifiers = [t.text.lower() for t in noun.children
+                             if t.dep_ in ("amod", "compound", "nummod")]
+                key = f"{verb.lemma_.lower()} {noun.lemma_.lower()}"
+                survived = noun.lemma_.lower() in edit_lemmas
+                seen[key] += 1
+                modified[key] += int(bool(modifiers))
+                kept[key] += int(survived)
+                collapsed[key] += int(not survived)
+    return {"seen": seen, "collapsed": collapsed, "kept": kept, "modified": modified}
+
+
+def collapse_rate(survey_result: dict, minimum: int = _MINIMUM_TO_RANK) -> list[tuple]:
+    """Constructions ordered by how often the gold editor resolved them away."""
+    seen, collapsed = survey_result["seen"], survey_result["collapsed"]
+    rows = [(key, count, collapsed[key], collapsed[key] / count)
+            for key, count in seen.items() if count >= minimum]
+    return sorted(rows, key=lambda row: (-row[3], -row[1]))
+
+
+def write_table(survey_result: dict, path, minimum: int = _MINIMUM_TO_SHIP) -> int:
+    """Write the induced collapse-rate table as an importable module."""
+    rows = collapse_rate(survey_result, minimum=minimum)
+    lines = [_TABLE_HEADER]
+    for key, seen, _, rate in sorted(rows):
+        lines.append(f'    "{key}": ({rate:.2f}, {seen}),\n')
+    lines.append("}\n")
+    path.write_text("".join(lines), encoding="utf-8")
+    return len(rows)
