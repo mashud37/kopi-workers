@@ -1,22 +1,10 @@
-"""Turn a manuscript or outline into a styled .pptx and a PDF: parse the input, plan
-the slides with a model, apply the house rules, then render.
-"""
+"""Turn a manuscript or outline into a styled .pptx and a PDF: parse the input, plan the slides with a model, apply the house rules, then render."""
 
-import argparse
 import json
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-
-# Windows consoles default to cp1252; force UTF-8 so progress glyphs (→, …) print.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
-from slides.config import load_config
+from cli import ui
+from slides import config as settings
 from slides.emitter_pptx import build_pptx
 from slides.linter import lint_and_repair
 from slides.llm import generate_slide_json, revise_slide_json
@@ -24,116 +12,105 @@ from slides.parser import parse_input
 from slides.renderer_pptx import export_pdf
 from slides.rules import apply_house_rules
 
-_log = lambda *a, **kw: print(*a, **kw, file=sys.stderr)
+OPTION_DEFAULTS = {
+    "output": None,
+    "venue": None,
+    "no_pdf": False,
+    "plan": None,
+    "dry_run": False,
+    "review": False,
+    "emoji": False,
+    "condense": False,
+}
 
 
-def _build_plan(input_path: Path, args, config: dict) -> dict:
-    """Parse the input file and either call the model or load an existing JSON
-    plan for it. Returns the parsed content plus the slide plan."""
-    _log(f"\n[1/5] Parsing  {input_path.name} ...")
-    content = parse_input(input_path, condense=args.condense)
-    _log(f"       {len(content.split()):,} words "
-         f"({'condensed' if args.condense else 'full text'})")
+def run(file_name: str, options: dict) -> None:
+    """Build one deck.
 
-    if args.plan:
-        _log(f"[2/5] Loading JSON  {args.plan} ...")
-        with open(args.plan, encoding="utf-8") as f:
-            slide_data = json.load(f)
-    else:
-        _log(f"[2/5] Calling {config.get('llm', {}).get('model', 'LLM')} ...")
-        slide_data = generate_slide_json(content, config, venue_override=args.venue)
-
-    return {"content": content, "slide_data": slide_data}
-
-
-def _parse_args() -> argparse.Namespace:
-    ap = argparse.ArgumentParser(
-        description="Generate academic conference slides from a manuscript or outline."
-    )
-    ap.add_argument("input_file", help="Input .docx or .txt file")
-    ap.add_argument("-o", "--output", default=None, help="Output directory (default: beside input)")
-    ap.add_argument("--venue", default=None, help="Venue string (overrides manuscript + config default)")
-    ap.add_argument("--no-pdf", action="store_true", help="Skip PDF rendering")
-    ap.add_argument("--no-render", action="store_true", help="Skip PDF rendering (.pptx only)")
-    ap.add_argument("--plan", default=None, metavar="FILE", help="Load existing JSON plan (skip LLM)")
-    ap.add_argument("--dry-run", action="store_true", help="Print JSON plan to stdout; write no files")
-    ap.add_argument("--review", action="store_true",
-                    help="Pause after the plan is generated to review/edit it before rendering")
-    ap.add_argument("--emoji", action="store_true",
-                    help="Use colour emoji instead of the default Segoe Fluent icons")
-    ap.add_argument("--condense", action="store_true",
-                    help="Condense long .docx paragraphs (first+last sentence) instead of sending the full text")
-    return ap.parse_args()
-
-
-def _print_step_plan(input_path: Path, args: argparse.Namespace) -> None:
-    _log(f"\n▶ kopi-presenter  {input_path.name}")
-    _log("  · 1/5  Parse input")
-    _log("  · 2/5  Generate slide JSON" if not args.plan else "  · 2/5  Load JSON plan")
-    _log("  · 3/5  Lint & apply house rules")
-    _log("  · 4/5  Build .pptx")
-    _log("  · 5/5  Export PDF" if not (args.no_render or args.no_pdf) else "  · 5/5  Export PDF (skipped)")
-
-
-def main() -> None:
-    args = _parse_args()
-
-    input_path = Path(args.input_file)
-    if not input_path.exists():
-        sys.exit(f"Error: '{args.input_file}' not found.")
-
-    config = load_config()
-    if args.emoji:
+    Args:
+        file_name: the manuscript or outline; a bare name resolves against input/.
+        options: any of the keys in OPTION_DEFAULTS; missing keys take their default.
+    """
+    options = {**OPTION_DEFAULTS, **options}
+    input_path = settings.resolve_input(file_name)
+    config = settings.load_config()
+    if options["emoji"]:
         config.setdefault("render", {})["icons"] = "emoji"
-    output_dir = Path(args.output) if args.output else (ROOT / "output")
+    output_dir = Path(options["output"]) if options["output"] else settings.OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
 
-    _print_step_plan(input_path, args)
+    _print_step_plan(input_path, options)
+    plan = _build_plan(input_path, options, config)
+    content = plan["content"]
+    slide_data = plan["slide_data"]
 
-    # ---- 1+2. Parse, then LLM or load JSON ----
-    plan = _build_plan(input_path, args, config)
-    content, slide_data = plan["content"], plan["slide_data"]
-
-    if args.dry_run:
-        _log("\n── JSON plan (dry-run) ──────────────────────────────────")
+    if options["dry_run"]:
         print(json.dumps(slide_data, indent=2, ensure_ascii=False))
         return
 
-    # Save JSON for reuse / debugging
     json_path = output_dir / f"{stem}.json"
     _write_json(json_path, slide_data)
-    _log(f"       JSON → {json_path.name}")
+    ui.info(f"plan saved: {json_path.name}")
 
-    # ---- 2b. Optional conversational review ----
-    if args.review:
+    if options["review"]:
         slide_data = _review_plan(json_path, slide_data, config)
 
-    # ---- 3. Lint ----
-    _log("[3/5] Linting ...")
+    ui.step("[3/5] Lint and apply house rules")
     slide_data = lint_and_repair(slide_data, content, config)
     slide_data = apply_house_rules(slide_data)
 
-    # ---- 4. Emit .pptx ----
     pptx_path = output_dir / f"{stem}.pptx"
-    _log(f"[4/5] Building  {pptx_path.name} ...")
+    ui.step(f"[4/5] Build {pptx_path.name}")
     build_pptx(slide_data, pptx_path, config)
-    n_slides = len(slide_data.get("slides", []))
-    _log(f"       {n_slides} content slides  (+title +closing = {n_slides + 2} total)")
-    _log(f"       → {pptx_path.name}  ({pptx_path.stat().st_size // 1024} KB)")
+    slide_count = len(slide_data.get("slides", []))
+    ui.ok(f"{slide_count} content slides (+ title + closing = {slide_count + 2}), {pptx_path.stat().st_size // 1024} KB")
 
-    # ---- 5. Render PDF ----
-    if args.no_render or args.no_pdf:
-        _log("[5/5] Skipping PDF (--no-pdf/--no-render).")
+    if options["no_pdf"]:
+        ui.step("[5/5] Export PDF: skipped")
     else:
-        _log("[5/5] Exporting PDF ...")
+        ui.step("[5/5] Export PDF")
         if export_pdf(pptx_path):
             pdf_path = pptx_path.with_suffix(".pdf")
-            _log(f"       → {pdf_path.name}  ({pdf_path.stat().st_size // 1024} KB)")
+            ui.ok(f"{pdf_path.name} ({pdf_path.stat().st_size // 1024} KB)")
         else:
-            _log("       PDF export failed (no PowerPoint or LibreOffice found).")
+            ui.warn("PDF export failed: neither PowerPoint nor LibreOffice was found")
 
-    _log(f"\nDone.  Output → {output_dir.resolve()}\n")
+    ui.ok(f"done, output in {output_dir.resolve()}")
+
+
+def _print_step_plan(input_path: Path, options: dict) -> None:
+    ui.step(f"kopi-presenter: {input_path.name}")
+    ui.info("1/5  Parse input")
+    if options["plan"]:
+        ui.info("2/5  Load the saved plan")
+    else:
+        ui.info("2/5  Plan the slides with the model")
+    ui.info("3/5  Lint and apply house rules")
+    ui.info("4/5  Build .pptx")
+    if options["no_pdf"]:
+        ui.info("5/5  Export PDF (skipped)")
+    else:
+        ui.info("5/5  Export PDF")
+
+
+def _build_plan(input_path: Path, options: dict, config: dict) -> dict:
+    """Parse the input, then either call the model or load a saved plan."""
+    ui.step(f"[1/5] Parse {input_path.name}")
+    content = parse_input(input_path, condense=options["condense"])
+    if options["condense"]:
+        ui.info(f"{len(content.split()):,} words (condensed)")
+    else:
+        ui.info(f"{len(content.split()):,} words (full text)")
+
+    if options["plan"]:
+        ui.step(f"[2/5] Load plan {options['plan']}")
+        with open(options["plan"], encoding="utf-8") as f:
+            slide_data = json.load(f)
+    else:
+        ui.step(f"[2/5] Plan the slides with {config.get('llm', {}).get('model', 'the model')}")
+        slide_data = generate_slide_json(content, config, venue_override=options["venue"])
+    return {"content": content, "slide_data": slide_data}
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -144,38 +121,45 @@ def _write_json(path: Path, data: dict) -> None:
 def _print_outline(data: dict) -> None:
     meta = data.get("meta", {})
     slides = data.get("slides", [])
-    _log("\n── Plan ──────────────────────────────────────────────────")
-    _log(f"   {meta.get('title', '(untitled)')}")
+    ui.rule()
+    print(f"  {meta.get('title', '(untitled)')}")
     last_section = None
-    for i, s in enumerate(slides, 1):
-        section = s.get("section", "")
+    for number, slide in enumerate(slides, 1):
+        section = slide.get("section", "")
         if section != last_section:
-            _log(f"\n   {section}")
+            print(f"\n  {section}")
             last_section = section
-        layout = s.get("layout", "bullets")
-        _log(f"\n     {i:>2}. [{layout}] {s.get('title', '')}")
-        body = s.get("body", {}) or {}
-        for b in body.get("bullets", []):
-            _log(f"          • {_plain(b.get('text', ''))}")
-        for c in body.get("cards", []):
-            _log(f"          ▸ {_plain(c.get('title', ''))}: {_plain(c.get('text', ''))}")
-        for cell in body.get("cells", []):
-            _log(f"          ▸ {_plain(cell.get('label', ''))}: {_plain(cell.get('text', ''))}")
-        for step in body.get("steps", []):
-            _log(f"          → {_plain(str(step))}")
-        for col in body.get("columns", []):
-            _log(f"          ◦ {_plain(col.get('lead', ''))}: {_plain(col.get('text', ''))}")
-        if body.get("center") or body.get("keywords"):
-            _log(f"          ◯ {_plain(body.get('center', ''))}: {', '.join(body.get('keywords', []))}")
-        ev = body.get("evidence") or {}
-        if ev:
-            if ev.get("kind") == "stats":
-                detail = "; ".join(f"{it.get('number','')} {it.get('label','')}" for it in ev.get("items", []))
-            else:
-                detail = ev.get("text") or ev.get("label") or ev.get("number") or ""
-            _log(f"          [{ev.get('kind', '')}] {_plain(str(detail))[:90]}")
-    _log(f"\n   {len(slides)} content slides (+ title + closing)")
-    _log("──────────────────────────────────────────────────────────")
+        print(f"\n    {number:>2}. [{slide.get('layout', 'bullets')}] {slide.get('title', '')}")
+        for line in _body_lines(slide.get("body", {}) or {}):
+            print(f"         {line}")
+    print(f"\n  {len(slides)} content slides (+ title + closing)")
+    ui.rule()
+
+
+def _body_lines(body: dict) -> list[str]:
+    """One short line per bullet, card, cell, step, column or piece of evidence on a slide."""
+    lines = []
+    for bullet in body.get("bullets", []):
+        lines.append(f"• {_plain(bullet.get('text', ''))}")
+    for card in body.get("cards", []):
+        lines.append(f"▸ {_plain(card.get('title', ''))}: {_plain(card.get('text', ''))}")
+    for cell in body.get("cells", []):
+        lines.append(f"▸ {_plain(cell.get('label', ''))}: {_plain(cell.get('text', ''))}")
+    for step in body.get("steps", []):
+        lines.append(f"→ {_plain(str(step))}")
+    for column in body.get("columns", []):
+        lines.append(f"◦ {_plain(column.get('lead', ''))}: {_plain(column.get('text', ''))}")
+    if body.get("center") or body.get("keywords"):
+        lines.append(f"◯ {_plain(body.get('center', ''))}: {', '.join(body.get('keywords', []))}")
+    evidence = body.get("evidence") or {}
+    if evidence:
+        if evidence.get("kind") == "stats":
+            parts = [f"{item.get('number', '')} {item.get('label', '')}" for item in evidence.get("items", [])]
+            detail = "; ".join(parts)
+        else:
+            detail = evidence.get("text") or evidence.get("label") or evidence.get("number") or ""
+        lines.append(f"[{evidence.get('kind', '')}] {_plain(str(detail))[:90]}")
+    return lines
 
 
 def _plain(text: str) -> str:
@@ -183,26 +167,21 @@ def _plain(text: str) -> str:
 
 
 def _review_plan(json_path: Path, slide_data: dict, config: dict) -> dict:
-    """Conversational review: show the plan, take plain-language feedback, let the
-    LLM revise it, repeat until the presenter accepts (or aborts)."""
-    _log("\n   Review mode: type feedback in plain language and the assistant will")
-    _log("   revise the deck (each revision is one LLM call). Press Enter to accept.")
+    """Show the plan, take plain-language feedback, let the model revise it, and repeat until it is accepted.
+    An empty answer accepts, so a run without input accepts the first plan."""
+    ui.info("Review: type feedback in plain language and the model revises the deck (one call each).")
     while True:
         _print_outline(slide_data)
-        resp = input("\nFeedback (or [Enter] to accept · [q] to abort):\n> ").strip()
-        if resp == "":
+        answer = ui.ask("Feedback (Enter accepts, q stops)", "")
+        if not answer:
             return slide_data
-        if resp.lower() in ("q", "quit", "abort"):
-            sys.exit("Aborted at review.")
-        _log("       Revising with your feedback ...")
+        if answer.lower() in ("q", "quit", "abort"):
+            raise SystemExit("stopped at review")
+        ui.info("revising with your feedback ...")
         try:
-            revised = revise_slide_json(slide_data, resp, config)
+            revised = revise_slide_json(slide_data, answer, config)
             slide_data = apply_house_rules(revised)
             _write_json(json_path, slide_data)
-            _log("       Plan updated.")
-        except Exception as e:
-            _log(f"       Revision failed ({e}). Try rephrasing, or press Enter to accept.")
-
-
-if __name__ == "__main__":
-    main()
+            ui.ok("plan updated")
+        except Exception as error:
+            ui.warn(f"revision failed ({error}); rephrase, or press Enter to accept")

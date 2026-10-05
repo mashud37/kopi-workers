@@ -5,7 +5,6 @@ import time
 _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 _CHECK = "✓"
 _LABEL_W = 22
-_BAR_W = 20
 
 
 def _first_summary(new_log_entries: list) -> str:
@@ -56,52 +55,3 @@ class StepSpinner:
             sys.stdout.flush()
         else:
             print(f"  {self._label}... {safe_summary}")
-
-
-class LLMProgress:
-    """Live one-line progress bar for the LLM tightening phase.
-
-    Thread-safe (``advance`` is called from worker threads as each paragraph
-    finishes) and ASCII-only so it renders on legacy Windows consoles. A no-op
-    when stdout is not a TTY, so captured/redirected output stays clean.
-    """
-
-    def __init__(self, total: int):
-        self._total = total
-        self._done = 0
-        self._cut = 0
-        self._tty = sys.stdout.isatty()
-        self._lock = threading.Lock()
-        if self._tty and total:
-            self._render()
-
-    def advance(self, words_cut: int = 0, accepted: bool = False) -> None:
-        with self._lock:
-            self._done += 1
-            if accepted:
-                self._cut += max(0, words_cut)
-            if self._tty:
-                self._render()
-
-    def _render(self) -> None:
-        span = self._total or 1
-        filled = int(_BAR_W * self._done / span)
-        bar = "#" * filled + "." * (_BAR_W - filled)
-        remaining = self._total - self._done
-        line = (
-            f"\r  LLM tightening  [{bar}]  {self._done}/{self._total} para"
-            f"  |  {self._cut} words cut  |  {remaining} left   "
-        )
-        try:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-        except Exception:
-            pass
-
-    def finish(self) -> None:
-        if self._tty:
-            try:
-                sys.stdout.write("\n")
-                sys.stdout.flush()
-            except Exception:
-                pass

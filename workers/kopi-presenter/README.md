@@ -21,15 +21,19 @@ flowchart LR
 
 ```powershell
 pip install -r requirements.txt
-Copy-Item config.yaml config.local.yaml
+python manage.py install
 ```
 
-Set `api.anthropic_key` in `config.local.yaml`.
+Set `api.anthropic_key` in `config.local.yaml`, or the `ANTHROPIC_API_KEY` environment variable.
 
 ## Commands
 
+`python manage.py` with no arguments opens the menu.
+
 | Action | Command |
 |---|---|
-| Build a deck | `python run.py input/paper.docx` |
-| Review and revise the plan before building | `python run.py input/paper.docx --review` |
-| Rebuild from a saved plan without a model call | `python run.py input/paper.docx --plan output/paper.json` |
+| Build a deck | `python manage.py slides paper.docx` |
+| Review and revise the plan before building | `python manage.py slides paper.docx --review` |
+| Rebuild from a saved plan without a model call | `python manage.py slides paper.docx --plan output/paper.json` |
+| Show the configuration | `python manage.py config` |
+| Check dependencies and create `config.local.yaml` | `python manage.py install` |

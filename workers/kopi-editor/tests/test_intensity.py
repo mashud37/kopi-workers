@@ -34,8 +34,8 @@ def test_paragraph_floor_tracks_fraction():
 
 
 def test_topup_triggers_on_shortfall_only():
-    from kopi.quote_guard import guard
     from kopi import step_concision
+    from kopi.quote_guard import guard
 
     paras = [f"Paragraph {i} " + "word " * 80 for i in range(6)]
     text = "\n\n".join(paras)

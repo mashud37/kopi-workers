@@ -18,21 +18,28 @@ class _CyclicTok:
 
 def test_tree_depth_is_bounded():
     """A cyclic parse must not hang the depth walk (bounded at 1000)."""
-    a = _CyclicTok(); b = _CyclicTok()
-    a.head = b; b.head = a  # cycle
+    a = _CyclicTok()
+    b = _CyclicTok()
+    a.head = b
+    b.head = a  # cycle
     assert signals._tree_depth(a) == 1000
 
 
 class _FakeTok:
     def __init__(self, dep="dep", pos="NOUN", lemma="thing", text="thing"):
-        self.dep_ = dep; self.pos_ = pos; self.lemma_ = lemma; self.text = text
-        self.is_punct = False; self.is_space = False
+        self.dep_ = dep
+        self.pos_ = pos
+        self.lemma_ = lemma
+        self.text = text
+        self.is_punct = False
+        self.is_space = False
         self.head = self
 
 
 class _FakeSent:
     def __init__(self, tokens, text):
-        self._tokens = tokens; self.text = text
+        self._tokens = tokens
+        self.text = text
 
     def __iter__(self):
         return iter(self._tokens)

@@ -194,7 +194,7 @@ def _set_bullet(p, color=PRIMARY, char="●"):
         if e is not None:
             pPr.remove(e)
     buClr = pPr.makeelement(qn("a:buClr"), {})
-    srgb = pPr.makeelement(qn("a:srgbClr"), {"val": "%02X%02X%02X" % (color[0], color[1], color[2])})
+    srgb = pPr.makeelement(qn("a:srgbClr"), {"val": f"{color[0]:02X}{color[1]:02X}{color[2]:02X}"})
     buClr.append(srgb)
     pPr.append(buClr)
     pPr.append(pPr.makeelement(qn("a:buSzPct"), {"val": "70000"}))
@@ -241,8 +241,11 @@ def _title(slide, text, size=TITLE_PT, icon_glyph=None):
     p = tf.paragraphs[0]
     _no_bullet(p)
     if icon_glyph:
-        ir = p.add_run(); ir.text = icon_glyph + "  "
-        ir.font.name = ICON_FONT; ir.font.size = Pt(size - 4); ir.font.color.rgb = PRIMARY
+        ir = p.add_run()
+        ir.text = icon_glyph + "  "
+        ir.font.name = ICON_FONT
+        ir.font.size = Pt(size - 4)
+        ir.font.color.rgb = PRIMARY
     r = p.add_run()
     r.text = text
     r.font.name = FONT
@@ -302,13 +305,43 @@ def _stat(slide, number, label, at, color):
     p = tf.paragraphs[0]
     p.alignment = PP_ALIGN.CENTER
     _no_bullet(p)
-    r = p.add_run(); r.text = number
-    r.font.name = FONT; r.font.bold = True; r.font.size = Pt(40); r.font.color.rgb = color
+    r = p.add_run()
+    r.text = number
+    r.font.name = FONT
+    r.font.bold = True
+    r.font.size = Pt(40)
+    r.font.color.rgb = color
     p2 = tf.add_paragraph()
     p2.alignment = PP_ALIGN.CENTER
     _no_bullet(p2)
-    r2 = p2.add_run(); r2.text = label
-    r2.font.name = FONT; r2.font.bold = True; r2.font.size = Pt(13); r2.font.color.rgb = INK
+    r2 = p2.add_run()
+    r2.text = label
+    r2.font.name = FONT
+    r2.font.bold = True
+    r2.font.size = Pt(13)
+    r2.font.color.rgb = INK
+
+
+def _evidence_heading(tf, label, icon, color) -> bool:
+    """Write the panel's label (with its icon) or its icon alone into the first paragraph.
+    Returns whether a heading was written, so the body starts on a new paragraph."""
+    if not label and not icon:
+        return False
+    p = tf.paragraphs[0]
+    _no_bullet(p)
+    if not label:
+        add_icon_run(p, icon, 22, color)
+        return True
+    ic = add_icon_run(p, icon, 16, color)
+    if ic is not None:
+        p.add_run().text = "  "
+    r = p.add_run()
+    r.text = label
+    r.font.name = FONT
+    r.font.bold = True
+    r.font.size = Pt(16)
+    r.font.color.rgb = color
+    return True
 
 
 def _evidence_box(slide, box, body_runs_list, style):
@@ -326,39 +359,40 @@ def _evidence_box(slide, box, body_runs_list, style):
     italic = style.get("italic", True)
     icon = style.get("icon")
     sp = _rounded(slide, box["left"], box["top"], box["width"], box["height"])
-    sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.93)
-    sp.line.color.rgb = color; sp.line.width = Pt(1.5)
+    sp.fill.solid()
+    sp.fill.fore_color.rgb = _tint(color, 0.93)
+    sp.line.color.rgb = color
+    sp.line.width = Pt(1.5)
     tf = sp.text_frame
     tf.word_wrap = True
     tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     tf.margin_left = tf.margin_right = Emu(180000)
     tf.margin_top = tf.margin_bottom = Emu(150000)
-    first = True
-    if label:
-        p = tf.paragraphs[0]; first = False
-        _no_bullet(p)
-        ic = add_icon_run(p, icon, 16, color)
-        if ic is not None:
-            p.add_run().text = "  "
-        r = p.add_run(); r.text = label
-        r.font.name = FONT; r.font.bold = True; r.font.size = Pt(16); r.font.color.rgb = color
-    elif icon:
-        p = tf.paragraphs[0]; first = False
-        _no_bullet(p)
-        add_icon_run(p, icon, 22, color)
+    first = not _evidence_heading(tf, label, icon, color)
     for runs in body_runs_list:
-        p = tf.paragraphs[0] if first else tf.add_paragraph(); first = False
-        _no_bullet(p); p.line_spacing = 1.12
+        p = tf.paragraphs[0] if first else tf.add_paragraph()
+        first = False
+        _no_bullet(p)
+        p.line_spacing = 1.12
         for text, bold, color2 in runs:
-            r = p.add_run(); r.text = text
-            r.font.name = FONT; r.font.bold = bold; r.font.italic = italic
-            r.font.size = Pt(19); r.font.color.rgb = color2 or INK
+            r = p.add_run()
+            r.text = text
+            r.font.name = FONT
+            r.font.bold = bold
+            r.font.italic = italic
+            r.font.size = Pt(19)
+            r.font.color.rgb = color2 or INK
     if source:
-        p = tf.add_paragraph(); p.alignment = PP_ALIGN.RIGHT
-        _no_bullet(p); p.space_before = Pt(6)
-        r = p.add_run(); r.text = source
-        r.font.name = FONT; r.font.size = Pt(13); r.font.color.rgb = MUTED
+        p = tf.add_paragraph()
+        p.alignment = PP_ALIGN.RIGHT
+        _no_bullet(p)
+        p.space_before = Pt(6)
+        r = p.add_run()
+        r.text = source
+        r.font.name = FONT
+        r.font.size = Pt(13)
+        r.font.color.rgb = MUTED
 
 
 def _stat_trio(slide, items, box):
@@ -378,12 +412,24 @@ def _stat_trio(slide, items, box):
         color = CATEGORICAL[i % len(CATEGORICAL)]
         tf = _box(slide, box["left"], cy, box["width"], cell_h)["frame"]
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
-        r = p.add_run(); r.text = str(it.get("number", ""))
-        r.font.name = FONT; r.font.bold = True; r.font.size = Pt(40); r.font.color.rgb = color
-        p2 = tf.add_paragraph(); p2.alignment = PP_ALIGN.CENTER; _no_bullet(p2)
-        r2 = p2.add_run(); r2.text = str(it.get("label", ""))
-        r2.font.name = FONT; r2.font.bold = True; r2.font.size = Pt(13); r2.font.color.rgb = INK
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        _no_bullet(p)
+        r = p.add_run()
+        r.text = str(it.get("number", ""))
+        r.font.name = FONT
+        r.font.bold = True
+        r.font.size = Pt(40)
+        r.font.color.rgb = color
+        p2 = tf.add_paragraph()
+        p2.alignment = PP_ALIGN.CENTER
+        _no_bullet(p2)
+        r2 = p2.add_run()
+        r2.text = str(it.get("label", ""))
+        r2.font.name = FONT
+        r2.font.bold = True
+        r2.font.size = Pt(13)
+        r2.font.color.rgb = INK
 
 
 def _render_evidence(slide, ev):
@@ -427,11 +473,20 @@ def _render_evidence(slide, ev):
         return
     # figure placeholder
     sp = _rounded(slide, RIGHT_X, BODY_TOP, RIGHT_W, BODY_H - 200000)
-    sp.fill.solid(); sp.fill.fore_color.rgb = PANEL; sp.line.color.rgb = HAIRLINE
-    tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
-    r = p.add_run(); r.text = "[ figure: " + (ev.get("alt") or ev.get("text") or "") + " ]"
-    r.font.name = FONT; r.font.size = Pt(13); r.font.color.rgb = MUTED
+    sp.fill.solid()
+    sp.fill.fore_color.rgb = PANEL
+    sp.line.color.rgb = HAIRLINE
+    tf = sp.text_frame
+    tf.word_wrap = True
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    _no_bullet(p)
+    r = p.add_run()
+    r.text = "[ figure: " + (ev.get("alt") or ev.get("text") or "") + " ]"
+    r.font.name = FONT
+    r.font.size = Pt(13)
+    r.font.color.rgb = MUTED
 
 
 # ---- layouts ----
@@ -463,19 +518,28 @@ def _layout_iconrow(slide, body, use_emoji=False):
         ch, font = icon["char"], icon["font"]
 
         circ = _oval(slide, int(cx + col_w / 2 - disc / 2), BODY_TOP, disc, disc)
-        circ.fill.solid(); circ.fill.fore_color.rgb = _tint(color, 0.86)
-        circ.line.color.rgb = color; circ.line.width = Pt(1)
-        ctf = circ.text_frame; ctf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        ep = ctf.paragraphs[0]; ep.alignment = PP_ALIGN.CENTER; _no_bullet(ep)
+        circ.fill.solid()
+        circ.fill.fore_color.rgb = _tint(color, 0.86)
+        circ.line.color.rgb = color
+        circ.line.width = Pt(1)
+        ctf = circ.text_frame
+        ctf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        ep = ctf.paragraphs[0]
+        ep.alignment = PP_ALIGN.CENTER
+        _no_bullet(ep)
         if ch:
-            er = ep.add_run(); er.text = ch
-            er.font.name = font; er.font.size = Pt(40)
+            er = ep.add_run()
+            er.text = ch
+            er.font.name = font
+            er.font.size = Pt(40)
             if font == ICON_FONT:
                 er.font.color.rgb = color
         # text
         tf = _box(slide, cx, BODY_TOP + disc + 120000, col_w, BODY_H - disc - 120000)["frame"]
         lead, text, quote = col.get("lead", ""), col.get("text", ""), col.get("quote", "")
-        p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        _no_bullet(p)
         runs = []
         if lead:
             runs.append((lead + ("  " if text else ""), True, INK))
@@ -485,9 +549,15 @@ def _layout_iconrow(slide, body, use_emoji=False):
         for r in p.runs:
             r.font.size = Pt(15)
         if quote:
-            pq = tf.add_paragraph(); pq.alignment = PP_ALIGN.CENTER; _no_bullet(pq)
-            rq = pq.add_run(); rq.text = quote
-            rq.font.name = FONT; rq.font.italic = True; rq.font.size = Pt(13); rq.font.color.rgb = MUTED
+            pq = tf.add_paragraph()
+            pq.alignment = PP_ALIGN.CENTER
+            _no_bullet(pq)
+            rq = pq.add_run()
+            rq.text = quote
+            rq.font.name = FONT
+            rq.font.italic = True
+            rq.font.size = Pt(13)
+            rq.font.color.rgb = MUTED
 
 
 def _two_col(slide, left_paras, right_paras):
@@ -499,13 +569,19 @@ def _two_col(slide, left_paras, right_paras):
         tf = _box(slide, cx, BODY_TOP, col_w, BODY_H)["frame"]
         first = True
         for j, b in enumerate(paras):
-            p = tf.paragraphs[0] if first else tf.add_paragraph(); first = False
-            p.space_after = Pt(8); p.line_spacing = 1.08
+            p = tf.paragraphs[0] if first else tf.add_paragraph()
+            first = False
+            p.space_after = Pt(8)
+            p.line_spacing = 1.08
             heading = b.get("heading")
             if j == 0 and heading:
                 _no_bullet(p)
-                r = p.add_run(); r.text = heading
-                r.font.name = FONT; r.font.bold = True; r.font.size = Pt(18); r.font.color.rgb = CATEGORICAL[idx % len(CATEGORICAL)]
+                r = p.add_run()
+                r.text = heading
+                r.font.name = FONT
+                r.font.bold = True
+                r.font.size = Pt(18)
+                r.font.color.rgb = CATEGORICAL[idx % len(CATEGORICAL)]
                 continue
             _set_bullet(p, CATEGORICAL[idx % len(CATEGORICAL)])
             _add_runs(p, _md_runs(b.get("text", "")))
@@ -526,23 +602,33 @@ def _layout_cards(slide, body):
         cx = MARGIN + i * (col_w + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
         sp = _rounded(slide, cx, BODY_TOP, col_w, BODY_H)
-        sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.92)
-        sp.line.color.rgb = color; sp.line.width = Pt(1.25)
+        sp.fill.solid()
+        sp.fill.fore_color.rgb = _tint(color, 0.92)
+        sp.line.color.rgb = color
+        sp.line.width = Pt(1.25)
         # header bar
         hdr = _rounded(slide, cx, BODY_TOP, col_w, 560000)
         _solid(hdr, color)
-        htf = hdr.text_frame; htf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        htf = hdr.text_frame
+        htf.vertical_anchor = MSO_ANCHOR.MIDDLE
         htf.margin_left = Emu(200000)
-        hp = htf.paragraphs[0]; _no_bullet(hp)
+        hp = htf.paragraphs[0]
+        _no_bullet(hp)
         ic = add_icon_run(hp, card.get("icon"), 18, WHITE)
         if ic is not None:
             hp.add_run().text = "  "
-        hr = hp.add_run(); hr.text = card.get("title", "")
-        hr.font.name = FONT; hr.font.bold = True; hr.font.size = Pt(18); hr.font.color.rgb = WHITE
+        hr = hp.add_run()
+        hr.text = card.get("title", "")
+        hr.font.name = FONT
+        hr.font.bold = True
+        hr.font.size = Pt(18)
+        hr.font.color.rgb = WHITE
         # body
         tf = _box(slide, cx + 200000, BODY_TOP + 700000, col_w - 400000, BODY_H - 880000)["frame"]
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        p = tf.paragraphs[0]; _no_bullet(p); p.line_spacing = 1.12
+        p = tf.paragraphs[0]
+        _no_bullet(p)
+        p.line_spacing = 1.12
         _add_runs(p, _md_runs(card.get("text", "")))
         for r in p.runs:
             r.font.size = Pt(16)
@@ -559,18 +645,31 @@ def _layout_matrix(slide, body):
         cy = BODY_TOP + r_ * (ch + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
         sp = _rounded(slide, cx, cy, cw, ch)
-        sp.fill.solid(); sp.fill.fore_color.rgb = _tint(color, 0.9)
-        sp.line.color.rgb = color; sp.line.width = Pt(6)
-        tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.TOP
-        tf.margin_left = tf.margin_right = Emu(180000); tf.margin_top = Emu(160000)
-        p = tf.paragraphs[0]; _no_bullet(p)
+        sp.fill.solid()
+        sp.fill.fore_color.rgb = _tint(color, 0.9)
+        sp.line.color.rgb = color
+        sp.line.width = Pt(6)
+        tf = sp.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.TOP
+        tf.margin_left = tf.margin_right = Emu(180000)
+        tf.margin_top = Emu(160000)
+        p = tf.paragraphs[0]
+        _no_bullet(p)
         ic = add_icon_run(p, cell.get("icon"), 17, color)
         if ic is not None:
             p.add_run().text = "  "
-        r = p.add_run(); r.text = cell.get("label", "")
-        r.font.name = FONT; r.font.bold = True; r.font.size = Pt(18); r.font.color.rgb = color
+        r = p.add_run()
+        r.text = cell.get("label", "")
+        r.font.name = FONT
+        r.font.bold = True
+        r.font.size = Pt(18)
+        r.font.color.rgb = color
         if cell.get("text"):
-            p2 = tf.add_paragraph(); _no_bullet(p2); p2.line_spacing = 1.1; p2.space_before = Pt(4)
+            p2 = tf.add_paragraph()
+            _no_bullet(p2)
+            p2.line_spacing = 1.1
+            p2.space_before = Pt(4)
             _add_runs(p2, _md_runs(cell["text"]))
             for rr in p2.runs:
                 rr.font.size = Pt(15)
@@ -587,34 +686,50 @@ def _layout_stepflow(slide, body):
         sx = MARGIN + i * (sw + gap)
         color = CATEGORICAL[i % len(CATEGORICAL)]
         sp = _rounded(slide, sx, sy, sw, sh)
-        sp.fill.solid(); sp.fill.fore_color.rgb = PANEL
-        sp.line.color.rgb = color; sp.line.width = Pt(1.5)
-        tf = sp.text_frame; tf.word_wrap = True; tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+        sp.fill.solid()
+        sp.fill.fore_color.rgb = PANEL
+        sp.line.color.rgb = color
+        sp.line.width = Pt(1.5)
+        tf = sp.text_frame
+        tf.word_wrap = True
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE
         tf.margin_left = tf.margin_right = Emu(140000)
-        p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
+        p = tf.paragraphs[0]
+        p.alignment = PP_ALIGN.CENTER
+        _no_bullet(p)
         _add_runs(p, _md_runs(str(step)))
         for r in p.runs:
             r.font.size = Pt(15)
         if i < n - 1:
             atf = _box(slide, sx + sw, sy, gap, sh)["frame"]
             atf.vertical_anchor = MSO_ANCHOR.MIDDLE
-            ap = atf.paragraphs[0]; ap.alignment = PP_ALIGN.CENTER; _no_bullet(ap)
-            ar = ap.add_run(); ar.text = "→"
-            ar.font.name = FONT; ar.font.size = Pt(28); ar.font.color.rgb = MUTED
+            ap = atf.paragraphs[0]
+            ap.alignment = PP_ALIGN.CENTER
+            _no_bullet(ap)
+            ar = ap.add_run()
+            ar.text = "→"
+            ar.font.name = FONT
+            ar.font.size = Pt(28)
+            ar.font.color.rgb = MUTED
 
 
 def _layout_statement(slide, body):
     tf = _box(slide, MARGIN, BODY_TOP, SLIDE_W - 2 * MARGIN, BODY_H)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]; _no_bullet(p)
+    p = tf.paragraphs[0]
+    _no_bullet(p)
     _add_runs(p, _md_runs(body.get("claim", "")))
     for r in p.runs:
-        r.font.size = Pt(30); r.font.bold = True
+        r.font.size = Pt(30)
+        r.font.bold = True
     if body.get("sub"):
-        p2 = tf.add_paragraph(); _no_bullet(p2); p2.space_before = Pt(14)
+        p2 = tf.add_paragraph()
+        _no_bullet(p2)
+        p2.space_before = Pt(14)
         _add_runs(p2, _md_runs(body["sub"]))
         for r in p2.runs:
-            r.font.size = Pt(18); r.font.color.rgb = MUTED
+            r.font.size = Pt(18)
+            r.font.color.rgb = MUTED
 
 
 def _layout_boxes(slide, body):
@@ -627,9 +742,15 @@ def _word_label(slide, text, centre, color, size=WORD_LABEL_PT):
     w, h = 1900000, 380000
     tf = _box(slide, int(centre["cx"] - w / 2), int(centre["cy"] - h / 2), w, h)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
-    r = p.add_run(); r.text = text
-    r.font.name = FONT; r.font.bold = True; r.font.size = Pt(size); r.font.color.rgb = color
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    _no_bullet(p)
+    r = p.add_run()
+    r.text = text
+    r.font.name = FONT
+    r.font.bold = True
+    r.font.size = Pt(size)
+    r.font.color.rgb = color
 
 
 def _layout_circle(slide, body):
@@ -695,22 +816,45 @@ def _title_slide(slide, title, author, affiliation, venue):
     if venue:
         vtf = _box(slide, MARGIN, 300000, SLIDE_W - 2 * MARGIN, 400000)["frame"]
         vtf.vertical_anchor = MSO_ANCHOR.MIDDLE
-        vp = vtf.paragraphs[0]; _no_bullet(vp)
-        vr = vp.add_run(); vr.text = venue
-        vr.font.name = FONT; vr.font.bold = True; vr.font.size = Pt(15); vr.font.color.rgb = MUTED
+        vp = vtf.paragraphs[0]
+        _no_bullet(vp)
+        vr = vp.add_run()
+        vr.text = venue
+        vr.font.name = FONT
+        vr.font.bold = True
+        vr.font.size = Pt(15)
+        vr.font.color.rgb = MUTED
     # centred title block
     tf = _box(slide, MARGIN, 2150000, SLIDE_W - 2 * MARGIN, 2400000)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    tp = tf.paragraphs[0]; tp.alignment = PP_ALIGN.CENTER; _no_bullet(tp)
-    tr = tp.add_run(); tr.text = title
-    tr.font.name = FONT; tr.font.bold = True; tr.font.size = Pt(38); tr.font.color.rgb = INK
-    ap = tf.add_paragraph(); ap.alignment = PP_ALIGN.CENTER; _no_bullet(ap); ap.space_before = Pt(20)
-    ar = ap.add_run(); ar.text = author
-    ar.font.name = FONT; ar.font.italic = True; ar.font.size = Pt(20); ar.font.color.rgb = INK
+    tp = tf.paragraphs[0]
+    tp.alignment = PP_ALIGN.CENTER
+    _no_bullet(tp)
+    tr = tp.add_run()
+    tr.text = title
+    tr.font.name = FONT
+    tr.font.bold = True
+    tr.font.size = Pt(38)
+    tr.font.color.rgb = INK
+    ap = tf.add_paragraph()
+    ap.alignment = PP_ALIGN.CENTER
+    _no_bullet(ap)
+    ap.space_before = Pt(20)
+    ar = ap.add_run()
+    ar.text = author
+    ar.font.name = FONT
+    ar.font.italic = True
+    ar.font.size = Pt(20)
+    ar.font.color.rgb = INK
     if affiliation:
-        afp = tf.add_paragraph(); afp.alignment = PP_ALIGN.CENTER; _no_bullet(afp)
-        afr = afp.add_run(); afr.text = affiliation
-        afr.font.name = FONT; afr.font.size = Pt(15); afr.font.color.rgb = MUTED
+        afp = tf.add_paragraph()
+        afp.alignment = PP_ALIGN.CENTER
+        _no_bullet(afp)
+        afr = afp.add_run()
+        afr.text = affiliation
+        afr.font.name = FONT
+        afr.font.size = Pt(15)
+        afr.font.color.rgb = MUTED
 
 
 def _closing_slide(slide, author, email, venue):
@@ -718,10 +862,22 @@ def _closing_slide(slide, author, email, venue):
     _solid(rb, PRIMARY)
     tf = _box(slide, MARGIN, 2400000, SLIDE_W - 2 * MARGIN, 2000000)["frame"]
     tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]; p.alignment = PP_ALIGN.CENTER; _no_bullet(p)
-    r = p.add_run(); r.text = "Thank you"
-    r.font.name = FONT; r.font.bold = True; r.font.size = Pt(48); r.font.color.rgb = INK
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    _no_bullet(p)
+    r = p.add_run()
+    r.text = "Thank you"
+    r.font.name = FONT
+    r.font.bold = True
+    r.font.size = Pt(48)
+    r.font.color.rgb = INK
     contact = author + (("  ·  " + email) if email else "")
-    p2 = tf.add_paragraph(); p2.alignment = PP_ALIGN.CENTER; _no_bullet(p2); p2.space_before = Pt(18)
-    r2 = p2.add_run(); r2.text = contact
-    r2.font.name = FONT; r2.font.size = Pt(18); r2.font.color.rgb = MUTED
+    p2 = tf.add_paragraph()
+    p2.alignment = PP_ALIGN.CENTER
+    _no_bullet(p2)
+    p2.space_before = Pt(18)
+    r2 = p2.add_run()
+    r2.text = contact
+    r2.font.name = FONT
+    r2.font.size = Pt(18)
+    r2.font.color.rgb = MUTED

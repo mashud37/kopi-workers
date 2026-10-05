@@ -37,7 +37,8 @@ def cmd_run(app_name, command_name, values):
     while True:
         log = jobs.job_log(job_id, position)
         for line in log["lines"]:
-            print(line)
+            if not line.startswith(jobs.ITEM_PREFIX):
+                print(line)
         position = log["next"]
         if log["status"] != "running" and not log["lines"]:
             return log["exit_code"] or 0

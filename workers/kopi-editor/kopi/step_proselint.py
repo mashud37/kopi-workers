@@ -1,9 +1,9 @@
 import re
 from functools import lru_cache
 
-from kopi.quote_guard import guard, unguard, word_count
 from kopi.quote_guard import _PATTERN as _QUOTE_RE
- 
+from kopi.quote_guard import guard, unguard, word_count
+
 _ENABLED_CATEGORIES = frozenset([
     "redundancy",
     "needless_variants",
@@ -12,8 +12,8 @@ _ENABLED_CATEGORIES = frozenset([
     "industrial_language",
 ])
 _AUTO_CATEGORIES = frozenset(["redundancy", "needless_variants"])
- 
- 
+
+
 def _para_num(text, offset):
     paras = text.split("\n\n")
     pos = 0
@@ -22,25 +22,25 @@ def _para_num(text, offset):
             return f"P{i}"
         pos += len(para) + 2
     return "P?"
- 
- 
+
+
 @lru_cache(maxsize=1)
 def _register_checks() -> None:
     """Load proselint's check registry, once per process."""
-    from proselint.tools import CheckRegistry
     from proselint.checks import __register__
+    from proselint.tools import CheckRegistry
 
     CheckRegistry().register_many(__register__)
 
 
 def _run_proselint(text):
-    from proselint.tools import LintFile
     from proselint import config as cfg_mod
+    from proselint.tools import LintFile
 
     _register_checks()
     lint_file = LintFile(source="kopi-buffer.txt", content=text)
     results = lint_file.lint(cfg_mod.DEFAULT)
- 
+
     out = []
     text_len = len(text)
     for r in results:
@@ -57,8 +57,8 @@ def _run_proselint(text):
             "message": cr.message,
         })
     return out
- 
- 
+
+
 def _hit_para(offset: int, para_offsets: list, num_paras: int) -> int:
     for i, (s, e) in enumerate(para_offsets):
         if s <= offset <= e:

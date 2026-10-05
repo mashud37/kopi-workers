@@ -1,5 +1,5 @@
 import re
-from kopi.data_syntax_patterns import DEMONSTRATIVE_GERUNDS
+
 from kopi.quote_guard import guard, unguard, word_count
 
 _CONNECTOR_DROP = re.compile(

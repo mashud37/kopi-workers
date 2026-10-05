@@ -1,5 +1,4 @@
-import re
-from kopi.quote_guard import unguard, word_count
+from kopi.quote_guard import unguard
 
 
 def _mean_dep_depth(text, nlp):

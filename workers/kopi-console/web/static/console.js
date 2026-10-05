@@ -3,6 +3,7 @@ const uploadForm = document.querySelector("[data-upload]");
 const LEADING_SYMBOLS = /^[\s▶✓✗⚠·─]+/;
 const COUNTER = /(\d+)\s*\/\s*(\d+)/g;
 const SECONDS_PER_MINUTE = 60;
+const ITEM_PREFIX = "kopi-item: ";
 
 const THEME_NAMES = {
   system: "Theme: follows the system",
@@ -201,6 +202,8 @@ async function followRun(panel) {
       return;
     }
     const atBottom = log.scrollTop + log.clientHeight >= log.scrollHeight - 40;
+    const received = data.lines.length;
+    data.lines = takeItemEvents(panel, data.lines);
     if (data.lines.length > 0) {
       const chunk = document.createElement("span");
       chunk.textContent = data.lines.join("\n") + "\n";
@@ -212,7 +215,7 @@ async function followRun(panel) {
     }
     next = data.next;
     showState(panel, data);
-    if (data.status !== "running" && data.lines.length === 0) {
+    if (data.status !== "running" && received === 0) {
       return;
     }
     await wait(Number(panel.dataset.poll));
@@ -267,8 +270,83 @@ function timeLeft(panel, counter) {
   return ` · about ${Math.round(seconds / SECONDS_PER_MINUTE)} min left`;
 }
 
+function takeItemEvents(panel, lines) {
+  const shown = [];
+  for (const line of lines) {
+    if (line.startsWith(ITEM_PREFIX)) {
+      const parts = line.slice(ITEM_PREFIX.length).split(" | ");
+      showItem(panel, parts[0], parts[1], parts.slice(2).join(" | "));
+    } else {
+      shown.push(line);
+    }
+  }
+  return shown;
+}
+
+function showItem(panel, state, name, detail) {
+  const box = panel.querySelector("[data-progress]");
+  const running = box.querySelector("[data-items-running]");
+  const finished = box.querySelector("[data-items-finished]");
+  if (state === "total") {
+    box.hidden = false;
+    box.dataset.total = name;
+    box.dataset.finished = 0;
+    box.dataset.failed = 0;
+    running.replaceChildren();
+    finished.replaceChildren();
+    countItems(panel);
+    return;
+  }
+  if (state === "done") {
+    box.dataset.finished = name;
+    countItems(panel);
+    return;
+  }
+  let row = box.querySelector(`li[data-name="${CSS.escape(name)}"]`);
+  if (!row) {
+    row = document.createElement("li");
+    row.dataset.name = name;
+    row.innerHTML = '<span class="item-icon" aria-hidden="true"></span><span class="item-name"></span><span class="item-detail"></span>';
+    row.querySelector(".item-name").textContent = name;
+  }
+  row.className = "item item-" + (state === "start" ? "running" : state);
+  row.querySelector(".item-detail").textContent = detail;
+  row.title = detail ? `${name}: ${detail}` : name;
+  if (state === "start") {
+    running.append(row);
+    return;
+  }
+  finished.prepend(row);
+  box.dataset.finished = Number(box.dataset.finished) + 1;
+  if (state === "failed") {
+    box.dataset.failed = Number(box.dataset.failed) + 1;
+  }
+  countItems(panel);
+}
+
+function countItems(panel) {
+  const box = panel.querySelector("[data-progress]");
+  const counter = {done: Number(box.dataset.finished), total: Number(box.dataset.total)};
+  let text = `${counter.done} of ${counter.total} done`;
+  if (Number(box.dataset.failed) > 0) {
+    text += ` · ${box.dataset.failed} not accepted`;
+  }
+  if (counter.done < counter.total) {
+    text += timeLeft(panel, counter);
+  }
+  panel.querySelector("[data-progress-count]").textContent = text;
+  let share = 0;
+  if (counter.total > 0) {
+    share = (100 * counter.done) / counter.total;
+  }
+  panel.querySelector("[data-progress-bar]").style.width = `${share}%`;
+}
+
 function showProgress(panel, data) {
   const box = panel.querySelector("[data-progress]");
+  if (box.dataset.total) {
+    return;
+  }
   const counter = latestCounter(data.lines.concat([data.partial]));
   if (counter === null) {
     return;

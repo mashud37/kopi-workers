@@ -1,6 +1,5 @@
-import re
-from kopi.quote_guard import guard, unguard, word_count
 from kopi.quote_guard import _PATTERN as _QUOTE_RE
+from kopi.quote_guard import guard, unguard, word_count
 
 _BLOCKED_RULES = frozenset([
     "WHITESPACE_RULE",

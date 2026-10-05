@@ -1,6 +1,6 @@
 """British-spelling normaliser: maps American spellings, preserves quotes."""
-from kopi.step_plain import _apply_lookup
 from kopi.data_spelling import AMERICAN_TO_BRITISH
+from kopi.step_plain import _apply_lookup
 
 
 def _normalise(text):

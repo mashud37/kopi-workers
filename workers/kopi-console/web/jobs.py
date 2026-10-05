@@ -9,7 +9,7 @@ import threading
 import time
 from datetime import datetime
 
-from registry import app_folder, get_app, get_command
+from registry import app_folder, data_folder, get_app, get_command
 from web import keys, options
 
 STATUS_LABEL = {
@@ -19,10 +19,13 @@ STATUS_LABEL = {
     "cancelled": "Stopped",
 }
 
+# KOPI_ITEM_EVENTS asks an app to announce each item it starts and finishes, which the run panel lists.
 CHILD_ENVIRONMENT = {
     "PYTHONUNBUFFERED": "1",
     "PYTHONIOENCODING": "utf-8",
+    "KOPI_ITEM_EVENTS": "on",
 }
+ITEM_PREFIX = "kopi-item:"
 STOP_WAIT_SECONDS = 5
 SECONDS_PER_MINUTE = 60
 CLOCK_FORMAT = "%H:%M"
@@ -73,7 +76,7 @@ def input_path(app, file_name):
     Raises:
         ValueError: the name reaches outside the folder, or no such file is there.
     """
-    folder = app_folder(app) / "input"
+    folder = data_folder(app) / "input"
     path = folder / file_name
     if path.name != file_name or not path.is_file():
         raise ValueError(f"There is no {file_name} in {app['name']}'s input folder.")
@@ -81,9 +84,8 @@ def input_path(app, file_name):
 
 
 def build_argv(app, command, flags):
-    """The command line for one run: this Python, the app's script, the command's words, then the flags."""
-    words = command.get("argv", [command["name"]])
-    return [sys.executable, app["script"], *words, *flags]
+    """The command line for one run: this Python, the app's script, --no-input so no question waits, the command, then the flags."""
+    return [sys.executable, app["script"], "--no-input", command["name"], *flags]
 
 
 def start_job(app_name, command_name, values):
@@ -242,6 +244,8 @@ def summary_row(job):
     """The fields a run panel or the jobs list shows for one job, with the last line's status symbols removed."""
     last_line = ""
     for line in reversed(job["lines"]):
+        if line.startswith(ITEM_PREFIX):
+            continue
         text = line.strip().lstrip("▶✓⚠·✗─ ")
         if text:
             last_line = text

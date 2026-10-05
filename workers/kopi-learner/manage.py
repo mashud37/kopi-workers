@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import io
 import sys
 
 from cli import commands, install, ui
@@ -83,6 +84,7 @@ def _build_parser() -> argparse.ArgumentParser:  # lint-style: ignore FN004
     parser = argparse.ArgumentParser(
         prog="manage.py",
         description="Distil Opus academic copy-edits into a LoRA adapter for the served Qwen3 editor.")
+    parser.add_argument("--no-input", action="store_true", help="Never ask a question: each one takes its default answer")
     sub = parser.add_subparsers(dest="command")
     _add_data_parsers(sub)
     _add_train_parsers(sub)
@@ -114,6 +116,8 @@ _DISPATCH = {
 
 def main():
     args = _build_parser().parse_args()
+    if args.no_input:
+        sys.stdin = io.StringIO()
     if args.command is None:
         return menu_mod.main()
     _DISPATCH[args.command](args)

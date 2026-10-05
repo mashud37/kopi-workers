@@ -1,4 +1,5 @@
 import re
+
 from kopi.data_plain import CLICHE_REPLACEMENTS, WORD_SUBSTITUTIONS
 from kopi.pipeline import load_nlp
 from kopi.quote_guard import guard, unguard, word_count

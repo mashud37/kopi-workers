@@ -1,9 +1,8 @@
 """Validate slide JSON against house-style rules and attempt auto-repair via LLM."""
 
 import json
-import re
 
-import anthropic
+from backends.llm import complete_json
 
 _VALID_LAYOUTS = {
     "split",
@@ -99,13 +98,7 @@ def _lint(data: dict) -> list[str]:
 # ---- Repair ----
 
 def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
-    api_key = config.get("api", {}).get("anthropic_key", "")
-    model = config.get("llm", {}).get("model", "claude-haiku-4-5-20251001")
-
-    max_tokens = config.get("llm", {}).get("max_tokens", 16000)
-    client = anthropic.Anthropic(api_key=api_key)
     error_list = "\n".join(f"- {e}" for e in errors)
-
     prompt = (
         f"Fix the following validation errors in the slide JSON. "
         f"Shorten over-long bullets by distilling to the essential phrase "
@@ -113,17 +106,8 @@ def _repair(slide_data: dict, errors: list[str], config: dict) -> dict:
         f"ERRORS:\n{error_list}\n\n"
         f"JSON:\n{json.dumps(slide_data, indent=2, ensure_ascii=False)}"
     )
-
     try:
-        response = client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = "".join(block.text for block in response.content if block.type == "text").strip()
-        raw = re.sub(r"^```(?:json)?\s*\n?", "", raw, flags=re.MULTILINE)
-        raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
-        return json.loads(raw.strip())
+        return complete_json(config, None, prompt)
     except Exception as exc:
         print(f"       Repair call failed ({exc}), using original JSON")
         return slide_data

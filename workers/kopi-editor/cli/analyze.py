@@ -1,12 +1,12 @@
 """Run the deterministic diagnosis and print a readability, wordiness, and redundancy
 summary, writing the full report to `output/<name>_analysis.md`.
 """
-from cli import config, ui, common
+from cli import common, config, ui
 
 
 def run(file):
-    from kopi.pipeline import load_nlp
     from kopi import diagnose, report
+    from kopi.pipeline import load_nlp
     from kopi.progress import StepSpinner
 
     path = common.resolve_docx(file)

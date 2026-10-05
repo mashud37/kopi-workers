@@ -108,9 +108,9 @@ def _load_redundancy_model() -> dict:
     Raises ImportError if a package is missing, OSError if the spaCy model
     itself was never downloaded; the caller tells the two apart.
     """
+    import numpy as np
     import spacy
     from sentence_transformers import SentenceTransformer
-    import numpy as np
     nlp = spacy.load("en_core_web_sm")
     return {"nlp": nlp, "SentenceTransformer": SentenceTransformer, "np": np}
 

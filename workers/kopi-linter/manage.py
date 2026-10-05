@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import io
 import sys
 
 from cli import (
@@ -102,6 +103,7 @@ def _parser() -> argparse.ArgumentParser:
         prog="manage.py",
         description="Deterministic, fully local plain-language linter for academic prose.",
     )
+    parser.add_argument("--no-input", action="store_true", help="Never ask a question: each one takes its default answer")
     sub = parser.add_subparsers(dest="command")
     _measurement_parsers(sub)
     _fitting_parsers(sub)
@@ -122,6 +124,8 @@ def _parser() -> argparse.ArgumentParser:
 
 def main():
     args = _parser().parse_args()
+    if args.no_input:
+        sys.stdin = io.StringIO()
     if args.command is None:
         return menu_mod.main()
     if args.command == "evidence":

@@ -6,6 +6,8 @@ import sys
 import threading
 import time
 
+from . import items
+
 _FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 _CHECK = "✓"
 _LABEL_W = 24
@@ -63,12 +65,14 @@ class BatchProgress:
         self._started = time.perf_counter()
         self._tty = sys.stdout.isatty()
         self._lock = threading.Lock()
+        items.announce("total", total)
         if self._tty and total:
             self._render()
 
     def advance(self, step: int = 1) -> None:
         with self._lock:
             self._done += step
+            items.announce("done", self._done)
             if self._tty:
                 self._render()
 

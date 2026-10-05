@@ -1,6 +1,7 @@
 import re
+
 from kopi.data_padding_tails import TAIL_PATTERNS
-from kopi.quote_guard import guard, unguard, word_count
+from kopi.quote_guard import guard, unguard
 
 
 def _capitalize_after_sentence(match) -> str:

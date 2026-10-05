@@ -4,11 +4,10 @@ shared by analyze, proof, and edit. Only reads the parse, never mutates text.
 """
 import re
 
+from kopi import signals, step_redundancy
 from kopi.data_fillers import PHRASE_REPLACEMENTS
 from kopi.data_padding_tails import TAIL_PATTERNS
 from kopi.data_plain import CLICHE_REPLACEMENTS, WORD_SUBSTITUTIONS
-from kopi import signals
-from kopi import step_redundancy
 
 # Paragraphs shorter than this are left alone (too little to edit meaningfully).
 _MIN_PARA_WORDS = 40

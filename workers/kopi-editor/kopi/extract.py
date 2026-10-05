@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from docx import Document
 
 _BLOCK_STYLE_TERMS = ("block", "quote", "quotation", "long quot")

@@ -1,7 +1,6 @@
 """Convert a .pptx to PDF with PowerPoint COM, falling back to headless LibreOffice.
 """
 
-import os
 import shutil
 import subprocess
 import tempfile

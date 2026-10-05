@@ -1,10 +1,8 @@
-"""Claude Haiku API integration: manuscript → structured slide JSON."""
+"""Turn a manuscript into structured slide JSON, or revise a plan from feedback, through the configured Claude model."""
 
 import json
-import re
-from typing import Optional
 
-import anthropic
+from backends.llm import complete_json
 
 # ---- System prompt ----
 # Condensed for token efficiency while preserving all rules.
@@ -153,7 +151,7 @@ Return ONLY the JSON object."""
 def generate_slide_json(
     content: str,
     config: dict,
-    venue_override: Optional[str] = None,
+    venue_override: str | None = None,
 ) -> dict:
     defaults = config.get("defaults", {})
 
@@ -188,7 +186,7 @@ def generate_slide_json(
         f"---\n{content}\n---\n\n"
         f"Return ONLY the JSON object."
     )
-    return _complete_json(config, user_msg)
+    return complete_json(config, _SYSTEM, user_msg)
 
 
 def revise_slide_json(slide_data: dict, feedback: str, config: dict) -> dict:
@@ -202,57 +200,4 @@ def revise_slide_json(slide_data: dict, feedback: str, config: dict) -> dict:
         "above (schema, layouts, evidence kinds, British spelling, one Conclusion "
         "slide). Return ONLY the full updated JSON object."
     )
-    return _complete_json(config, user_msg)
-
-
-def _complete_json(config: dict, user_msg: str) -> dict:
-    api_key = config.get("api", {}).get("anthropic_key", "")
-    if not api_key or api_key.startswith("YOUR_"):
-        raise ValueError(
-            "Anthropic API key not set. "
-            "Add it to config.local.yaml (api.anthropic_key) "
-            "or set the ANTHROPIC_API_KEY environment variable."
-        )
-    model = config.get("llm", {}).get("model", "claude-haiku-4-5-20251001")
-    max_tokens = config.get("llm", {}).get("max_tokens", 16000)
-
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        system=_SYSTEM,
-        messages=[{"role": "user", "content": user_msg}],
-    )
-
-    usage = response.usage
-    rates = {
-        "claude-haiku-4-5-20251001": (1.00, 5.00),
-        "claude-haiku-4-5": (1.00, 5.00),
-        "claude-sonnet-5-5": (2.00, 10.00),
-        "claude-opus-5-5": (4.00, 20.00),
-    }
-    in_rate, out_rate = rates.get(model, (4.00, 20.00))
-    cost_usd = (usage.input_tokens / 1_000_000) * in_rate + (usage.output_tokens / 1_000_000) * out_rate
-    print(
-        f"       Tokens: input: {usage.input_tokens:,}  output: {usage.output_tokens:,}  "
-        f"(est. cost: ${cost_usd:.4f})"
-    )
-
-    if response.stop_reason == "max_tokens":
-        raise ValueError(
-            f"The model hit the {max_tokens:,}-token output limit and the slide "
-            "JSON was truncated. Raise llm.max_tokens in config.local.yaml "
-            "(try 8192+) or ask for fewer slides, then re-run."
-        )
-
-    raw = "".join(block.text for block in response.content if block.type == "text").strip()
-    raw = re.sub(r"^```(?:json)?\s*\n?", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
-
-    try:
-        return json.loads(raw.strip())
-    except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Model did not return valid JSON ({e}). "
-            f"Last 200 chars received:\n...{raw.strip()[-200:]}"
-        ) from e
+    return complete_json(config, _SYSTEM, user_msg)

@@ -2,14 +2,14 @@
 configured LLM backend (cloud, api, or local) for a plain-language edit. Word
 reduction only sets how hard it cuts.
 """
-from cli import config, ui, common
+from cli import common, config, ui
 
 
 def _normalize_british(state):
     """Restore British spelling in the edited text (the model sometimes slips to
     American despite the prompt). Runs on the GUARDED text, so quoted material (where American spelling must be preserved verbatim) is left untouched."""
-    from kopi.step_plain import _apply_lookup
     from kopi.data_spelling import AMERICAN_TO_BRITISH
+    from kopi.step_plain import _apply_lookup
     changes = []
     new_text = _apply_lookup(state["text"], AMERICAN_TO_BRITISH, changes, "Spelling: British")
     state = {**state, "text": new_text}
@@ -20,25 +20,6 @@ def _normalize_british(state):
             "para": None,
         })
         state["log"].extend(changes)
-    return state
-
-
-def _tighten(llm, state, candidates=None):
-    """Run one editing pass on the configured backend.
-
-    ``candidates is None`` selects every eligible paragraph (pass 1); pass an
-    explicit list for a targeted top-up pass.
-    """
-    if llm == "cloud":
-        from cli import cloud
-        return cloud.tighten(state, candidates)
-    if llm == "api":
-        from cli import api
-        return api.tighten(state, candidates)
-    if llm == "local":
-        from kopi import step_concision
-        ui.info("running local Ollama editing...")
-        return step_concision.run(state, candidates)
     return state
 
 
@@ -74,11 +55,12 @@ def _topup_shortfall(llm, state, reduction):
     """Re-edit the wordiest remaining paragraphs once if pass 1 fell short of
     the reduction target. The model cannot count, so we measure the realised
     cut and top up rather than trust a single pass; one extra pass, bounded cost."""
+    from backends import llm as model_calls
     from kopi import step_concision
     extra = step_concision.topup_candidates(state)
     if extra:
         ui.info(f"target shortfall after first pass: re-editing {len(extra)} paragraph(s) once more")
-        state = _tighten(llm, state, extra)
+        state = model_calls.tighten(state, llm, extra)
     return state
 
 
@@ -115,8 +97,9 @@ def _report_summary(state, original, written):
 
 def run(file, reduction=None, lang=None, llm=None, verbose=False):
     from datetime import datetime
-    from kopi.pipeline import prepare
+
     from kopi.output import write_outputs
+    from kopi.pipeline import prepare
 
     lang = lang or config.get("LANG")
     llm = llm or config.get("LLM")
@@ -141,10 +124,11 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
     plan = intensity.plan(reduction or 0, original)
     ui.info(f"editing intensity: {intensity.describe(plan, reduction or 0)}")
 
+    from backends import llm as model_calls
     if llm == "skip":
         ui.info("LLM editing skipped (llm=skip)")
     else:
-        state = _tighten(llm, state)
+        state = model_calls.tighten(state, llm)
         if reduction:
             state = _topup_shortfall(llm, state, reduction)
 

@@ -1,7 +1,7 @@
 """Apply the safe mechanical fixes with no model call (fillers, padding, cliches, long
 words, grammar), writing the edited text and a change log to `output/`.
 """
-from cli import config, ui, common
+from cli import common, config, ui
 
 
 def run(file, lang=None):
@@ -21,9 +21,9 @@ def run(file, lang=None):
         sp.done()
     ui.info(f"{words} words | conservative deterministic edit (no LLM)")
 
-    from kopi.pipeline import prepare, finalize
-    from kopi.proof import proof
     from kopi.output import write_outputs
+    from kopi.pipeline import finalize, prepare
+    from kopi.proof import proof
 
     ui.info("  · 1/3  Diagnose document")
     ui.info("  · 2/3  Apply deterministic edits")

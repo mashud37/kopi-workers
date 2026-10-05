@@ -1,11 +1,12 @@
 import math
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import numpy as np
-from kopi.citations import CITATION_RE as _CITATION_RE, restore_casing
+
+from kopi.citations import CITATION_RE as _CITATION_RE
+from kopi.citations import restore_casing
 from kopi.quote_guard import guard, unguard, word_count
-from kopi.progress import LLMProgress
 
 _MIN_PARA_WORDS = 40
 # Max fraction a paragraph may shrink before we reject the edit as too aggressive.
@@ -239,8 +240,8 @@ def get_candidates(state: dict) -> list[dict]:
     ``floor``. With no reduction requested this is a clarity pass: the model is
     told to barely change length and the guard rejects deep cuts.
     """
-    from kopi.intensity import paragraph_floor
     from kopi import intensity
+    from kopi.intensity import paragraph_floor
     restored = unguard(state["text"], state["qmap"])
     paragraphs = restored.split("\n\n")
     already = set(state.get("llm_edited_indices", set()))
@@ -416,55 +417,6 @@ def _bumped_stats(state: dict, para: int, accepted: int, rejected: int) -> dict:
     }
 
 
-def _record_outcome(state: dict, applied: dict, para_count: int) -> dict:
-    """Store the edited text, the counts and the change log back into the run state."""
-    quoted = guard("\n\n".join(applied["paragraphs"]))
-    guarded, qmap = quoted["text"], quoted["qmap"]
-    final_count = word_count(guarded, qmap)
-    state = {
-        **state,
-        "text": guarded,
-        "qmap": qmap,
-        "llm_edited_indices": applied["edited"],
-        "llm_stats": _bumped_stats(state, para_count, applied["accepted"], applied["rejected"]),
-    }
-    state["counts"]["step10"] = final_count
-    state["log"].append({
-        "step": "Step 10: Concision",
-        "detail": f"{para_count} paragraphs processed: {applied['accepted']} accepted, "
-                  f"{applied['rejected']} rejected -> {final_count} words",
-        "para": None,
-    })
-    state["log"].extend(applied["changelog"])
-    return state
-
-
-def _backend_unavailable() -> str | None:
-    """Why the local model cannot be reached, or None when it can."""
-    try:
-        import ollama
-        ollama.list()
-    except ImportError:
-        return "skipped: ollama package not installed"
-    except Exception as error:
-        return f"skipped, Ollama not running: {error}"
-    return None
-
-
-def _worker_count(para_count: int) -> int:
-    """How many paragraphs to edit at once.
-
-    Conservative by default because Ollama serialises on CPU. Raise
-    KOPI_LLM_WORKERS when the backend can serve requests in parallel, on a GPU
-    or with OLLAMA_NUM_PARALLEL above one.
-    """
-    try:
-        wanted = int(os.environ.get("KOPI_LLM_WORKERS", "2"))
-    except ValueError:
-        wanted = 2
-    return max(1, min(wanted, para_count))
-
-
 def _preload_embedding_model() -> None:
     """Load the guard's embedding model before any paragraph is sent, and stop the run if it cannot load.
 
@@ -484,171 +436,3 @@ def _preload_embedding_model() -> None:
         ) from None
     finally:
         sp.done()
-
-
-class _ModelCall:
-    """One paragraph's call settings, held so a corrective retry asks on the same terms."""
-
-    def __init__(self, lang: str, mode: str, floor) -> None:
-        self.lang = lang
-        self.mode = mode
-        self.floor = floor
-
-    def edit(self, text: str, instructions):
-        from kopi.llm import edit_paragraph
-
-        return edit_paragraph(text, {
-            "instructions": instructions,
-            "lang": self.lang,
-            "mode": self.mode,
-            "floor": self.floor,
-        })
-
-
-def _edit_one(cand: dict, paragraphs: list[str], lang: str) -> dict:
-    """Edit and guard a single paragraph, with one corrective retry.
-
-    Touches nothing shared, so paragraphs can be edited concurrently; the results
-    are applied later in document order.
-    """
-    para = paragraphs[cand["index"]]
-    caller = _ModelCall(lang, cand.get("mode", "firm"), cand.get("floor"))
-    try:
-        res = edit_with_retry(caller.edit, para, cand.get("instructions"),
-                              cand.get("max_compression", _MAX_COMPRESSION))
-    except Exception as error:
-        return {"cand": cand, "para": para, "error": str(error)}
-    return {
-        "cand": cand,
-        "para": para,
-        "edited": res["edited"],
-        "ok": res["accepted"],
-        "reason": res["reason"],
-    }
-
-
-def _track(progress, result: dict) -> dict:
-    """Report one finished paragraph to the live progress line."""
-    if result.get("error") or not result.get("ok"):
-        progress.advance(0, accepted=False)
-    else:
-        cut = len(result["para"].split()) - len(result["edited"].split())
-        progress.advance(cut, accepted=True)
-    return result
-
-
-def _run_edits(candidates: list[dict], paragraphs: list[str], lang: str, workers: int) -> list[dict]:
-    """Edit every candidate paragraph, on one thread or several."""
-    progress = LLMProgress(len(candidates))
-    results = []
-    if workers == 1:
-        for cand in candidates:
-            results.append(_track(progress, _edit_one(cand, paragraphs, lang)))
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = [pool.submit(_edit_one, cand, paragraphs, lang) for cand in candidates]
-            for future in as_completed(futures):
-                results.append(_track(progress, future.result()))
-    progress.finish()
-    return results
-
-
-def _apply_edits(paragraphs: list[str], results: list[dict]) -> dict:
-    """Fold the finished edits back into the paragraphs, in document order.
-
-    Sorted by paragraph index first, so the change log and the applied text read
-    the same however the workers happened to finish.
-    """
-    kept = list(paragraphs)
-    changelog = []
-    edited = set()
-    accepted = 0
-    rejected = 0
-    for result in sorted(results, key=lambda one: one["cand"]["index"]):
-        idx = result["cand"]["index"]
-        para = result["para"]
-        para_ref = f"P{idx + 1}"
-        if result.get("error"):
-            changelog.append({
-                "step": "Step 10: Concision",
-                "detail": f"LLM error: {result['error']}",
-                "para": para_ref,
-            })
-            continue
-        if not result["ok"]:
-            rejected += 1
-            changelog.append({
-                "step": "Step 10: Concision",
-                "detail": f"rejected: {result['reason']}",
-                "para": para_ref,
-            })
-            continue
-        saved = len(para.split()) - len(result["edited"].split())
-        accepted += 1
-        kept[idx] = result["edited"]
-        edited.add(idx)
-        changelog.append({
-            "step": "Step 10: Concision",
-            "detail": f"accepted (~{saved} words saved)",
-            "para": para_ref,
-            "items": [
-                f"original -> \"{para[:100]}{'...' if len(para) > 100 else ''}\"",
-                f"edited   -> \"{result['edited'][:100]}{'...' if len(result['edited']) > 100 else ''}\"",
-            ],
-        })
-    return {
-        "paragraphs": kept,
-        "changelog": changelog,
-        "edited": edited,
-        "accepted": accepted,
-        "rejected": rejected,
-    }
-
-
-def run(state: dict, candidates: list[dict] | None = None) -> dict:
-    """Local Ollama path: edit every eligible paragraph in parallel at the run's
-    intensity.
-
-    Each candidate carries its ``instructions`` (from :mod:`kopi.diagnose`) and the
-    intensity derived from the requested reduction: ``mode`` (prompt stance),
-    ``max_compression`` (guard ceiling), and a soft ``floor``. The guard
-    (`_accept_edit`) protects meaning and enforces the ceiling; rejected edits keep
-    the original. Pass explicit ``candidates`` for a targeted top-up pass; otherwise
-    every eligible paragraph is selected.
-    """
-    unavailable = _backend_unavailable()
-    if unavailable:
-        state["log"].append({
-            "step": "Step 10: Concision",
-            "detail": unavailable,
-            "para": None,
-        })
-        return state
-    from kopi.llm import DEFAULT_MODEL
-
-    restored = unguard(state["text"], state["qmap"])
-    paragraphs = restored.split("\n\n")
-    candidates = candidates if candidates is not None else get_candidates(state)
-    edited_indices = set(state.get("llm_edited_indices", set()))
-    para_count = len(candidates)
-
-    if not candidates:
-        state["counts"]["step10"] = word_count(state["text"], state["qmap"])
-        state["log"].append({
-            "step": "Step 10: Concision",
-            "detail": "no paragraphs qualified for editing",
-            "para": None,
-        })
-        return {**state, "llm_stats": _bumped_stats(state, 0, 0, 0)}
-
-    workers = _worker_count(para_count)
-    print(
-        f"  {para_count} paragraph(s) queued for editing "
-        f"(model: {DEFAULT_MODEL}, {workers} worker{'s' if workers > 1 else ''})."
-    )
-    _preload_embedding_model()
-
-    results = _run_edits(candidates, paragraphs, state.get("lang", "british"), workers)
-    applied = _apply_edits(paragraphs, results)
-    applied["edited"] |= edited_indices
-    return _record_outcome(state, applied, para_count)

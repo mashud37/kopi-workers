@@ -8,9 +8,11 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-INPUT_DIR = ROOT / "input"
-OUTPUT_DIR = ROOT / "output"
-ENV_FILE = ROOT / "env.yaml"
+DATA = os.environ.get("KOPI_DATA")
+DATA_ROOT = Path(DATA) / "kopi-editor" if DATA else ROOT
+INPUT_DIR = DATA_ROOT / "input"
+OUTPUT_DIR = DATA_ROOT / "output"
+ENV_FILE = DATA_ROOT / "env.yaml"
 ENV_EXAMPLE = ROOT / "env.yaml.example"
 _LEGACY_CLOUD_JSON = Path.home() / ".config" / "kopi-editor" / "cloud.json"
 
@@ -31,6 +33,7 @@ _ENV_OVERRIDE = {
     # Standard Anthropic env var name (also read by the SDK); per security.md §2.
     "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY",
     "ANTHROPIC_MODEL": "KOPI_ANTHROPIC_MODEL",
+    "LOCAL_URL": "KOPI_LOCAL_URL",
 }
 
 # MODEL (self-hosted/cloud) and ANTHROPIC_MODEL (api) have NO default: the user
@@ -47,7 +50,34 @@ _DEFAULTS = {
     "GPU_TYPE": "nvidia-rtx-pro-6000",
     "CPU": 20,
     "MEMORY": 80,
+    "LOCAL_URL": "http://localhost:11434/v1",
 }
+
+# Published Anthropic list prices, USD per 1M tokens (input, output), cached 2026-10.
+# Prompt-cache writes bill at 1.25x the input rate, reads at 0.10x.
+ANTHROPIC_PRICES = {
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-fable-5": (10.0, 50.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-opus-4-6": (5.0, 25.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+CACHE_WRITE_FACTOR = 1.25
+CACHE_READ_FACTOR = 0.10
+
+# Cloud Run list prices, USD per second while the instance is active (cached 2026-06).
+# Google has published no per-second SKU for the RTX PRO 6000 on Cloud Run, so its
+# figure is an estimate at about four times the L4; KOPI_GPU_PER_SEC overrides it.
+GPU_PRICE_PER_SECOND = {
+    "nvidia-l4": 0.000233,
+    "nvidia-rtx-pro-6000": 0.00093,
+}
+VCPU_PRICE_PER_SECOND = 0.0000180
+MEMORY_PRICE_PER_SECOND = 0.0000020
 
 LANGS = ("british", "american")
 LLM_BACKENDS = ("cloud", "local", "api", "skip")

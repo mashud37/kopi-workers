@@ -1,7 +1,7 @@
 import difflib
 import re
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
 _SECTION_KEYS = [
     "Step 1: Count",

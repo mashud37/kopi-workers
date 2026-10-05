@@ -1,4 +1,5 @@
 import re
+
 from kopi.data_fillers import PHRASE_REPLACEMENTS
 from kopi.data_padding_tails import TAIL_PATTERNS
 from kopi.quote_guard import unguard

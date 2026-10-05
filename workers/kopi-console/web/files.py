@@ -5,7 +5,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from registry import app_folder
+from registry import data_folder
 from settings import SETTINGS
 from web import documents
 
@@ -23,7 +23,7 @@ def folder_path(app, folder):
     """
     if folder not in FOLDERS:
         raise ValueError(f"No folder called {folder}.")
-    return app_folder(app) / folder
+    return data_folder(app) / folder
 
 
 def inside_folder(app, folder, relative):

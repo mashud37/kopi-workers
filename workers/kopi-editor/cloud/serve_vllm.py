@@ -5,10 +5,10 @@ Relays chat messages with Qwen3 reasoning mode off.
 import json
 import os
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 
-from flask import Flask, request, jsonify, abort
+from flask import Flask, abort, jsonify, request
 
 # Top-level (not lazy inside the handler) so a packaging slip (kopi/ missing from the
 # image) fails at container startup and the build-time import check, never as a 500

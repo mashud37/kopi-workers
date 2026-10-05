@@ -152,8 +152,8 @@ def key_terms(paragraphs: list[str], top: int = _KEY_TERMS_SHOWN) -> list[tuple[
     if len(paras) < 3:
         return []
     try:
-        from sklearn.feature_extraction.text import TfidfVectorizer
         import numpy as np
+        from sklearn.feature_extraction.text import TfidfVectorizer
     except Exception:
         return []
     try:

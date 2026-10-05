@@ -1,10 +1,13 @@
 import re
+
 from kopi.data_syntax_patterns import (
-    INTENSIFIER_DEP_PATTERN, SKIP_AFTER_INTENSIFIER,
-    RELCL_PATTERN, DEMONSTRATIVE_GERUNDS,
+    DEMONSTRATIVE_GERUNDS,
+    INTENSIFIER_DEP_PATTERN,
+    RELCL_PATTERN,
+    SKIP_AFTER_INTENSIFIER,
 )
-from kopi.quote_guard import guard, unguard, word_count
 from kopi.quote_guard import _PATTERN as _QUOTE_RE
+from kopi.quote_guard import guard, unguard, word_count
 
 _nlp = None
 _dep_matcher = None

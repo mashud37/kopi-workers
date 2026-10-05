@@ -4,21 +4,24 @@ sciences. No arguments launches the interactive menu; any subcommand runs
 directly.
 """
 import os
+
 # Allow torch's and spaCy/blis's OpenMP runtimes to coexist (Windows loads two
 # libiomp copies, which otherwise aborts or hangs). Must be set before imports.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-import sys
 import argparse
+import io
+import sys
 
-from cli import menu, install, update, settings, analyze, proof, edit, cloud, deploy, config, ui
+from cli import analyze, config, deploy, edit, install, menu, proof, settings, ui, update
 
 
-def main():
+def _build_parser():  # lint-style: ignore FN004
     parser = argparse.ArgumentParser(
         prog="manage.py",
         description="Academic copyeditor: plain-language editing for academic prose.",
     )
+    parser.add_argument("--no-input", action="store_true", help="Never ask a question: each one takes its default answer")
     sub = parser.add_subparsers(dest="command")
 
     a = sub.add_parser("analyze", help="Diagnose a .docx: report cuts + per-paragraph needs (no edits)")
@@ -47,8 +50,13 @@ def main():
     sub.add_parser("config", help="Print the effective configuration")
     sub.add_parser("install", help="Create env.yaml + folders and check dependencies (idempotent)")
     sub.add_parser("update", help="Upgrade dependencies and the spaCy model")
+    return parser
 
-    args = parser.parse_args()
+
+def main():
+    args = _build_parser().parse_args()
+    if args.no_input:
+        sys.stdin = io.StringIO()
     if args.command is None:
         return menu.main()
     if args.command == "analyze":
@@ -61,7 +69,8 @@ def main():
         source = args.source or config.newest_output()
         if not source:
             raise SystemExit("no source file; pass --source or run `edit` first.")
-        return cloud.smoke(source, args.n)
+        from backends import llm as model_calls
+        return model_calls.smoke("cloud", source, args.n)
     if args.command == "deploy":
         return deploy.run(args.ollama)
     if args.command == "deploy-status":

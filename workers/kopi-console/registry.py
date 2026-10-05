@@ -1,6 +1,7 @@
 """List the kopi apps, the commands offered for each, and the files each takes in.
 The console runs every command through the app's own script, never importing an app.
 """
+import os
 from pathlib import Path
 
 FAMILY = Path(__file__).resolve().parent.parent
@@ -67,7 +68,6 @@ PRESENTER_COMMANDS = [
         "name": "slides",
         "kind": "heavy",
         "help": "Plan the slides with a model and build the deck",
-        "argv": [],
         "fields": [
             {"name": "file", "type": "input", "help": "Manuscript or outline"},
             {"name": "--venue", "type": "text", "help": "Venue line, for example ICA 2027"},
@@ -75,6 +75,12 @@ PRESENTER_COMMANDS = [
             {"name": "--emoji", "type": "bool", "help": "Use colour emoji instead of the default icons"},
             {"name": "--no-pdf", "type": "bool", "help": "Build the deck only, no PDF"},
         ],
+    },
+    {
+        "name": "config",
+        "kind": "safe",
+        "help": "Show the model, key source and folders in use",
+        "fields": [],
     },
 ]
 
@@ -98,7 +104,7 @@ APPS = [
     {
         "name": "kopi-presenter",
         "blurb": "Turn a manuscript or outline into a styled slide deck and a PDF",
-        "script": "run.py",
+        "script": "manage.py",
         "accepts": [".docx", ".txt", ".md"],
         "keys": ["ANTHROPIC_API_KEY"],
         "commands": PRESENTER_COMMANDS,
@@ -125,3 +131,10 @@ def get_command(app, command_name):
 def app_folder(app):
     """The folder the app lives in, where its commands run."""
     return FAMILY / app["name"]
+
+
+def data_folder(app):
+    """The folder holding the app's input and output: under KOPI_DATA when it is set, the app's own folder otherwise."""
+    if os.environ.get("KOPI_DATA"):
+        return Path(os.environ["KOPI_DATA"]) / app["name"]
+    return app_folder(app)

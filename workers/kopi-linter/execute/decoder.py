@@ -28,7 +28,8 @@ GREEDY = {
 _TIMEOUT = 300
 
 _SECRETS = Path(__file__).resolve().parents[1] / "secrets.yaml"
-_EDITOR_ENV = Path(__file__).resolve().parents[2] / "kopi-editor" / "env.yaml"
+_EDITOR_DATA = Path(os.environ["KOPI_DATA"]) / "kopi-editor" if os.environ.get("KOPI_DATA") else Path(__file__).resolve().parents[2] / "kopi-editor"
+_EDITOR_ENV = _EDITOR_DATA / "env.yaml"
 
 _SYSTEM = "You are copy-editing academic prose in British English."
 

@@ -4,7 +4,7 @@ builds the prompt and runs the acceptance guard.
 """
 import os
 
-from flask import Flask, request, jsonify, abort
+from flask import Flask, abort, jsonify, request
 
 app = Flask(__name__)
 _TOKEN = os.environ.get("JOB_TOKEN", "")

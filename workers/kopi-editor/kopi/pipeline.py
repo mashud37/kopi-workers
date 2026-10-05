@@ -4,8 +4,8 @@ runs the diagnosis core, then lets each route perform its own actions.
 """
 from functools import lru_cache
 
-from kopi.quote_guard import guard, unguard
 from kopi import diagnose
+from kopi.quote_guard import guard, unguard
 
 
 @lru_cache(maxsize=1)

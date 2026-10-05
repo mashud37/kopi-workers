@@ -2,8 +2,8 @@
 long-word substitution, LanguageTool grammar) with no LLM judgement. Sentence
 removal and restructuring are excluded; quotations are protected by `quote_guard`.
 """
+from kopi import step_fillers, step_plain, step_proofing, step_reduce
 from kopi.quote_guard import word_count
-from kopi import step_fillers, step_reduce, step_plain, step_proofing
 
 
 def proof(state: dict) -> dict:

@@ -1,7 +1,7 @@
 """Interactive menu shown when manage.py runs with no arguments, mirroring the
 subcommands one to one.
 """
-from cli import config, install, update, settings, analyze, proof, edit, cloud, deploy, ui
+from cli import analyze, config, deploy, edit, install, proof, settings, ui, update
 
 
 def _pick_docx():
@@ -45,7 +45,8 @@ def _cloud_test_flow():
     if not src:
         ui.warn("no source file; run `edit` first or pass a path")
         return
-    cloud.smoke(src, ui.ask("Paragraphs to send (integer or 'all')", "3"))
+    from backends import llm as model_calls
+    model_calls.smoke("cloud", src, ui.ask("Paragraphs to send (integer or 'all')", "3"))
 
 
 _ACTIONS = [

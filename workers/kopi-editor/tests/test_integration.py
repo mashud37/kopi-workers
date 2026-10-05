@@ -1,14 +1,9 @@
-"""End-to-end test of the local edit pass with `edit_paragraph` stubbed by a
-deterministic word-dropper and `_cosine_sim` forced to 1.0, exercising
-candidate selection, the guards, and the apply logic.
-"""
-import sys
-import types
-
+"""Test the edit pass end to end, with deterministic editors in place of the model and the similarity check forced to 1.0."""
 import pytest
 
 np = pytest.importorskip("numpy")  # hard dependency of step_concision
 
+from backends import llm as model_calls
 from kopi import step_concision
 from kopi.quote_guard import guard, unguard, word_count
 
@@ -62,16 +57,35 @@ def _always_similar(a, b):
     return 1.0
 
 
-def _no_ollama_models():
-    return {"models": []}
+class _StubAsk:
+    """Stands in for backends.llm.ask, handing each paragraph to a deterministic editor."""
+
+    def __init__(self, editor):
+        self.editor = editor
+
+    def __call__(self, session, text, instructions, style):
+        return self.editor(text, {"instructions": instructions})
+
+
+def _stub_session(backend):
+    return {
+        "backend": backend,
+        "model": "stub",
+        "lang": "british",
+        "workers": 2,
+        "tally": model_calls.Tally(),
+    }
+
+
+def _no_preload():
+    return None
 
 
 def _stub_llm(monkeypatch, editor):
-    monkeypatch.setattr("kopi.llm.edit_paragraph", editor)
+    monkeypatch.setattr(model_calls, "ask", _StubAsk(editor))
+    monkeypatch.setattr(model_calls, "open_session", _stub_session)
+    monkeypatch.setattr(model_calls, "_preload_embedding_model", _no_preload)
     monkeypatch.setattr(step_concision, "_cosine_sim", _always_similar)
-    fake_ollama = types.ModuleType("ollama")
-    fake_ollama.list = _no_ollama_models
-    monkeypatch.setitem(sys.modules, "ollama", fake_ollama)
 
 
 def test_edits_every_paragraph_and_preserves_guards(monkeypatch):
@@ -84,7 +98,7 @@ def test_edits_every_paragraph_and_preserves_guards(monkeypatch):
     state = _make_state(text, reduction=word_count(quoted["text"], quoted["qmap"]))
     original = state["counts"]["step1"]
 
-    state = step_concision.run(state)
+    state = model_calls.tighten(state, "local")
 
     # Every eligible paragraph was processed and the document got shorter.
     assert state["llm_stats"]["para"] == 20
@@ -108,7 +122,7 @@ def test_rejected_edit_keeps_original(monkeypatch):
     # shorten. Only clear padding/gutting is rejected.)
     _stub_llm(monkeypatch, _bloat_editor)
     state = _make_state(_build_document())
-    state = step_concision.run(state)
+    state = model_calls.tighten(state, "local")
     assert state["llm_stats"]["accepted"] == 0
     assert state["llm_stats"]["rejected"] == 20
 
@@ -121,7 +135,7 @@ def test_small_expansion_is_accepted(monkeypatch):
     # Plain-language rephrase that adds a couple of words must NOT be rejected.
     _stub_llm(monkeypatch, _small_expansion_editor)
     state = _make_state(_build_document())
-    state = step_concision.run(state)
+    state = model_calls.tighten(state, "local")
     assert state["llm_stats"]["accepted"] == 20
 
 
@@ -138,7 +152,7 @@ def _over_compression_editor(paragraph, style=None):
 def test_over_compression_triggers_softer_retry(monkeypatch):
     _stub_llm(monkeypatch, _over_compression_editor)
     state = _make_state(_build_document())
-    state = step_concision.run(state)
+    state = model_calls.tighten(state, "local")
     assert state["llm_stats"]["accepted"] == 20
     assert state["llm_stats"]["rejected"] == 0
 
@@ -151,7 +165,7 @@ def test_no_reduction_is_clarity_and_rejects_deep_cuts(monkeypatch):
     _stub_llm(monkeypatch, _word_dropper)
     state = _make_state(_build_document())  # reduction defaults to 0 -> clarity
     original = state["counts"]["step1"]
-    state = step_concision.run(state)
+    state = model_calls.tighten(state, "local")
     assert state["llm_stats"]["accepted"] == 0
     assert state["llm_stats"]["rejected"] == 20
     assert state["counts"]["step10"] == original  # document unchanged
