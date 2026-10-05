@@ -64,6 +64,14 @@ def run():
     except Exception:
         ui.warn("spaCy model missing (run: python -m spacy download en_core_web_sm)")
 
+    try:
+        from kopi.step_concision import _EMBEDDING_MODEL, _get_model
+        ui.info(f"loading embedding model {_EMBEDDING_MODEL} (downloads once)")
+        _get_model()
+        ui.ok(f"embedding model {_EMBEDDING_MODEL}: ok")
+    except Exception as error:
+        ui.warn(f"embedding model did not load, edits cannot be checked: {error}")
+
     g = shutil.which("gcloud")
     (ui.ok if g else ui.warn)(f"gcloud: {'found' if g else 'NOT FOUND (needed for deploy)'}")
 

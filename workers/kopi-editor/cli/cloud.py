@@ -140,21 +140,9 @@ def _shape_result(r):
 def _edit_all(candidates: list) -> list:
     """Send candidates to the service in parallel, guard locally, shape results
     for step_concision.apply_results."""
-    from kopi.step_concision import _get_model
+    from kopi.step_concision import _preload_embedding_model
 
-    # Pre-load the embedding model ONCE before the workers start. The guard's
-    # cosine check loads sentence-transformers lazily; letting 4 threads race to
-    # initialise it throws torch's "Cannot copy out of meta tensor" (concurrent
-    # init is not thread-safe). One load up front removes the race.
-    from kopi.progress import StepSpinner
-    sp = StepSpinner("loading embedding model")
-    sp.start()
-    try:
-        _get_model()
-    except Exception:
-        pass
-    finally:
-        sp.done()
+    _preload_embedding_model()
 
     total = len(candidates)
     start = time.time()

@@ -148,26 +148,6 @@ def _work(cand: dict, session: dict) -> dict:
     return outcome
 
 
-def _preload_guard_model() -> None:
-    """Load the embedding model before the workers start.
-
-    The parallel guard checks would otherwise race to initialise
-    sentence-transformers, and concurrent torch init throws "Cannot copy out of
-    meta tensor".
-    """
-    from kopi.step_concision import _get_model
-    from kopi.progress import StepSpinner
-
-    sp = StepSpinner("loading embedding model")
-    sp.start()
-    try:
-        _get_model()
-    except Exception:
-        pass
-    finally:
-        sp.done()
-
-
 def _open_client():
     """An Anthropic client on the configured key."""
     try:
@@ -210,7 +190,9 @@ def _edit_all(candidates: list) -> list:
 
     A heartbeat thread keeps the wait visible while the workers run.
     """
-    _preload_guard_model()
+    from kopi.step_concision import _preload_embedding_model
+
+    _preload_embedding_model()
     session = {
         "client": _open_client(),
         "model": config.get("ANTHROPIC_MODEL"),

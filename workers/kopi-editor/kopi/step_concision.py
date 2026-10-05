@@ -37,14 +37,19 @@ _MIN_COSINE_SIM = 0.85
 # below this fraction of the ask (e.g. asked -600, got < 480).
 _TOPUP_TOLERANCE = 0.80
 
+_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 _embedding_model = None
 
 
 def _get_model():
+    """The guard's embedding model: read from the local cache, downloaded once if it is not there."""
     global _embedding_model
     if _embedding_model is None:
         from sentence_transformers import SentenceTransformer
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2", local_files_only=True)
+        try:
+            _embedding_model = SentenceTransformer(_EMBEDDING_MODEL, local_files_only=True)
+        except OSError:
+            _embedding_model = SentenceTransformer(_EMBEDDING_MODEL)
     return _embedding_model
 
 
@@ -461,15 +466,22 @@ def _worker_count(para_count: int) -> int:
 
 
 def _preload_embedding_model() -> None:
-    """Load the shared embedding model before the workers race to initialise it."""
+    """Load the guard's embedding model before any paragraph is sent, and stop the run if it cannot load.
+
+    Loading once up front also stops parallel workers racing to initialise it. Without the model
+    the guard rejects every edit, so a run that went on would pay for edits it then throws away.
+    """
     from kopi.progress import StepSpinner
 
     sp = StepSpinner("loading embedding model")
     sp.start()
     try:
         _get_model()
-    except Exception:
-        pass
+    except Exception as error:
+        raise SystemExit(
+            f"the embedding model the guard needs ({_EMBEDDING_MODEL}) did not load, so nothing "
+            f"was sent: {error}"
+        ) from None
     finally:
         sp.done()
 
