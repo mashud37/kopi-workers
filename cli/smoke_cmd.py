@@ -73,10 +73,10 @@ def help_row(name):
 
 
 def run():
-    """Install the newest wheel in a fresh environment and run every app's --help once."""
+    """Install the newest wheel in a fresh environment and run every released app's --help once."""
     settings = manifest.load()
     wheel = newest_wheel()
-    names = sorted(settings["apps"])
+    names = sorted(manifest.chosen_apps(settings))
 
     ui.step("Plan")
     ui.info("Step 1/2: Install the wheel in a fresh environment")
