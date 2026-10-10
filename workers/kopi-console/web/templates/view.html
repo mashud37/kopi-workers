@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_icons.html" as icon %}
 {% block title %}{{ document.name }} · kopi{% endblock %}
+{% block main_class %} class="wide"{% endblock %}
 {% block content %}
 {% set raw_url = url_for('console.app_file', name=app.name, folder=folder, relative=relative) %}
 <nav class="crumbs-nav" aria-label="Breadcrumb">
@@ -25,7 +26,11 @@
       <button class="tonal">{{ icon.copy_in() }}Copy to documents<span class="visually-hidden">, for {{ readers | join(", ") }}</span></button>
     </form>
     {% endif %}
-    <a class="button text" href="{{ raw_url }}" target="_blank" rel="noopener">{{ icon.open_new() }}{% if document.kind in ["docx", "other"] %}Download{% else %}Open on its own<span class="visually-hidden"> (new tab)</span>{% endif %}</a>
+    <form method="post" action="{{ url_for('console.view_open', name=app.name, folder=folder, relative=relative) }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="filled">{{ icon.open_new() }}Open file<span class="visually-hidden"> in its own program</span></button>
+    </form>
+    <a class="button text" href="{{ raw_url }}"{% if document.kind not in ["docx", "slides", "other"] %} target="_blank" rel="noopener"{% endif %}>{% if document.kind in ["docx", "slides", "other"] %}Download{% else %}Open in a new tab{% endif %}</a>
   </div>
 </div>
 
@@ -37,6 +42,13 @@
 <pre class="card document plain">{{ document.text }}</pre>
 {% elif document.kind == "pdf" %}
 <iframe class="document-frame" src="{{ raw_url }}" title="{{ document.name }}"></iframe>
+{% elif document.kind == "slides" and document.has_pdf %}
+<iframe class="document-frame" src="{{ url_for('console.app_file', name=app.name, folder=folder, relative=pdf_relative) }}" title="Slides of {{ document.name }}"></iframe>
+{% elif document.kind == "slides" %}
+<div class="empty">
+  <h2>No PDF was made for this deck</h2>
+  <p class="supporting">Open the file to see the slides, or run slides again without "no-pdf".</p>
+</div>
 {% elif document.kind == "image" %}
 <div class="card document"><img src="{{ raw_url }}" alt="{{ document.name }}"></div>
 {% else %}

@@ -1,6 +1,6 @@
 # kopi-console
 
-One local web page for the kopi apps: kopi-editor, kopi-linter and kopi-presenter. Each app has its
+One local web page for the kopi apps: kopi-editor and kopi-presenter. Each app has its
 own page where you drop a file, fill in a command's form, and watch it run. The console runs each
 app through its own script in its own folder, holds no keys, and answers only on this machine.
 
@@ -56,7 +56,7 @@ python manage.py install
 |---|---|
 | Open the web page | `python manage.py` |
 | List the apps and their commands | `python manage.py status` |
-| Run one command and print its log | `python manage.py run kopi-linter lint "file=sample.md" --band=firm` |
+| Run one command and print its log | `python manage.py run kopi-editor analyze "file=chapter.docx"` |
 | Check dependencies and find the apps | `python manage.py install` |
 
 ## Cost

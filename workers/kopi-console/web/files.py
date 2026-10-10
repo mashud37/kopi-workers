@@ -115,6 +115,14 @@ def copy_to_documents(path):
     return target.name
 
 
+def open_file(path):
+    """Open one file in the program the system uses for its kind, such as Word or PowerPoint."""
+    if os.name == "nt":
+        os.startfile(path)
+    else:
+        subprocess.run(["xdg-open", str(path)], check=False)
+
+
 def open_folder(app, folder, relative):
     """Open one of the app's folders, or a sub-folder of it, in the system's file manager.
 

@@ -1,4 +1,4 @@
-"""Show any file an app reads or writes inside the console: markdown rendered, text and Word files as text.
+"""Show any file an app reads or writes inside the console: markdown rendered, Word files as text, decks through their PDF.
 The viewer and the folder browser use it.
 """
 import json
@@ -28,6 +28,7 @@ KIND_BY_SUFFIX = {
     ".png": "image",
     ".jpg": "image",
     ".docx": "docx",
+    ".pptx": "slides",
 }
 
 TEXT_LIMIT = 2_000_000
@@ -65,7 +66,7 @@ def size_text(size):
 
 def json_text(path):
     """A JSON file laid out with indents, or as it is when it does not parse."""
-    raw = path.read_text(encoding="utf-8", errors="replace")[:TEXT_LIMIT]
+    raw = path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT]
     try:
         return json.dumps(json.loads(raw), indent=2, ensure_ascii=False)
     except ValueError:
@@ -76,7 +77,8 @@ def document_view(path):
     """Everything the viewer shows for one file: its kind, and its content when it is shown as text.
 
     Returns:
-        dict with "kind", "name", "size", "modified", and "html" or "text" for the kinds shown inline.
+        dict with "kind", "name", "size", "modified", "html" or "text" for the kinds shown inline,
+        and "has_pdf" for a deck whose PDF sits beside it.
     """
     stat = path.stat()
     kind = KIND_BY_SUFFIX.get(path.suffix.lower(), "other")
@@ -88,11 +90,12 @@ def document_view(path):
         "html": "",
         "text": "",
         "cut": stat.st_size > TEXT_LIMIT and kind in ["markdown", "text", "json"],
+        "has_pdf": kind == "slides" and path.with_suffix(".pdf").is_file(),
     }
     if kind == "markdown":
-        view["html"] = render_markdown(path.read_text(encoding="utf-8", errors="replace")[:TEXT_LIMIT])
+        view["html"] = render_markdown(path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT])
     elif kind == "text":
-        view["text"] = path.read_text(encoding="utf-8", errors="replace")[:TEXT_LIMIT]
+        view["text"] = path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT]
     elif kind == "json":
         view["text"] = json_text(path)
     elif kind == "docx":

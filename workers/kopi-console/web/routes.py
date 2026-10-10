@@ -137,6 +137,7 @@ def view_page(name, folder, relative):
         folder=folder,
         folder_label=files.FOLDERS[folder],
         relative=relative,
+        pdf_relative=str(Path(relative).with_suffix(".pdf")),
         parent="" if parent == "." else parent,
         document=documents.document_view(path),
         readers=files.readers_of(path) if folder == "output" else [],
@@ -154,6 +155,19 @@ def view_copy(name, folder, relative):
         flash(f"Copied to documents as {saved}. Every tool that reads it can now run on it.")
     except OSError as error:
         flash(f"Could not copy the file: {error}")
+    return redirect(url_for("console.view_page", name=name, folder=folder, relative=relative))
+
+
+@bp.route("/view/<name>/<folder>/<path:relative>/open", methods=["POST"])
+def view_open(name, folder, relative):
+    app = find_app(name)
+    path = files.resolve_file(app, folder, relative)
+    if path is None:
+        abort(404)
+    try:
+        files.open_file(path)
+    except OSError as error:
+        flash(f"Could not open the file: {error}")
     return redirect(url_for("console.view_page", name=name, folder=folder, relative=relative))
 
 

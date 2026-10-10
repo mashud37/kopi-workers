@@ -6,8 +6,6 @@ from pathlib import Path
 
 FAMILY = Path(__file__).resolve().parent.parent
 
-LINTER_BANDS = ("clarity", "firm", "aggressive")
-
 EDITOR_COMMANDS = [
     {
         "name": "analyze",
@@ -42,27 +40,6 @@ EDITOR_COMMANDS = [
     },
 ]
 
-LINTER_COMMANDS = [
-    {
-        "name": "lint",
-        "kind": "safe",
-        "help": "Lint a document and write the edited text",
-        "fields": [
-            {"name": "file", "type": "input", "help": "Document"},
-            {"name": "--band", "type": "choice", "choices": LINTER_BANDS, "help": "Editing intensity"},
-        ],
-    },
-    {
-        "name": "evaluate",
-        "kind": "safe",
-        "help": "Score the linter against Opus's edits",
-        "fields": [
-            {"name": "--limit", "type": "int", "help": "Stop after this many paragraphs"},
-            {"name": "--show", "type": "bool", "help": "Show the edits Opus did not make"},
-        ],
-    },
-]
-
 PRESENTER_COMMANDS = [
     {
         "name": "slides",
@@ -92,14 +69,6 @@ APPS = [
         "accepts": [".docx"],
         "keys": ["ANTHROPIC_API_KEY"],
         "commands": EDITOR_COMMANDS,
-    },
-    {
-        "name": "kopi-linter",
-        "blurb": "Edit a text file by rules alone, fully local",
-        "script": "manage.py",
-        "accepts": [".md", ".txt"],
-        "keys": [],
-        "commands": LINTER_COMMANDS,
     },
     {
         "name": "kopi-presenter",
