@@ -20,18 +20,18 @@ flowchart LR
     PR --> DECK[/".pptx and PDF"/]
 ```
 
-## Setup
+## Getting started
 
-Each tool installs from its own folder:
+1. Install Python 3.10 or newer from [python.org](https://www.python.org/downloads/). On Windows,
+   tick **Add python.exe to PATH** on the installer's first screen.
+2. Open PowerShell (a terminal on macOS or Linux) and run:
 
 ```powershell
-cd workers/kopi-editor
-pip install -r requirements.txt
-python manage.py install
+pip install kopi-workers
+kopi-console
 ```
 
-## Commands
-
-| Action | Command |
-|---|---|
-| Open a tool's menu | `cd workers/<tool>; python manage.py` |
+The console opens in the browser at `http://127.0.0.1:5191`. Its pages take the API key and the
+documents each tool works on. Each tool also runs on its own as a command of the same name,
+`kopi-editor` for example, which opens its menu. `pip install --upgrade kopi-workers` updates
+every tool.

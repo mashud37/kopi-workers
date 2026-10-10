@@ -1,6 +1,16 @@
 # Agent instructions stay on this machine, never on GitHub.
 CLAUDE.md
 
+# Package build output
+/build/
+/dist/
+
+# Documentation pages written by python manage.py docs, and Quarto's output
+/docs/*.md
+/docs/commands/
+/docs/_site/
+/docs/.quarto/
+
 # Secrets, wherever they appear
 secrets.yaml
 config.local.yaml

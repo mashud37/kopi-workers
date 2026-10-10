@@ -1,0 +1,36 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: kopi-workers
+  description: Copy-editing and presentation tools for academic prose.
+  site-url: https://mashud37.github.io/kopi-workers/
+  repo-url: https://github.com/mashud37/kopi-workers
+  favicon: logo.png
+  navbar:
+    logo: logo.png
+    left:
+      - href: index.md
+        text: Get started
+      - href: models.md
+        text: Models
+      - text: Tools
+        menu:
+          - kopi-editor.md
+          - kopi-presenter.md
+      - text: Commands
+        menu:
+          - commands/kopi-console.md
+          - commands/kopi-editor.md
+          - commands/kopi-presenter.md
+      - href: news.md
+        text: News
+    right:
+      - icon: github
+        href: https://github.com/mashud37/kopi-workers
+
+format:
+  html:
+    theme: cosmo
+    toc: true
