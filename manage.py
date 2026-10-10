@@ -9,7 +9,7 @@ from cli import bundle_cmd, check_cmd, docs_cmd, install, smoke_cmd, ui
 _ACTIONS = [
     {
         "label": "Development wheel",
-        "hint": "every app at HEAD, version marked as a development one",
+        "hint": "the released apps as they are in the working tree, version marked as a development one",
         "run": partial(bundle_cmd.run, dev=True),
     },
     {
@@ -53,7 +53,7 @@ def _parser():
     parser = argparse.ArgumentParser(prog="manage.py", description="Build the kopi-workers package")
     sub = parser.add_subparsers(dest="command")
     bundle = sub.add_parser("bundle", help="Build the wheel from the apps workers.yaml releases")
-    bundle.add_argument("--dev", action="store_true", help="include every app as it is in the working tree and mark the version")
+    bundle.add_argument("--dev", action="store_true", help="take the released apps as they are in the working tree and mark the version")
     sub.add_parser("check", help="Hold every app against the release gate")
     sub.add_parser("docs", help="Copy the guides and write each app's commands page into docs/")
     sub.add_parser("test", help="Install the newest wheel in a fresh environment and run each command")

@@ -35,11 +35,11 @@ def load():
     return manifest
 
 
-def chosen_apps(manifest, include_unreleased):
-    """The apps this build takes: the released ones, or every one for a development build."""
+def chosen_apps(manifest):
+    """The apps every build takes: the released ones; an app still in development never ships."""
     names = []
     for name, entry in manifest["apps"].items():
-        if entry["released"] or include_unreleased:
+        if entry["released"]:
             names.append(name)
     return names
 

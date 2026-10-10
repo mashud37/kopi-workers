@@ -29,16 +29,16 @@ def export_apps(names, apps_folder, settings, commit):
 
 
 def run(dev=False):
-    """Build one wheel holding every released app at HEAD, or every app as it is in the working
-    tree for a development build.
+    """Build one wheel holding every released app, at HEAD or, for a development build, as it is
+    in the working tree.
 
     Raises:
-        SystemExit: no app is released and this is not a development build.
+        SystemExit: no app is released.
     """
     settings = manifest.load()
-    names = manifest.chosen_apps(settings, dev)
+    names = manifest.chosen_apps(settings)
     if not names:
-        raise SystemExit("No app is released yet. Mark one in workers.yaml, or build with --dev.")
+        raise SystemExit("No app is released yet. Mark one in workers.yaml.")
 
     ui.step("Plan")
     source = "as they are in the working tree" if dev else "as committed at HEAD"

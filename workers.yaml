@@ -1,6 +1,6 @@
 package: kopi-workers
 version: "0.1.0"
-summary: "Copy-editing and presentation tools for academic prose: edit a manuscript, measure what rules alone can do, and turn a paper into a slide deck."
+summary: "Copy-editing and presentation tools for academic prose: edit a manuscript and turn a paper into a slide deck."
 license: "MIT"
 python: ">=3.10"
 
@@ -10,7 +10,7 @@ base:
 
 apps:
   kopi-editor:
-    released: false
+    released: true
     leave_out:
       - tests
   kopi-linter:
@@ -21,8 +21,8 @@ apps:
     released: false
     leave_out: []
   kopi-presenter:
-    released: false
+    released: true
     leave_out: []
   kopi-console:
-    released: false
+    released: true
     leave_out: []
