@@ -36,8 +36,7 @@ def run(file, lang=None):
     state = proof(state)
     state = finalize(state)
 
-    from datetime import datetime
-    run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
+    run_dir = common.run_folder(path, "proof")
     written = write_outputs(state, path, run_dir)
     edited, changelog, diff = written["edited"], written["report"], written["diff"]
     final = state["counts"].get("final", words)

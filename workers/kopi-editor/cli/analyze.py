@@ -1,7 +1,7 @@
 """Run the deterministic diagnosis and print a readability, wordiness, and redundancy
-summary, writing the full report to `output/<name>_analysis.md`.
+summary, writing the full report into a new folder for this run.
 """
-from cli import common, config, ui
+from cli import common, ui
 
 
 def run(file):
@@ -60,5 +60,5 @@ def run(file):
         ui.step("Key terms")
         ui.info(", ".join(t for t, _ in terms))
 
-    report_path = report.write_analysis(diag, text, path.name, config.OUTPUT_DIR)
+    report_path = report.write_analysis(diag, text, path.name, common.run_folder(path, "analyze"))
     ui.ok(f"full report: {report_path}")

@@ -96,8 +96,6 @@ def _report_summary(state, original, written):
 
 
 def run(file, reduction=None, lang=None, llm=None, verbose=False):
-    from datetime import datetime
-
     from kopi.output import write_outputs
     from kopi.pipeline import prepare
 
@@ -134,9 +132,7 @@ def run(file, reduction=None, lang=None, llm=None, verbose=False):
 
     state = _finalize_text(state, lang, llm)
 
-    # Each run's outputs go in their own output/<document> <timestamp>/ folder, so
-    # repeated runs (and multiple documents) never overwrite or interleave.
-    run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"
+    run_dir = common.run_folder(path, "edit")
 
     # Before/after comparison (same measures on each version + key-term survival),
     # merged into the single edit report rather than a separate file.

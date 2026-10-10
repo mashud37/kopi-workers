@@ -34,6 +34,6 @@ Set `api.anthropic_key` in `config.local.yaml`, or the `ANTHROPIC_API_KEY` envir
 |---|---|
 | Build a deck | `python manage.py slides paper.docx` |
 | Review and revise the plan before building | `python manage.py slides paper.docx --review` |
-| Rebuild from a saved plan without a model call | `python manage.py slides paper.docx --plan output/paper.json` |
+| Rebuild from a saved plan without a model call | `python manage.py slides paper.docx --plan "output/paper slides <time>/paper.json"` |
 | Show the configuration | `python manage.py config` |
 | Check dependencies and create `config.local.yaml` | `python manage.py install` |

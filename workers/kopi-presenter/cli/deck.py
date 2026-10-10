@@ -1,6 +1,7 @@
 """Turn a manuscript or outline into a styled .pptx and a PDF: parse the input, plan the slides with a model, apply the house rules, then render."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from cli import ui
@@ -36,9 +37,12 @@ def run(file_name: str, options: dict) -> None:
     config = settings.load_config()
     if options["emoji"]:
         config.setdefault("render", {})["icons"] = "emoji"
-    output_dir = Path(options["output"]) if options["output"] else settings.OUTPUT_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
+    if options["output"]:
+        output_dir = Path(options["output"])
+    else:
+        output_dir = settings.OUTPUT_DIR / f"{stem} slides {datetime.now():%Y-%m-%d %H%M%S}"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     _print_step_plan(input_path, options)
     plan = _build_plan(input_path, options, config)

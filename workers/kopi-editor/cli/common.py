@@ -1,4 +1,5 @@
 """Shared helpers for the analyze / proof / edit routes."""
+from datetime import datetime
 from pathlib import Path
 
 from cli import config
@@ -24,3 +25,8 @@ def load_text(file: str) -> dict:
     path = resolve_docx(file)
     text = extract_docx(path)
     return {"path": path, "text": text, "words": len(text.split())}
+
+
+def run_folder(path: Path, command: str) -> Path:
+    """The new folder for one run's outputs, named by document, command and time, so no run overwrites another."""
+    return config.OUTPUT_DIR / f"{path.stem} {command} {datetime.now():%Y-%m-%d %H%M%S}"

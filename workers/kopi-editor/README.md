@@ -28,7 +28,6 @@ also drops redundant sentences.
 
 ```powershell
 pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 python manage.py install
 python manage.py settings
 ```
