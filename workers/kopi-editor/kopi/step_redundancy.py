@@ -106,12 +106,13 @@ def _load_redundancy_model() -> dict:
     """Import spaCy plus sentence-transformers and load the parser.
 
     Raises ImportError if a package is missing, OSError if the spaCy model
-    itself was never downloaded; the caller tells the two apart.
+    could not be downloaded; the caller tells the two apart.
     """
     import numpy as np
-    import spacy
     from sentence_transformers import SentenceTransformer
-    nlp = spacy.load("en_core_web_sm")
+
+    from kopi.language_model import load_english
+    nlp = load_english()
     return {"nlp": nlp, "SentenceTransformer": SentenceTransformer, "np": np}
 
 
@@ -180,7 +181,7 @@ def run(state: dict) -> dict:
     except OSError:
         state["log"].append({
             "step": "Step 5: Redundancy scan",
-            "detail": "skipped, run: python -m spacy download en_core_web_sm",
+            "detail": "skipped, spaCy's English model could not be downloaded",
             "para": None,
         })
         return {**state, "redundant_pairs": [], "merge_candidates": []}

@@ -23,9 +23,8 @@ RUN ollama serve & sleep 8 && ollama pull ${KOPI_MODEL} && (pkill -f "ollama ser
 
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
 RUN python -m spacy download en_core_web_sm
-RUN python -c "import language_tool_python; language_tool_python.LanguageTool('en-GB')" || true
 
 COPY kopi/ ./kopi/
 COPY cloud/serve.py entrypoint_serve.sh ./

@@ -145,7 +145,7 @@ def _finish_deploy(rec):
 
 def _stage_adapter():
     src = Path(os.environ.get("KOPI_ADAPTER_DIR")
-               or config.ROOT.parent / "kopi-learner" / "data" / "adapters" / "sft")
+               or config.DATA_ROOT.parent / "kopi-learner" / "data" / "adapters" / "sft")
     dst = config.ROOT / "adapter"
     dst.mkdir(exist_ok=True)
     for p in dst.iterdir():

@@ -12,7 +12,6 @@ _SECTION_KEYS = [
     "Step 6: Merge",
     "Step 7: Reduce",
     "Step 8: Plain language",
-    "Step 9: Proofing",
     "Step 10: Concision",
     "Step 11: Evaluate",
     "Step 12: Final check",
@@ -38,7 +37,6 @@ def _count_table(counts: dict) -> str:
         ("After merge", counts.get("step6_merge", "-")),
         ("After reduce", counts.get("step7", "-")),
         ("After plain language", counts.get("step8", "-")),
-        ("After proofing", counts.get("step9", "-")),
         ("After concision (LLM)", counts.get("step10", "-")),
         ("Final", counts.get("final", "-")),
     ]
@@ -147,36 +145,6 @@ def _evaluation_lines(metrics: dict) -> list[str]:
     return lines
 
 
-def _write_review(review_items: list, source_path: Path, review_path: Path) -> None:
-    """Write the repeated-suggestion sheet the author ticks through once."""
-    lines = [
-        "# kopi-editor: Proofing Review",
-        "",
-        f"**Source:** {source_path.name}  ",
-        f"**Date:** {date.today().isoformat()}  ",
-        "",
-        "These suggestions appeared multiple times. Decide once: mark `[x]` to apply globally.",
-        "",
-        "---",
-        "",
-    ]
-    for item in review_items:
-        repls = " / ".join(f"`{r}`" for r in item["replacements"])
-        paras = ", ".join(item["paras"])
-        lines += [
-            f"## `{item['original']}` -> {repls}",
-            "",
-            f"- Rule: `{item['rule_id']}`",
-            f"- Appears: {item['count']}x ({paras})",
-            f"- Message: {item['message']}",
-            "",
-            "- [ ] Apply all",
-            "- [ ] Skip all",
-            "",
-        ]
-    review_path.write_text("\n".join(lines), encoding="utf-8-sig")
-
-
 def _write_diff(state: dict, source_path: Path, diff_path: Path) -> Path | None:
     """Write the unified diff, or None when the edit changed nothing."""
     original = state.get("original_text", "")
@@ -242,7 +210,7 @@ def _write_side_by_side(state: dict, source_path: Path, path: Path) -> Path | No
 def write_outputs(
     state: dict, source_path: Path, out_dir: Path = None, comparison: list[str] | None = None
 ) -> dict:
-    """Write the edited text, the report, the review sheet, the side-by-side table and the diff.
+    """Write the edited text, the report, the side-by-side table and the diff.
 
     Returns:
         Mapping with `edited`, `report`, `side_by_side` and `diff`; `diff` is None when the
@@ -259,7 +227,6 @@ def write_outputs(
     # plain '_changelog.md' is written.
     log_path = out_dir / (f"{stem}_report.md" if comparison else f"{stem}_changelog.md")
     diff_path = out_dir / f"{stem}.diff"
-    review_path = out_dir / f"{stem}_review.md"
     side_by_side_path = out_dir / f"{stem}_side-by-side.md"
 
     edited_path.write_text(state["final_text"], encoding="utf-8-sig")
@@ -281,10 +248,6 @@ def write_outputs(
         lines += _evaluation_lines(state["eval_metrics"])
 
     log_path.write_text("\n".join(lines), encoding="utf-8-sig")
-
-    review_items = state.get("review_items", [])
-    if review_items:
-        _write_review(review_items, source_path, review_path)
 
     return {
         "edited": edited_path,

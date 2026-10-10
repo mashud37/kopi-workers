@@ -28,7 +28,7 @@ def run(file):
     finally:
         sp.done()
     if nlp is None:
-        raise SystemExit("spaCy model missing: run `python manage.py update` (downloads en_core_web_sm).")
+        raise SystemExit("spaCy's English model could not be downloaded: check the internet connection and run again.")
 
     sp = StepSpinner("analysing document")
     sp.start()

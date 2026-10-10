@@ -1,5 +1,5 @@
 """Apply the safe mechanical fixes with no model call (fillers, padding, cliches, long
-words, grammar), writing the edited text and a change log to `output/`.
+words), writing the edited text and a change log to `output/`.
 """
 from cli import common, config, ui
 
@@ -33,8 +33,8 @@ def run(file, lang=None):
     # reports "at target" rather than a spurious shortfall.
     state = prepare(text, words, lang)
     state["run_info"] = {"backend": "skip", "model": None}
-    proof(state)
-    finalize(state)
+    state = proof(state)
+    state = finalize(state)
 
     from datetime import datetime
     run_dir = config.OUTPUT_DIR / f"{path.stem} {datetime.now():%Y-%m-%d %H%M%S}"

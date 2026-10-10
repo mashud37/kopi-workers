@@ -17,8 +17,8 @@ _RELCL_SKIP_SUFFIX = ("ly", "ing", "tion", "ment", "ance", "ence")
 def _get_nlp():
     global _nlp
     if _nlp is None:
-        import spacy
-        _nlp = spacy.load("en_core_web_sm")
+        from kopi.language_model import load_english
+        _nlp = load_english()
     return _nlp
 
 
@@ -206,7 +206,7 @@ def run(state: dict) -> dict:
     except OSError:
         state["log"].append({
             "step": "Step 4: Syntax",
-            "detail": "skipped, run: python -m spacy download en_core_web_sm",
+            "detail": "skipped, spaCy's English model could not be downloaded",
             "para": None,
         })
         return state

@@ -68,8 +68,8 @@ def _readability_flags(restored: str, ease_before) -> dict:
 def _syntax_flags(restored: str, dep_before) -> list:
     flags = []
     try:
-        import spacy
-        nlp = spacy.load("en_core_web_sm")
+        from kopi.language_model import load_english
+        nlp = load_english()
         dep_after = _mean_dep_depth(restored, nlp)
         if dep_before is not None and dep_after is not None:
             dep_delta = dep_after - dep_before

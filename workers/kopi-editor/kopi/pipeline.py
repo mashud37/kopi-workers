@@ -2,18 +2,15 @@
 runs the diagnosis core, then lets each route perform its own actions.
 `prepare` builds the common state.
 """
-from functools import lru_cache
-
 from kopi import diagnose
+from kopi.language_model import load_english
 from kopi.quote_guard import guard, unguard
 
 
-@lru_cache(maxsize=1)
 def load_nlp():
-    """Load (and cache) the spaCy pipeline, or None if unavailable."""
+    """The spaCy pipeline, downloaded on first use, or None if it cannot be had."""
     try:
-        import spacy
-        return spacy.load("en_core_web_sm")
+        return load_english()
     except Exception:
         return None
 
@@ -66,7 +63,6 @@ def prepare(text: str, target: int, lang: str = "british", reduction: int = 0) -
         "merge_candidates": [],
         "flags": [],
         "llm_stats": {},
-        "review_items": [],
         "readability_before": readability_before,
         "original_text": text,
         "eval_metrics": {},

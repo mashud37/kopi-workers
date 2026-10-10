@@ -40,7 +40,7 @@ def run():
             ui.ok("created env.yaml")
 
     for d in (config.INPUT_DIR, config.OUTPUT_DIR):
-        d.mkdir(exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
         (d / ".gitkeep").touch(exist_ok=True)
     ui.ok("input/ and output/ ready")
 
@@ -58,11 +58,12 @@ def run():
             ui.warn(f"{mod}: MISSING (pip install {pkg})")
 
     try:
-        import spacy
-        spacy.load("en_core_web_sm")
-        ui.ok("spaCy model en_core_web_sm: ok")
-    except Exception:
-        ui.warn("spaCy model missing (run: python -m spacy download en_core_web_sm)")
+        from kopi.language_model import MODEL, load_english
+        ui.info(f"loading spaCy model {MODEL} (downloads once)")
+        load_english()
+        ui.ok(f"spaCy model {MODEL}: ok")
+    except Exception as error:
+        ui.warn(f"spaCy model did not load: {error}")
 
     try:
         from kopi.step_concision import _EMBEDDING_MODEL, _get_model

@@ -1,8 +1,7 @@
-"""Apply only safe mechanical fixes (filler/padding removal, cliche and
-long-word substitution, LanguageTool grammar) with no LLM judgement. Sentence
-removal and restructuring are excluded; quotations are protected by `quote_guard`.
+"""Apply only safe mechanical fixes (filler and padding removal, cliche and long-word substitution) with no model call.
+Sentence removal and restructuring are left out, and quotations are protected by `quote_guard`.
 """
-from kopi import step_fillers, step_plain, step_proofing, step_reduce
+from kopi import step_fillers, step_plain, step_reduce
 from kopi.quote_guard import word_count
 
 
@@ -13,7 +12,6 @@ def proof(state: dict) -> dict:
     state = step_fillers.run(state)   # detect filler phrases -> state["fillers"]
     state = step_reduce.run(state)    # apply all fillers + padding tails (no sentence removal)
     state = step_plain.run(state)     # clichés + long->short word substitutions
-    state = step_proofing.run(state)  # grammar / spelling (skips quoted spans itself)
 
     state = {**state, "target": real_target}
     state["counts"]["final"] = word_count(state["text"], state["qmap"])
