@@ -18,6 +18,7 @@
     <a href="{{ url_for('console.app_page', name=each.name) }}"{% if request.path == url_for('console.app_page', name=each.name) %} aria-current="page"{% endif %}>{{ each.name.removeprefix("kopi-") | capitalize }}</a>
     {% endfor %}
     <a href="{{ url_for('console.jobs_page') }}"{% if request.path.startswith("/jobs") %} aria-current="page"{% endif %}>Jobs<span class="badge" data-running{% if not running %} hidden{% endif %}><span class="visually-hidden">running: </span>{{ running }}</span></a>
+    <a href="{{ url_for('console.models_page') }}"{% if request.path.startswith("/models") %} aria-current="page"{% endif %}>Models</a>
     <a href="{{ url_for('console.keys_page') }}"{% if request.path.startswith("/keys") %} aria-current="page"{% endif %}>Keys</a>
   </nav>
   <button type="button" class="icon theme-toggle" data-theme-toggle aria-label="Theme" title="Theme: follow the system, light, or dark">

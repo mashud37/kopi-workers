@@ -8,30 +8,14 @@ from settings import SETTINGS
 
 OPTIONS_FILE_NAME = "options.json"
 
-CLAUDE_MODELS = {
-    "claude-haiku-4-5": "Claude Haiku 4.5: cheapest, $1 in, $5 out per million tokens",
-    "claude-sonnet-5-5": "Claude Sonnet 5.5: $2 in, $10 out per million tokens",
-    "claude-opus-5-5": "Claude Opus 5.5: strongest, $4 in, $20 out per million tokens",
-}
-
 # Each app's settings: the environment variable it arrives in, its label, and its choices,
 # each value with the words shown for it.
 OPTIONS = {
     "kopi-editor": [
-        {"variable": "KOPI_LLM", "label": "Who edits", "choices": {
-            "api": "Claude, through the Anthropic API",
-            "cloud": "Your Qwen server on Google Cloud",
-            "local": "Ollama on this computer",
-            "skip": "No model: rules only",
-        }},
-        {"variable": "KOPI_ANTHROPIC_MODEL", "label": "Claude model", "choices": CLAUDE_MODELS},
         {"variable": "KOPI_LANG", "label": "Spelling", "choices": {
             "british": "British",
             "american": "American",
         }},
-    ],
-    "kopi-presenter": [
-        {"variable": "KOPI_PRESENTER_MODEL", "label": "Claude model", "choices": CLAUDE_MODELS},
     ],
 }
 
@@ -88,9 +72,10 @@ def environment_for(app_name):
     """The settings a run of this app receives. A variable already set in the console's own environment wins."""
     chosen = load_store().get(app_name, {})
     environment = {}
-    for variable, value in chosen.items():
-        if not os.environ.get(variable):
-            environment[variable] = value
+    for option in OPTIONS.get(app_name, []):
+        variable = option["variable"]
+        if chosen.get(variable) and not os.environ.get(variable):
+            environment[variable] = chosen[variable]
     return environment
 
 

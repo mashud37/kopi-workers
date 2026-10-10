@@ -40,6 +40,5 @@ keeps the original paragraph instead. Quotations are never sent for editing.
 
 ## Settings
 
-**Who edits** chooses the model behind **edit**; [Models](models.md) explains the choices. There
-is no default Claude model, so every paid run is a deliberate choice. **Spelling** is British or
-American.
+The **Models** page chooses the model behind **edit**; [Models](models.md) explains the choices.
+**Spelling**, on the tool's page, is British or American.

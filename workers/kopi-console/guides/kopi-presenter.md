@@ -23,7 +23,7 @@ LibreOffice where PowerPoint is not installed, exports the PDF.
 | **emoji** | Uses colour emoji in place of the default icons |
 | **no-pdf** | Builds the deck without exporting a PDF |
 
-## Settings
+## Model
 
-**Claude model** chooses which Claude writes the plan; each choice shows its price per million
-tokens. A run prints its cost when it finishes.
+The **Models** page chooses which model writes the plan; [Models](models.md) explains the choices.
+A run prints its cost when it finishes.

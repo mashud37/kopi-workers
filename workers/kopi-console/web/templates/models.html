@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Models · kopi{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="heading">
+    <h1>Models</h1>
+    <p class="supporting">Which model writes for each app, and where it runs. Keys go under Keys.</p>
+  </div>
+</div>
+
+<form method="post" action="{{ url_for('console.models_save') }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  {% for app in page.apps %}
+  <section class="card model-card" aria-labelledby="{{ app.name }}-title">
+    <h2 class="title" id="{{ app.name }}-title">{{ app.name }}</h2>
+    <div class="routes" role="radiogroup" aria-label="Where {{ app.name }}'s model runs">
+      <label class="route"><input type="radio" name="{{ app.name }}|route" value=""{% if not app.chosen.route %} checked{% endif %}><span class="route-name">Its own settings</span><span class="route-detail">Whatever its settings file says</span></label>
+      {% for value, route in page.routes.items() %}
+      <label class="route"><input type="radio" name="{{ app.name }}|route" value="{{ value }}"{% if app.chosen.route == value %} checked{% endif %}><span class="route-name">{{ route.label }}</span><span class="route-detail">{{ route.detail }}</span></label>
+      {% endfor %}
+    </div>
+
+    <div class="route-fields when-claude">
+      {% for slot in app.slots %}
+      <label class="field"><span>{{ slot.label }}</span>
+        <select name="{{ app.name }}|{{ slot.setting }}|claude">
+          {% if slot.default %}
+          <option value="" data-detail="The app's own choice">Default: {% for model in page.claude_models if model.value == slot.default %}{{ model.label }}{% endfor %}</option>
+          {% else %}
+          <option value="" data-detail="The app's settings file names the model">From its settings file</option>
+          {% endif %}
+          {% for model in page.claude_models %}<option value="{{ model.value }}" data-detail="{{ model.detail }}"{% if app.chosen.route == 'claude' and app.chosen[slot.setting] == model.value %} selected{% endif %}>{{ model.label }}</option>{% endfor %}
+        </select>
+        <small class="hint">{{ slot.help }}</small>
+      </label>
+      {% endfor %}
+    </div>
+
+    <div class="route-fields when-server">
+      <div class="field wide"><span>Server address</span>
+        <div class="combo">
+          <input type="text" name="{{ app.name }}|base_url" value="{{ app.chosen.base_url }}" placeholder="https://… ending in /v1" data-address>
+          <button type="button" class="text" data-pick-address>Choose</button>
+        </div>
+        <small class="hint when-service">The provider's address. Its key goes on the Keys page as KOPI_LLM_API_KEY.</small>
+        <small class="hint when-computer">Start the program first; a server on this computer needs no key.</small>
+        <small class="hint when-cloud">Choose the server kopi-editor's deploy put on Cloud Run; its key goes to the Keys page by itself.</small>
+      </div>
+      {% for slot in app.slots %}
+      <div class="field"><span>{{ slot.label }}</span>
+        <div class="combo">
+          <input type="text" name="{{ app.name }}|{{ slot.setting }}|server" value="{% if app.chosen.route not in ['', 'claude'] %}{{ app.chosen[slot.setting] }}{% endif %}" placeholder="For example qwen3:8b" data-model-name>
+          <button type="button" class="text" data-list-models data-app="{{ app.name }}" data-list-url="{{ url_for('console.models_list') }}">Show models</button>
+        </div>
+        <small class="hint">{{ slot.help }}</small>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <div class="form-actions"><button class="filled">Save</button></div>
+</form>
+
+<script type="application/json" id="addresses">{{ page.addresses | tojson }}</script>
+<p class="meta footnote">{{ page.file }}</p>
+{% endblock %}

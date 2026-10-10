@@ -17,7 +17,7 @@ from flask import (
 )
 
 from registry import get_app
-from web import documents, files, jobs, keys, mascot, options
+from web import documents, files, jobs, keys, mascot, models, options
 
 bp = Blueprint("console", __name__)
 
@@ -203,6 +203,34 @@ def app_open(name, folder):
     if inside:
         return redirect(url_for("console.browse_page", name=name, folder=folder, **{"in": inside}))
     return redirect(url_for("console.app_page", name=name))
+
+
+# ---- Models ----
+
+@bp.route("/models")
+def models_page():
+    return render_template("models.html", page=models.page_view())
+
+
+@bp.route("/models/save", methods=["POST"])
+def models_save():
+    try:
+        models.save_choices(request.form)
+        flash("Saved. The next run of each app uses these models.")
+    except ValueError as error:
+        flash(str(error))
+    return redirect(url_for("console.models_page"))
+
+
+@bp.route("/models/list", methods=["POST"])
+def models_list():
+    try:
+        names = models.list_models(request.form.get("app", ""), request.form.get("base_url", "").strip())
+    except ValueError as error:
+        return jsonify({"error": str(error)})
+    if not names:
+        return jsonify({"error": "The server lists no models. Download one first, for example with ollama pull."})
+    return jsonify({"models": names})
 
 
 # ---- Keys ----

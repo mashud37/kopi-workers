@@ -82,6 +82,15 @@ def add_key(name, variable, value, everywhere):
     save_store(store)
 
 
+def use_server_key(app_name, name, value):
+    """Store a deployed server's key under its name and give it to this app as KOPI_LLM_API_KEY."""
+    store = load_store()
+    store["keys"][name] = {"variable": "KOPI_LLM_API_KEY", "value": value}
+    chosen = store["assign"].setdefault(app_name, {})
+    chosen["KOPI_LLM_API_KEY"] = name
+    save_store(store)
+
+
 def delete_key(name):
     """Remove a key and every assignment that pointed at it."""
     store = load_store()

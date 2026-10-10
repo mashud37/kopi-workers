@@ -26,9 +26,9 @@ the other tools.
 
 ## Keys
 
-Editing with Claude and building slides call a language model and need an Anthropic API key;
-diagnosing and proofreading do not. Add a key once on the **Keys** page and every tool that needs
-it gets it. Commands that call a paid model ask before they run.
+Editing and building slides call a language model, chosen on the **Models** page; diagnosing and
+proofreading do not. Claude and other hosted services need a key: add it once on the **Keys** page
+and every tool that needs it gets it. Commands that call a paid model ask before they run.
 
 ## A first run
 

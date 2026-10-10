@@ -67,7 +67,10 @@ APPS = [
         "blurb": "Copy-edit a Word document: diagnose it, proofread it, or edit it with a model",
         "script": "manage.py",
         "accepts": [".docx"],
-        "keys": ["ANTHROPIC_API_KEY"],
+        "keys": [
+            "ANTHROPIC_API_KEY",
+            "KOPI_LLM_API_KEY",
+        ],
         "commands": EDITOR_COMMANDS,
     },
     {
@@ -75,7 +78,10 @@ APPS = [
         "blurb": "Turn a manuscript or outline into a styled slide deck and a PDF",
         "script": "manage.py",
         "accepts": [".docx", ".txt", ".md"],
-        "keys": ["ANTHROPIC_API_KEY"],
+        "keys": [
+            "ANTHROPIC_API_KEY",
+            "KOPI_LLM_API_KEY",
+        ],
         "commands": PRESENTER_COMMANDS,
     },
 ]
