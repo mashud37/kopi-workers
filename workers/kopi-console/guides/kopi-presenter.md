@@ -12,9 +12,10 @@ LibreOffice where PowerPoint is not installed, exports the PDF.
 
 ## Use it
 
-1. Drop a manuscript or an outline on the page.
+1. Drop a manuscript or an outline on the page. Documents already dropped on the editor's page
+   are listed too.
 2. Run **slides**. **venue** adds a venue line, such as `ICA 2027`.
-3. The deck, its PDF and the slide plan appear under **Output**.
+3. The deck, its PDF and the slide plan appear in a new dated folder under **Results**.
 
 | Option | What it does |
 |---|---|

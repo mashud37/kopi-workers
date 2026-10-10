@@ -9,7 +9,7 @@ import threading
 import time
 from datetime import datetime
 
-from registry import app_folder, data_folder, get_app, get_command
+from registry import app_folder, documents_folder, get_app, get_command
 from web import keys, options
 
 STATUS_LABEL = {
@@ -38,7 +38,7 @@ LOCK = threading.Lock()
 
 # ---- Starting a job ----
 
-def form_flags(app, command, values):
+def form_flags(command, values):
     """Turn a submitted form into the arguments for one command; a chosen input file becomes its full path.
 
     Raises:
@@ -62,7 +62,7 @@ def form_flags(app, command, values):
         if field["type"] == "choice" and raw not in field["choices"]:
             raise ValueError(f"{name} must be one of {', '.join(field['choices'])}.")
         if field["type"] == "input":
-            raw = str(input_path(app, raw))
+            raw = str(input_path(raw))
         if name.startswith("-"):
             flags.extend([name, raw])
         else:
@@ -70,16 +70,15 @@ def form_flags(app, command, values):
     return positionals + flags
 
 
-def input_path(app, file_name):
-    """The full path of a file in the app's input folder.
+def input_path(file_name):
+    """The full path of a file in the shared documents folder.
 
     Raises:
         ValueError: the name reaches outside the folder, or no such file is there.
     """
-    folder = data_folder(app) / "input"
-    path = folder / file_name
+    path = documents_folder() / file_name
     if path.name != file_name or not path.is_file():
-        raise ValueError(f"There is no {file_name} in {app['name']}'s input folder.")
+        raise ValueError(f"There is no {file_name} in the documents folder.")
     return path
 
 
@@ -99,7 +98,7 @@ def start_job(app_name, command_name, values):
     if command is None:
         raise ValueError(f"Unknown command: {app_name} {command_name}.")
 
-    argv = build_argv(app, command, form_flags(app, command, values))
+    argv = build_argv(app, command, form_flags(command, values))
     environment = dict(os.environ)
     environment.update(options.environment_for(app_name))
     environment.update(keys.environment_for(app_name))

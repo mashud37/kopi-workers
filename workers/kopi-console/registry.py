@@ -133,8 +133,15 @@ def app_folder(app):
     return FAMILY / app["name"]
 
 
+def documents_folder():
+    """The one folder of documents every app reads from: under KOPI_DATA when it is set, the console's own input folder otherwise."""
+    if os.environ.get("KOPI_DATA"):
+        return Path(os.environ["KOPI_DATA"]) / "documents"
+    return Path(__file__).resolve().parent / "input"
+
+
 def data_folder(app):
-    """The folder holding the app's input and output: under KOPI_DATA when it is set, the app's own folder otherwise."""
+    """The folder holding the app's results: under KOPI_DATA when it is set, the app's own folder otherwise."""
     if os.environ.get("KOPI_DATA"):
         return Path(os.environ["KOPI_DATA"]) / app["name"]
     return app_folder(app)

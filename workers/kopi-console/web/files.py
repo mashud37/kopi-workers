@@ -1,28 +1,31 @@
-"""Find, receive and open the files in each app's input and output folders, never reaching outside them.
+"""Find, receive and open the shared documents and each app's results, never reaching outside those folders.
 The app pages, the folder browser and the viewer use these.
 """
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
-from registry import data_folder
+from registry import APPS, data_folder, documents_folder
 from settings import SETTINGS
 from web import documents
 
 FOLDERS = {
-    "input": "Input",
-    "output": "Output",
+    "input": "Documents",
+    "output": "Results",
 }
 
 
 def folder_path(app, folder):
-    """The full path of one of the app's two folders.
+    """The full path of the shared documents folder (input) or the app's results folder (output).
 
     Raises:
         ValueError: the folder is neither input nor output.
     """
     if folder not in FOLDERS:
         raise ValueError(f"No folder called {folder}.")
+    if folder == "input":
+        return documents_folder()
     return data_folder(app) / folder
 
 
@@ -64,7 +67,7 @@ def card_rows(app, folder):
 
 
 def input_choices(app):
-    """The files in the app's input folder that it can read, newest first, for the run forms."""
+    """The shared documents this app can read, newest first, for the run forms."""
     folder = folder_path(app, "input")
     if not folder.is_dir():
         return []
@@ -77,7 +80,7 @@ def input_choices(app):
 
 
 def save_upload(app, upload):
-    """Save one dropped file into the app's input folder, replacing a file of the same name.
+    """Save one dropped file into the shared documents folder, replacing a file of the same name.
 
     Raises:
         ValueError: the file has no usable name, or the app does not read its kind.
@@ -91,6 +94,25 @@ def save_upload(app, upload):
     folder.mkdir(parents=True, exist_ok=True)
     upload.save(folder / file_name)
     return file_name
+
+
+def readers_of(path):
+    """The names of the apps that can read this file."""
+    return [app["name"] for app in APPS if path.suffix.lower() in app["accepts"]]
+
+
+def copy_to_documents(path):
+    """Copy a result into the shared documents folder, so any app can run on it; return the name it was saved under.
+
+    A name already taken gets the result's folder name in front, so nothing in the documents folder is replaced.
+    """
+    folder = documents_folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / path.name
+    if target.exists():
+        target = folder / f"{path.parent.name} {path.name}"
+    shutil.copy2(path, target)
+    return target.name
 
 
 def open_folder(app, folder, relative):

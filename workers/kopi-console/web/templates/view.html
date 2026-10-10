@@ -18,6 +18,13 @@
     <p class="meta document-meta">{{ document.size }} · changed {{ document.modified }}</p>
   </div>
   <div class="actions">
+    <a class="button text" href="{{ url_for('console.browse_page', name=app.name, folder=folder, **({'in': parent} if parent else {})) }}">{{ icon.back() }}Back to {% if parent %}{{ parent }}{% else %}{{ folder_label }}{% endif %}</a>
+    {% if readers %}
+    <form method="post" action="{{ url_for('console.view_copy', name=app.name, folder=folder, relative=relative) }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button class="tonal">{{ icon.copy_in() }}Copy to documents<span class="visually-hidden">, for {{ readers | join(", ") }}</span></button>
+    </form>
+    {% endif %}
     <a class="button text" href="{{ raw_url }}" target="_blank" rel="noopener">{{ icon.open_new() }}{% if document.kind in ["docx", "other"] %}Download{% else %}Open on its own<span class="visually-hidden"> (new tab)</span>{% endif %}</a>
   </div>
 </div>

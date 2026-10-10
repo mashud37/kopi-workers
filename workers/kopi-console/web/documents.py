@@ -44,9 +44,13 @@ def render_markdown(text):
 
 
 def docx_text(path):
-    """The paragraphs of a Word file as plain text, one per line."""
+    """The paragraphs of a Word file as plain text, one per line, or a short note when the file cannot be read."""
     import docx
-    document = docx.Document(str(path))
+    from docx.opc.exceptions import PackageNotFoundError
+    try:
+        document = docx.Document(str(path))
+    except (PackageNotFoundError, KeyError, ValueError, OSError):
+        return "This Word file could not be read. It may be damaged, or still open in Word."
     return "\n\n".join(paragraph.text for paragraph in document.paragraphs)
 
 

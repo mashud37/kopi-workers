@@ -8,21 +8,21 @@ app through its own script in its own folder, holds no keys, and answers only on
 
 ```mermaid
 flowchart TD
-    USER["App page"] -->|"drop a file"| INPUT[("App's input folder")]
+    USER["App page"] -->|"drop a file"| INPUT[("Shared documents folder")]
     USER -->|"run a command"| JOB["Job"]
     JOB --> CHILD["App's own script<br/>in its own folder"]
     INPUT --> CHILD
     CHILD -->|"live log"| USER
-    CHILD --> OUTPUT[("App's output folder")]
+    CHILD --> OUTPUT[("App's results folder,<br/>one folder per run")]
 ```
 
 Each app page has:
 
 | Part | What it does |
 |---|---|
-| Drop area | Drop files anywhere on the page, or click to choose them; they are copied into the app's `input/` folder |
+| Drop area | Drop files anywhere on the page, or click to choose them; they are copied into the shared `documents/` folder, which every app reads |
 | Commands | One form per command, with its live log, a Stop button, and a box for answering a question the app asks |
-| Files | The newest files in `input/` and `output/`, each a link to open or download, and a button to open the folder |
+| Files | The newest files in `documents/` and the app's results, each a link to open or download, and a button to open the folder; **Copy to documents** on any result another app reads |
 
 Each app keeps its own settings and keys: the editor in its `env.yaml`, the presenter in its
 `config.local.yaml`. Set those once in the app itself.

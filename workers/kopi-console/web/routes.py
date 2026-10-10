@@ -139,7 +139,22 @@ def view_page(name, folder, relative):
         relative=relative,
         parent="" if parent == "." else parent,
         document=documents.document_view(path),
+        readers=files.readers_of(path) if folder == "output" else [],
     )
+
+
+@bp.route("/view/<name>/<folder>/<path:relative>/copy", methods=["POST"])
+def view_copy(name, folder, relative):
+    app = find_app(name)
+    path = files.resolve_file(app, folder, relative)
+    if path is None or folder != "output":
+        abort(404)
+    try:
+        saved = files.copy_to_documents(path)
+        flash(f"Copied to documents as {saved}. Every tool that reads it can now run on it.")
+    except OSError as error:
+        flash(f"Could not copy the file: {error}")
+    return redirect(url_for("console.view_page", name=name, folder=folder, relative=relative))
 
 
 @bp.route("/browse/<name>/<folder>")

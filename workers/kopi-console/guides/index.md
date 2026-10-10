@@ -18,8 +18,11 @@ it, and `kopi-console` starts it again. `pip install --upgrade kopi-workers` upd
 
 ## Where your files live
 
-Every tool keeps its files in one project folder, `kopi-workers` in your home folder. Each tool has its own folder inside it, with an `input` folder for
-the documents it works on and an `output` folder for what it writes.
+Every tool keeps its files in one project folder, `kopi-workers` in your home folder. A document
+dropped on any tool's page lands in its `documents` folder, which every tool reads, so a chapter
+added for the editor is ready for the presenter too. Each tool writes its results into its own
+folder, one dated folder per run. **Copy to documents**, on a result's page, hands that result to
+the other tools.
 
 ## Keys
 
@@ -33,7 +36,7 @@ it gets it. Commands that call a paid model ask before they run.
 2. Run **analyze**: it reports how readable the document is and how many words could go, without
    changing anything.
 3. Run **proof**: it applies the safe fixes that need no model and writes the edited text.
-4. Open the newest folder under **Output**. The side-by-side file shows each paragraph before and
+4. Open the newest folder under **Results**. The side-by-side file shows each paragraph before and
    after.
 
 ## The tools

@@ -25,7 +25,8 @@ keeps the original paragraph instead. Quotations are never sent for editing.
 3. Run **proof** for the safe fixes alone, or **edit** for a full edit. **edit** takes the number
    of words to remove as a guide: a small number tightens the wording, a large one also drops
    restated sentences, and a blank asks only for plainer wording.
-4. Each run writes a folder under **Output**, named after the document and the time:
+4. Each run writes a folder under **Results**, named after the document, the command and the
+   time:
 
 | File | What it holds |
 |---|---|
@@ -34,7 +35,8 @@ keeps the original paragraph instead. Quotations are never sent for editing.
 | `_changelog.md` or `_report.md` | Every change, step by step, and the readability before and after |
 | `.diff` | The changes line by line |
 
-**analyze** writes one `_analysis.md` report instead.
+**analyze** writes one `_analysis.md` report instead. To turn the edited text into slides, open
+`_edited.md` and choose **Copy to documents**; it then appears in kopi-presenter's file list.
 
 ## Settings
 
