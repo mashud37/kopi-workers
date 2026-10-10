@@ -88,7 +88,7 @@ def save_upload(app, upload):
     if Path(file_name).suffix.lower() not in app["accepts"]:
         raise ValueError(f"{app['name']} reads {', '.join(app['accepts'])} files, not {file_name}.")
     folder = folder_path(app, "input")
-    folder.mkdir(exist_ok=True)
+    folder.mkdir(parents=True, exist_ok=True)
     upload.save(folder / file_name)
     return file_name
 
@@ -99,7 +99,7 @@ def open_folder(app, folder, relative):
     Raises:
         ValueError: the path is not a folder inside the app's folders.
     """
-    folder_path(app, folder).mkdir(exist_ok=True)
+    folder_path(app, folder).mkdir(parents=True, exist_ok=True)
     path = resolve_folder(app, folder, relative)
     if path is None:
         raise ValueError("That folder is not there.")

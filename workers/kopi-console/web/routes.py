@@ -104,6 +104,8 @@ def app_upload(name):
         saved = files.save_upload(app, request.files.get("file"))
     except ValueError as error:
         return jsonify({"error": str(error)}), 400
+    except OSError as error:
+        return jsonify({"error": f"Could not save the file: {error}"}), 500
     return jsonify({"saved": saved})
 
 
