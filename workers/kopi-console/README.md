@@ -2,7 +2,8 @@
 
 One local web page for the kopi apps: kopi-editor and kopi-presenter. Each app has its
 own page where you drop a file, fill in a command's form, and watch it run. The console runs each
-app through its own script in its own folder, holds no keys, and answers only on this machine.
+app through its own script in its own folder, keeps keys and model choices in one store outside the
+workspace, and answers only on this machine.
 
 ## How it works
 
@@ -24,8 +25,9 @@ Each app page has:
 | Commands | One form per command, with its live log, a Stop button, and a box for answering a question the app asks |
 | Files | The newest files in `documents/` and the app's results, each a link to open or download, and a button to open the folder; **Copy to documents** on any result another app reads |
 
-Each app keeps its own settings and keys: the editor in its `env.yaml`, the presenter in its
-`config.local.yaml`. Set those once in the app itself.
+The **Models** page chooses where each app's model runs: Claude, another service, this computer,
+or your own cloud. The **Keys** page holds the keys, and each app's page holds its other settings.
+An app left on its own settings reads its `env.yaml` or `config.local.yaml`.
 
 ## Layout
 
@@ -62,5 +64,5 @@ python manage.py install
 ## Cost
 
 The editor's `edit` command and the presenter's `slides` command can call a paid model, so the
-page asks before running them. What they spend depends on the model chosen in each app's settings;
+page asks before running them. What they spend depends on the model chosen on the Models page;
 each app prints its estimate when it finishes. Estimates only.

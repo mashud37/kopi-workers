@@ -25,6 +25,9 @@ python manage.py install
 ```
 
 Set `api.anthropic_key` in `config.local.yaml`, or the `ANTHROPIC_API_KEY` environment variable.
+For any server that accepts OpenAI's chat format, set `llm.backend: openai-compatible`,
+`llm.base_url` and `llm.server_model` there instead, with its key in `api.llm_key` or
+`KOPI_LLM_API_KEY`.
 
 ## Commands
 

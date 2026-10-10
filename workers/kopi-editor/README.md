@@ -2,7 +2,8 @@
 
 Copy-edits an academic `.docx` into plainer prose while keeping the argument, voice, citations and
 quotations intact. Diagnosis runs locally; only the paragraphs sent for editing leave the machine,
-to a private Cloud Run GPU service, the Anthropic API, or a local Ollama.
+to Claude, another hosted service, a model on this computer, or a private Cloud Run GPU service of
+your own.
 
 ## How it works
 
