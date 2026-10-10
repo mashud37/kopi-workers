@@ -1,7 +1,4 @@
-"""Write the `analyze` report as readable Markdown: each measure on a visual
-scale bar with plain interpretation, grouped by the editable lever it speaks
-to, plus TF-IDF key terms.
-"""
+"""Write the analysis and before-and-after reports as Markdown tables: each measure beside a good value and what it means. The console and any Markdown viewer show them."""
 from datetime import date
 from pathlib import Path
 
@@ -18,36 +15,40 @@ _TAG_COMMAND = [
     ("passive", "Use the active voice"),
 ]
 
-# Each before/after gauge: where the bar starts and ends, the mark for a good
-# value, which direction counts as an improvement, and how the number prints.
+# Each before/after row: the good value shown beside it, which direction counts as
+# an improvement, and how the number prints.
+_READING_EASE_SCALE = {
+    "aim": "60 or more",
+    "better": "up",
+    "decimals": 0,
+    "suffix": "",
+}
+_READING_GRADE_SCALE = {
+    "aim": "12 or less",
+    "better": "down",
+    "decimals": 1,
+    "suffix": "",
+}
 _SENTENCE_LENGTH_SCALE = {
-    "lo": 10,
-    "hi": 40,
-    "target": 20,
+    "aim": "about 20",
     "better": "down",
     "decimals": 1,
     "suffix": " words",
 }
 _WORD_COMPLEXITY_SCALE = {
-    "lo": 1.2,
-    "hi": 2.2,
-    "target": 1.5,
+    "aim": "about 1.5",
     "better": "down",
     "decimals": 2,
-    "suffix": " syll/word",
+    "suffix": " syllables",
 }
 _DIFFICULT_WORDS_SCALE = {
-    "lo": 0,
-    "hi": 40,
-    "target": 8,
+    "aim": "8% or less",
     "better": "down",
     "decimals": 1,
     "suffix": "%",
 }
 _LENGTH_SCALE = {
-    "lo": 0,
-    "hi": 1,
-    "target": 0,
+    "aim": "shorter",
     "better": "down",
     "decimals": 0,
     "suffix": " words",
@@ -180,10 +181,6 @@ def key_terms(paragraphs: list[str], top: int = _KEY_TERMS_SHOWN) -> list[tuple[
     return out
 
 
-def _lever(label: str, value_str: str, bar: str, note: str) -> str:
-    return f"- **{label}**: {value_str}\n  `{bar}`  {note}"
-
-
 def _headline_section(source_name: str, summary: dict, m: dict) -> list[str]:
     """The report's opening: the document's counts, then reading ease and grade.
 
@@ -205,13 +202,12 @@ def _headline_section(source_name: str, summary: dict, m: dict) -> list[str]:
         "",
         "## Readability at a glance",
         "",
-        "`●` = this document · `│` = a good target",
-        "",
+        "| Measure | This document | Aim for | What it means |",
+        "|---|---:|---:|---|",
     ]
     if m.get("flesch") is not None:
         ease = m["flesch"]
-        L.append(f"- **Reading ease**: {ease:.0f}/100 · {flesch_band(ease)}")
-        L.append(f"  harder `{scale_bar(ease, 0, 100, target=60)}` easier")
+        L.append(f"| Reading ease, 0 to 100, higher is easier | {ease:.0f} | 60 or more | {flesch_band(ease)} |")
     if m.get("grade") is not None:
         grade = m["grade"]
         audience = "postgraduate"
@@ -219,8 +215,7 @@ def _headline_section(source_name: str, summary: dict, m: dict) -> list[str]:
             if grade <= threshold:
                 audience = label
                 break
-        L.append(f"- **Reading grade**: {grade:.0f} (≈ {audience})")
-        L.append(f"  grade 6 `{scale_bar(grade, 6, 18, target=12)}` 18+")
+        L.append(f"| Reading grade, years of schooling needed | {grade:.0f} | 12 or less | {audience} level |")
     L.append("")
     return L
 
@@ -230,53 +225,34 @@ def _lever_section(m: dict, levers: dict) -> list[str]:
 
     Args:
         m: the document metrics from :func:`_metrics`.
-        levers: `tag_counts`, `editable` and `n_editable` paragraph counts, the
-            `unnecessary` and `redundancy` diagnosis totals, and the document
-            `words` count the two savings bars are scaled against.
+        levers: `tag_counts`, `editable` and `n_editable` paragraph counts, and the
+            `unnecessary` and `redundancy` diagnosis totals.
     """
     tag_counts = levers["tag_counts"]
-    un, red, words = levers["unnecessary"], levers["redundancy"], levers["words"]
+    un, red = levers["unnecessary"], levers["redundancy"]
     n_editable = levers["n_editable"]
+    passive = tag_counts.get("passive", 0)
     L = [
         "## What to edit",
         "",
-        "Each lever shows where the document sits and what editing it would address.",
-        "",
+        "| Lever | This document | Aim for | What to do |",
+        "|---|---|---|---|",
     ]
-
     if m.get("words_per_sentence") is not None:
-        wps = m["words_per_sentence"]
         long_paras = tag_counts.get("long-sentence", 0)
-        L.append(_lever(
-            "Sentence length", f"{wps:.0f} words per sentence on average",
-            scale_bar(wps, 10, 40, target=20),
-            f"{long_paras} paragraph(s) run long → break them up (target ≈ 20).",
-        ))
-    if m.get("syll_per_word") is not None or m.get("dale_chall") is not None:
-        spw = m.get("syll_per_word") or 0
-        dc = m.get("dale_chall")
-        dc_str = f", Dale–Chall {dc:.1f}" if dc is not None else ""
-        L.append(_lever(
-            "Word complexity", f"{spw:.2f} syllables per word{dc_str}",
-            scale_bar(spw, 1.2, 2.2, target=1.5),
-            "→ prefer short, plain words over long Latinate ones.",
-        ))
-    passive = tag_counts.get("passive", 0)
-    L.append(_lever(
-        "Passive voice", f"{passive} of {levers['editable']} editable paragraph(s)",
-        scale_bar(passive, 0, n_editable, target=n_editable * 0.15),
-        "→ prefer the active voice where it reads naturally.",
-    ))
-    L.append(_lever(
-        "Wordiness", f"{un['hits']} filler/padding phrase(s), ~{un['savings']} words",
-        scale_bar(un["savings"], 0, max(50, words * 0.05), target=0),
-        "→ cut hedges, fillers, and padding.",
-    ))
-    L.append(_lever(
-        "Redundancy", f"{red['count']} restated sentence(s), ~{red['savings']} words",
-        scale_bar(red["savings"], 0, max(50, words * 0.08), target=0),
-        "→ consolidate points already made.",
-    ))
+        L.append(f"| Sentence length | {m['words_per_sentence']:.0f} words per sentence | about 20 | "
+                 f"Shorten long sentences, {long_paras} paragraph(s) flagged |")
+    if m.get("syll_per_word") is not None:
+        dale_chall = m.get("dale_chall")
+        dale_chall_text = f", Dale-Chall {dale_chall:.1f}" if dale_chall is not None else ""
+        L.append(f"| Word complexity | {m['syll_per_word']:.2f} syllables per word{dale_chall_text} | about 1.5 | "
+                 "Prefer short, plain words over long Latinate ones |")
+    L.append(f"| Passive voice | {passive} of {levers['editable']} editable paragraphs | "
+             f"{round(n_editable * 0.15)} or fewer | Prefer the active voice where it reads naturally |")
+    L.append(f"| Wordiness | {un['hits']} filler phrase(s), ~{un['savings']} words | none | "
+             "Cut hedges, fillers and padding |")
+    L.append(f"| Redundancy | {red['count']} restated sentence(s), ~{red['savings']} words | none | "
+             "Merge points already made |")
     L.append("")
     return L
 
@@ -397,40 +373,28 @@ def _count_term(term: str, text: str) -> int:
     return len(re.findall(r"\b" + re.escape(term) + r"\b", text))
 
 
-def _compare_gauge(label: str, before, after, scale: dict) -> list[str]:
-    """One measure as before/after sliders, stacked.
+def _compare_row(label: str, before, after, scale: dict) -> str:
+    """One measure as a table row: before, after, the value to aim for, and the change.
 
     Args:
         label: the measure's name, as the reader sees it.
         before: the value in the original text, or None if it could not be taken.
-        after: the same measure on the edited text.
-        scale: `lo`, `hi` and `target` for the bar, `better` ("up" or "down"),
-            `decimals` for how the number prints, and an optional `suffix`.
-
-    The whole label and bar live in one code span so the monospace font keeps the
-    bars aligned column for column; plain-text spaces would collapse in rendered
-    markdown and misalign them.
+        after: the same measure on the edited text, or None.
+        scale: `aim`, `better` ("up" or "down"), `decimals` and `suffix`, as in the scales above.
     """
-    lo, hi, target = scale["lo"], scale["hi"], scale["target"]
     decimals = scale["decimals"]
-    suffix = scale.get("suffix", "")
+    suffix = scale["suffix"]
     if before is None or after is None:
-        return [f"- **{label}**: {_num(before, decimals)} → {_num(after, decimals)}", ""]
+        return f"| {label} | {_num(before, decimals)} | {_num(after, decimals)} | {scale['aim']} | - |"
     moved = _delta_mark(before, after, scale["better"], decimals)
-    return [
-        f"- **{label}**: {before:.{decimals}f}{suffix} → {after:.{decimals}f}{suffix}  {moved}",
-        f"  `before {scale_bar(before, lo, hi, target=target)}`",
-        f"  `after  {scale_bar(after, lo, hi, target=target)}`",
-        "",
-    ]
+    return f"| {label} | {before:.{decimals}f}{suffix} | {after:.{decimals}f}{suffix} | {scale['aim']} | {moved} |"
 
 
 def comparison_lines(original: str, final: str) -> list[str]:
     """The before/after comparison as markdown lines (no title/date header), so it
     can stand alone or be embedded in the merged edit report.
 
-    Same visual language as the analysis report: slider gauges per measure (showing
-    the value move) and the key-terms bar plot, so the impact reads at a glance.
+    Each measure is one table row, before and after, as in the analysis report.
     """
     mb, ma = _metrics(original), _metrics(final)
     wb, wa = len(original.split()), len(final.split())
@@ -440,21 +404,16 @@ def comparison_lines(original: str, final: str) -> list[str]:
         "",
         "## Readability & length",
         "",
-        "`●` = value · `│` = a good target · top bar = before, bottom = after",
+        "| Measure | Before | After | Aim for | Change |",
+        "|---|---:|---:|---|---|",
+        _compare_row("Reading ease", mb.get("flesch"), ma.get("flesch"), _READING_EASE_SCALE),
+        _compare_row("Reading grade", mb.get("grade"), ma.get("grade"), _READING_GRADE_SCALE),
+        _compare_row("Sentence length", mb.get("words_per_sentence"), ma.get("words_per_sentence"), _SENTENCE_LENGTH_SCALE),
+        _compare_row("Word complexity", mb.get("syll_per_word"), ma.get("syll_per_word"), _WORD_COMPLEXITY_SCALE),
+        _compare_row("Difficult words", mb.get("difficult_pct"), ma.get("difficult_pct"), _DIFFICULT_WORDS_SCALE),
+        _compare_row("Length", float(wb), float(wa), _LENGTH_SCALE),
         "",
     ]
-    L += _compare_gauge("Reading ease", mb.get("flesch"), ma.get("flesch"),
-                        {"lo": 0, "hi": 100, "target": 60, "better": "up", "decimals": 0})
-    L += _compare_gauge("Reading grade", mb.get("grade"), ma.get("grade"),
-                        {"lo": 6, "hi": 18, "target": 12, "better": "down", "decimals": 1})
-    L += _compare_gauge("Sentence length", mb.get("words_per_sentence"), ma.get("words_per_sentence"),
-                        _SENTENCE_LENGTH_SCALE)
-    L += _compare_gauge("Word complexity", mb.get("syll_per_word"), ma.get("syll_per_word"),
-                        _WORD_COMPLEXITY_SCALE)
-    L += _compare_gauge("Difficult words", mb.get("difficult_pct"), ma.get("difficult_pct"),
-                        _DIFFICULT_WORDS_SCALE)
-    L += _compare_gauge("Length", float(wb), float(wa),
-                        {**_LENGTH_SCALE, "hi": max(1, wb), "target": wa})
 
     # ---- Key terms: before/after prominence (shared scale) per top concept ----
     before_terms = key_terms(original.split("\n\n"), top=_KEY_TERMS_SHOWN)
