@@ -137,7 +137,8 @@ def _finish_deploy(rec):
     rec.update(deployed=True, url=url)
     _save_state(rec)
     ui.ok(f"deployed: {url}")
-    ui.info("edit locally with:  python manage.py edit <file.docx> <words>")
+    ui.info(f"to edit with it, choose Your own cloud on the console's Models page, or run `python manage.py settings`: "
+            f"backend openai-compatible, server address {url}/v1, model {rec['model']} or kopi")
     return 0
 
 

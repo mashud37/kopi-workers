@@ -46,19 +46,19 @@ def _cloud_test_flow():
         ui.warn("no source file; run `edit` first or pass a path")
         return
     from backends import llm as model_calls
-    model_calls.smoke("cloud", src, ui.ask("Paragraphs to send (integer or 'all')", "3"))
+    model_calls.smoke(config.get("BACKEND"), src, ui.ask("Paragraphs to send (integer or 'all')", "3"))
 
 
 _ACTIONS = [
     ("Analyze", "diagnose what could be cut + per-paragraph needs (no edits)", _analyze_flow),
     ("Proof", "conservative deterministic edit, no LLM -> output/", _proof_flow),
-    ("Full edit", "plain-language edit via the LLM backend -> output/", _edit_flow),
-    ("Settings", "LLM backend / model / language", settings.run),
+    ("Full edit", "plain-language edit with the configured model -> output/", _edit_flow),
+    ("Settings", "model backend / model / language", settings.run),
     ("Show config", "the effective configuration", config.show),
     ("Deploy service", "fire the vLLM/Qwen3 image build async (frees the terminal)", deploy.run),
     ("Deploy status", "check the pending build; finish + deploy when it's ready",
      _deploy_status_flow),
-    ("Cloud smoke test", "send paragraphs straight to the GPU service", _cloud_test_flow),
+    ("Model smoke test", "send paragraphs straight to the configured model", _cloud_test_flow),
     ("Update", "upgrade dependencies + spaCy model", update.run),
     ("Install / setup", "env.yaml, folders, dependency check", install.run),
 ]

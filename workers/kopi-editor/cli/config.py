@@ -1,9 +1,10 @@
-"""Resolve effective configuration (Cloud Run target, editing defaults) from
+"""Resolve effective configuration (model backend, Cloud Run target, editing defaults) from
 environment variable, then env.yaml, then a built-in default. BASE_URL and
 JOB_TOKEN come from `manage.py deploy`.
 """
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -25,7 +26,7 @@ _ENV_OVERRIDE = {
     "JOB_TOKEN": "KOPI_JOB_TOKEN",
     "MODEL": "KOPI_MODEL",
     "LANG": "KOPI_LANG",
-    "LLM": "KOPI_LLM",
+    "BACKEND": "KOPI_BACKEND",
     # Deployed instance shape, used only to estimate run cost accurately.
     "GPU_TYPE": "KOPI_GPU_TYPE",
     "CPU": "KOPI_CPU",
@@ -33,11 +34,13 @@ _ENV_OVERRIDE = {
     # Standard Anthropic env var name (also read by the SDK); per security.md §2.
     "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY",
     "ANTHROPIC_MODEL": "KOPI_ANTHROPIC_MODEL",
-    "LOCAL_URL": "KOPI_LOCAL_URL",
+    "LLM_BASE_URL": "KOPI_LLM_BASE_URL",
+    "LLM_MODEL": "KOPI_LLM_MODEL",
+    "LLM_API_KEY": "KOPI_LLM_API_KEY",
 }
 
-# MODEL (self-hosted/cloud) and ANTHROPIC_MODEL (api) have NO default: the user
-# chooses explicitly in `settings`, and `edit` refuses to run until one is set.
+# ANTHROPIC_MODEL and LLM_MODEL have NO default: the user chooses explicitly in
+# `settings` or on the console's Models page, and `edit` refuses to run until one is set.
 # This keeps the choice (and its cost) deliberate rather than silently defaulting
 # to an expensive model.
 _DEFAULTS = {
@@ -46,11 +49,10 @@ _DEFAULTS = {
     "REGION": "europe-west4",
     "SERVICE": "kopi-editor-vllm",
     "LANG": "british",
-    "LLM": "cloud",
+    "BACKEND": "anthropic",
     "GPU_TYPE": "nvidia-rtx-pro-6000",
     "CPU": 20,
     "MEMORY": 80,
-    "LOCAL_URL": "http://localhost:11434/v1",
 }
 
 # Published Anthropic list prices, USD per 1M tokens (input, output), cached 2026-10.
@@ -80,7 +82,7 @@ VCPU_PRICE_PER_SECOND = 0.0000180
 MEMORY_PRICE_PER_SECOND = 0.0000020
 
 LANGS = ("british", "american")
-LLM_BACKENDS = ("cloud", "local", "api", "skip")
+BACKENDS = ("anthropic", "openai-compatible")
 
 
 def _file_values():
@@ -106,6 +108,28 @@ def set_values(updates):
     ENV_FILE.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
 
 
+def llm_connection():
+    """The server address, key and model the openai-compatible backend uses; your own Cloud Run service's key is its job token."""
+    base_url = get("LLM_BASE_URL")
+    model = get("LLM_MODEL")
+    if not base_url or not model:
+        raise SystemExit(
+            "The openai-compatible backend needs LLM_BASE_URL and LLM_MODEL in env.yaml, "
+            "or the KOPI_LLM_BASE_URL and KOPI_LLM_MODEL variables."
+        )
+    api_key = get("LLM_API_KEY")
+    if not api_key and is_own_cloud(base_url):
+        api_key = get("JOB_TOKEN")
+    return {"base_url": base_url, "api_key": api_key, "model": model}
+
+
+def is_own_cloud(base_url):
+    """Whether an address points at the service `manage.py deploy` put on Cloud Run."""
+    if not base_url or not get("BASE_URL"):
+        return False
+    return urlparse(base_url).hostname == urlparse(get("BASE_URL")).hostname
+
+
 def legacy_cloud_config():
     """Old ~/.config/kopi-editor/cloud.json, used to seed env.yaml on install."""
     if _LEGACY_CLOUD_JSON.exists():
@@ -127,21 +151,24 @@ def show():
     ui.header("kopi-editor: config")
     ui.info(f"env.yaml: {ENV_FILE if ENV_FILE.exists() else '(not created, run install)'}")
     rows = [
-        ("llm backend", get("LLM")),
+        ("backend", get("BACKEND")),
         ("language", get("LANG")),
         ("project", get("PROJECT")),
         ("region", get("REGION")),
         ("service", get("SERVICE")),
         ("base url", get("BASE_URL")),
         ("job token", "(set)" if get("JOB_TOKEN") else None),
-        ("self-hosted model", get("MODEL")),
+        ("deployed model", get("MODEL")),
         ("anthropic key", "(set)" if get("ANTHROPIC_API_KEY") else None),
         ("anthropic model", get("ANTHROPIC_MODEL")),
+        ("server address", get("LLM_BASE_URL")),
+        ("server model", get("LLM_MODEL")),
+        ("server key", "(set)" if get("LLM_API_KEY") else None),
     ]
     for label, val in rows:
         (ui.ok if val else ui.warn)(f"{label}: {val or '(unset)'}")
-    backend = get("LLM")
-    if backend == "cloud" and not get("BASE_URL"):
-        ui.warn("cloud editing needs the service deployed: run `manage.py deploy`")
-    if backend == "api" and not get("ANTHROPIC_API_KEY"):
-        ui.warn("api editing needs an Anthropic key: set it with `manage.py settings`")
+    backend = get("BACKEND")
+    if backend == "anthropic" and not get("ANTHROPIC_API_KEY"):
+        ui.warn("Claude needs an Anthropic key: set it with `manage.py settings`")
+    if backend == "openai-compatible" and not (get("LLM_BASE_URL") and get("LLM_MODEL")):
+        ui.warn("the openai-compatible backend needs LLM_BASE_URL and LLM_MODEL: set them with `manage.py settings`")

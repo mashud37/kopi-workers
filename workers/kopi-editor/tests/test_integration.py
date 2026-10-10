@@ -71,6 +71,7 @@ def _stub_session(backend):
     return {
         "backend": backend,
         "model": "stub",
+        "base_url": "http://localhost:11434/v1",
         "lang": "british",
         "workers": 2,
         "tally": model_calls.Tally(),
@@ -98,7 +99,7 @@ def test_edits_every_paragraph_and_preserves_guards(monkeypatch):
     state = _make_state(text, reduction=word_count(quoted["text"], quoted["qmap"]))
     original = state["counts"]["step1"]
 
-    state = model_calls.tighten(state, "local")
+    state = model_calls.tighten(state, "openai-compatible")
 
     # Every eligible paragraph was processed and the document got shorter.
     assert state["llm_stats"]["para"] == 20
@@ -122,7 +123,7 @@ def test_rejected_edit_keeps_original(monkeypatch):
     # shorten. Only clear padding/gutting is rejected.)
     _stub_llm(monkeypatch, _bloat_editor)
     state = _make_state(_build_document())
-    state = model_calls.tighten(state, "local")
+    state = model_calls.tighten(state, "openai-compatible")
     assert state["llm_stats"]["accepted"] == 0
     assert state["llm_stats"]["rejected"] == 20
 
@@ -135,7 +136,7 @@ def test_small_expansion_is_accepted(monkeypatch):
     # Plain-language rephrase that adds a couple of words must NOT be rejected.
     _stub_llm(monkeypatch, _small_expansion_editor)
     state = _make_state(_build_document())
-    state = model_calls.tighten(state, "local")
+    state = model_calls.tighten(state, "openai-compatible")
     assert state["llm_stats"]["accepted"] == 20
 
 
@@ -152,7 +153,7 @@ def _over_compression_editor(paragraph, style=None):
 def test_over_compression_triggers_softer_retry(monkeypatch):
     _stub_llm(monkeypatch, _over_compression_editor)
     state = _make_state(_build_document())
-    state = model_calls.tighten(state, "local")
+    state = model_calls.tighten(state, "openai-compatible")
     assert state["llm_stats"]["accepted"] == 20
     assert state["llm_stats"]["rejected"] == 0
 
@@ -165,7 +166,7 @@ def test_no_reduction_is_clarity_and_rejects_deep_cuts(monkeypatch):
     _stub_llm(monkeypatch, _word_dropper)
     state = _make_state(_build_document())  # reduction defaults to 0 -> clarity
     original = state["counts"]["step1"]
-    state = model_calls.tighten(state, "local")
+    state = model_calls.tighten(state, "openai-compatible")
     assert state["llm_stats"]["accepted"] == 0
     assert state["llm_stats"]["rejected"] == 20
     assert state["counts"]["step10"] == original  # document unchanged

@@ -29,7 +29,6 @@ def run():
                 "REGION": legacy.get("region"),
                 "SERVICE": "kopi-editor",
                 "LANG": "british",
-                "LLM": "cloud",
             })
             ui.ok("created env.yaml (seeded project/region from cloud.json)")
         elif config.ENV_EXAMPLE.exists():

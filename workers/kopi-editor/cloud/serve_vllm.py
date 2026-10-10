@@ -1,7 +1,4 @@
-"""Token-guarded proxy in front of a local vLLM server, presenting the same
-`/tighten` contract as cloud/serve.py so cli/cloud.py needs no changes.
-Relays chat messages with Qwen3 reasoning mode off.
-"""
+"""Token-guarded proxy in front of a local vLLM server: the `/tighten` contract kopi-learner and kopi-linter call, and OpenAI's chat format for the editor. Qwen3 reasoning stays off."""
 import json
 import os
 import time
@@ -41,9 +38,56 @@ def _vllm_ready() -> bool:
         return False
 
 
+def _wait_until_ready():
+    """Wait through a cold-start model load rather than 503-ing (scale-to-zero)."""
+    deadline = time.time() + _READY_WAIT
+    while not _vllm_ready():
+        if time.time() > deadline:
+            abort(503, "model still loading")
+        time.sleep(2)
+
+
+def _bearer_ok() -> bool:
+    """Whether an OpenAI-style request carries the job token as its key."""
+    return bool(_TOKEN) and request.headers.get("Authorization") == f"Bearer {_TOKEN}"
+
+
 @app.get("/healthz")
 def healthz():
     return "ok"
+
+
+@app.get("/v1/models")
+def models():
+    if not _bearer_ok():
+        abort(401)
+    names = [_MODEL] + sorted(_LORA)
+    return jsonify({"object": "list", "data": [{"id": name, "object": "model"} for name in names]})
+
+
+@app.post("/v1/chat/completions")
+def chat_completions():
+    if not _bearer_ok():
+        abort(401)
+    data = request.get_json(force=True, silent=True) or {}
+    if not data.get("messages"):
+        abort(400, "missing messages")
+    model = data.get("model") or _MODEL
+    if model != _MODEL and model not in _LORA:
+        abort(400, f"unknown model {model!r}")
+    _wait_until_ready()
+    payload = {**data, "model": model, "stream": False, "chat_template_kwargs": {"enable_thinking": False}}
+    req = urllib.request.Request(
+        _VLLM + "/v1/chat/completions", data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            return app.response_class(resp.read(), status=resp.status, mimetype="application/json")
+    except urllib.error.HTTPError as e:
+        return app.response_class(e.read(), status=e.code, mimetype="application/json")
+    except (urllib.error.URLError, OSError) as e:
+        abort(502, f"vllm unreachable: {e}")
 
 
 @app.post("/tighten")
@@ -59,12 +103,7 @@ def tighten():
     model = data.get("model") or _MODEL
     if model != _MODEL and model not in _LORA:
         abort(400, f"unknown model {model!r}")
-    # Wait through a cold-start model load rather than 503-ing (scale-to-zero).
-    deadline = time.time() + _READY_WAIT
-    while not _vllm_ready():
-        if time.time() > deadline:
-            abort(503, "model still loading")
-        time.sleep(2)
+    _wait_until_ready()
 
     # An edit only tightens, so the output never meaningfully exceeds the input; cap
     # max_tokens off the paragraph length (≈1.5 tok/word, doubled for headroom) so a

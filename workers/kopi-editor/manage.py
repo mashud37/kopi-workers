@@ -35,9 +35,9 @@ def _build_parser():  # lint-style: ignore FN004
     e.add_argument("file", help="Input .docx (a bare name resolves against input/)")
     e.add_argument("reduction", type=int, nargs="?", default=None, help="Optional words-to-remove guide")
     e.add_argument("--lang", choices=list(config.LANGS), default=None, help="Output variety (default from env.yaml)")
-    e.add_argument("--llm", choices=list(config.LLM_BACKENDS), default=None, help="LLM backend (default from env.yaml)")
+    e.add_argument("--backend", choices=list(config.BACKENDS), default=None, help="Model backend (default from env.yaml)")
 
-    ct = sub.add_parser("cloud-test", help="Send paragraphs straight to the GPU service (dev smoke)")
+    ct = sub.add_parser("cloud-test", help="Send paragraphs straight to the configured model (dev smoke)")
     ct.add_argument("n", nargs="?", default="3", help="Paragraphs to send (integer or 'all')")
     ct.add_argument("--source", default=None, help="Text file (default: newest output/*_edited.md)")
 
@@ -46,7 +46,7 @@ def _build_parser():  # lint-style: ignore FN004
 
     ds = sub.add_parser("deploy-status", help="Check the pending build; finish + deploy when it's ready")
     ds.add_argument("--wait", action="store_true", help="Block until the build finishes, then deploy")
-    sub.add_parser("settings", help="Edit LLM backend / model / language in env.yaml")
+    sub.add_parser("settings", help="Edit the model backend, model and language in env.yaml")
     sub.add_parser("config", help="Print the effective configuration")
     sub.add_parser("install", help="Create env.yaml + folders and check dependencies (idempotent)")
     sub.add_parser("update", help="Upgrade dependencies and the spaCy model")
@@ -64,13 +64,13 @@ def main():
     if args.command == "proof":
         return proof.run(args.file, args.lang)
     if args.command == "edit":
-        return edit.run(args.file, args.reduction, args.lang, args.llm)
+        return edit.run(args.file, args.reduction, args.lang, args.backend)
     if args.command == "cloud-test":
         source = args.source or config.newest_output()
         if not source:
             raise SystemExit("no source file; pass --source or run `edit` first.")
         from backends import llm as model_calls
-        return model_calls.smoke("cloud", source, args.n)
+        return model_calls.smoke(config.get("BACKEND"), source, args.n)
     if args.command == "deploy":
         return deploy.run(args.ollama)
     if args.command == "deploy-status":

@@ -1,16 +1,14 @@
-"""Send paragraphs to Anthropic, the Cloud Run service or an OpenAI-compatible server, guard each edit, and report progress and cost.
+"""Send paragraphs to Claude or to any server that accepts OpenAI's chat format, guard each edit, and report progress and cost.
 The edit command calls tighten()."""
-import json
 import os
 import threading
 import time
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from cli import config, ui
 from kopi import items
-from kopi.llm import _build_user_message, _system_for, build_messages
+from kopi.llm import _build_user_message, _system_for
 from kopi.step_concision import (
     _MAX_COMPRESSION,
     _preload_embedding_model,
@@ -22,21 +20,17 @@ from kopi.step_concision import (
 # ---- Settings ----
 
 BACKEND_LABEL = {
-    "api": "Anthropic",
-    "cloud": "the Cloud Run service",
-    "local": "the local OpenAI-compatible server",
+    "anthropic": "Claude",
+    "openai-compatible": "the OpenAI-compatible server",
 }
-WORKERS = {
-    "api": 4,
-    "cloud": 4,
-    "local": 2,
-}
+WORKERS = 4
 MAX_TOKENS = 4096
 EFFORT = "low"
-TEMPERATURE = 0.1
-REQUEST_TIMEOUT_SECONDS = 300
-REACH_TIMEOUT_SECONDS = 5
 HEARTBEAT_SECONDS = 5
+LOCAL_HOSTS = [
+    "localhost",
+    "127.0.0.1",
+]
 SMOKE_MIN_WORDS = 40
 SMOKE_BUDGET_SHARE = 0.2
 
@@ -76,10 +70,10 @@ class Tally:
 
 # ---- Opening a session ----
 
-def _open_api() -> dict:
+def _open_anthropic() -> dict:
     """An Anthropic client on the configured key and model."""
     if not config.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("no Anthropic API key: set it with `python manage.py settings`.")
+        raise SystemExit("no Anthropic API key: add it on the console's Keys page, or with `python manage.py settings`.")
     try:
         import anthropic
     except ImportError:
@@ -87,39 +81,22 @@ def _open_api() -> dict:
     return {
         "client": anthropic.Anthropic(api_key=config.get("ANTHROPIC_API_KEY")),
         "model": config.get("ANTHROPIC_MODEL"),
+        "base_url": "",
     }
 
 
-def _open_cloud() -> dict:
-    """The deployed service's /tighten address, with its job token."""
-    if not config.get("BASE_URL"):
-        raise SystemExit("no service deployed: run `python manage.py deploy` first.")
-    if not config.get("JOB_TOKEN"):
-        raise SystemExit("no JOB_TOKEN in env.yaml: re-run `python manage.py deploy`.")
-    base = config.get("BASE_URL").rstrip("/")
+def _open_server() -> dict:
+    """The OpenAI-compatible server's address and model; the client itself is made on the first call."""
+    connection = config.llm_connection()
     return {
-        "url": f"{base}/tighten?token={config.get('JOB_TOKEN')}",
-        "model": config.get("MODEL"),
-    }
-
-
-def _open_local() -> dict:
-    """The local server's chat address, after checking it answers."""
-    base = config.get("LOCAL_URL").rstrip("/")
-    try:
-        urllib.request.urlopen(f"{base}/models", timeout=REACH_TIMEOUT_SECONDS).close()
-    except OSError as error:
-        raise SystemExit(f"no model server answers at {base} (is Ollama running?): {error}") from None
-    return {
-        "url": f"{base}/chat/completions",
-        "model": config.get("MODEL"),
+        "model": connection["model"],
+        "base_url": connection["base_url"],
     }
 
 
 OPENERS = {
-    "api": _open_api,
-    "cloud": _open_cloud,
-    "local": _open_local,
+    "anthropic": _open_anthropic,
+    "openai-compatible": _open_server,
 }
 
 
@@ -131,8 +108,8 @@ def open_session(backend: str) -> dict:
     """
     if backend not in OPENERS:
         raise SystemExit(f"no model backend called '{backend}'.")
-    workers = WORKERS[backend]
-    if backend == "local" and os.environ.get("KOPI_LLM_WORKERS", "").isdigit():
+    workers = WORKERS
+    if os.environ.get("KOPI_LLM_WORKERS", "").isdigit():
         workers = int(os.environ["KOPI_LLM_WORKERS"])
     return {
         **OPENERS[backend](),
@@ -145,7 +122,7 @@ def open_session(backend: str) -> dict:
 
 # ---- One model call ----
 
-def _ask_api(session: dict, text: str, instructions, style: dict) -> str:
+def _ask_anthropic(session: dict, text: str, instructions, style: dict) -> str:
     """One Messages API call. The system prompt is the same for every paragraph at one
     intensity, so it is cached: the first call writes it and the rest read it at a tenth of the price."""
     request = {
@@ -162,40 +139,17 @@ def _ask_api(session: dict, text: str, instructions, style: dict) -> str:
     return "".join(parts).strip()
 
 
-def _post_json(url: str, body: dict) -> dict:
-    """POST a JSON body and return the JSON answer."""
-    data = json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
-        return json.loads(response.read())
-
-
-def _ask_cloud(session: dict, text: str, instructions, style: dict) -> str:
-    """One call to the service's /tighten relay. The prompt is built here, so a prompt change needs no redeploy;
-    `paragraph` and `instructions` are sent too, for a service still running the older contract."""
-    body = {
-        "messages": build_messages(text, instructions, session["lang"], style["mode"], style["floor"]),
-        "paragraph": text,
-        "instructions": instructions,
-    }
-    return _post_json(session["url"], body)["edited"]
-
-
-def _ask_local(session: dict, text: str, instructions, style: dict) -> str:
-    """One OpenAI-style chat completion, as Ollama, vLLM and similar servers accept."""
-    body = {
-        "model": session["model"],
-        "messages": build_messages(text, instructions, session["lang"], style["mode"], style["floor"]),
-        "temperature": TEMPERATURE,
-    }
-    answer = _post_json(session["url"], body)
-    return answer["choices"][0]["message"]["content"].strip()
+def _ask_server(session: dict, text: str, instructions, style: dict) -> str:
+    """One chat completion on the OpenAI-compatible server."""
+    from backends import openai_client
+    system = _system_for(session["lang"], style["mode"])
+    prompt = _build_user_message(text, instructions, style["floor"])
+    return openai_client.complete(system, prompt, MAX_TOKENS)
 
 
 ASKERS = {
-    "api": _ask_api,
-    "cloud": _ask_cloud,
-    "local": _ask_local,
+    "anthropic": _ask_anthropic,
+    "openai-compatible": _ask_server,
 }
 
 
@@ -257,16 +211,16 @@ def _heartbeat(session: dict, total: int, stop: threading.Event) -> None:
         done = session["tally"].done_count()
         elapsed = int(session["tally"].seconds())
         line = f"editing {done}/{total} done · {elapsed}s elapsed"
-        if session["backend"] == "cloud" and done == 0:
+        if config.is_own_cloud(session["base_url"]) and done == 0:
             line += "  (loading the model on the GPU, up to ~90s)"
         ui.info(line)
 
 
 def cost_line(session: dict) -> str:
-    """What the run cost at list price, by tokens for Anthropic and by active seconds for Cloud Run."""
-    if session["backend"] == "local":
+    """What the run cost at list price: by tokens for Claude, by active seconds for your own Cloud Run service."""
+    if session["backend"] == "openai-compatible" and any(host in session["base_url"] for host in LOCAL_HOSTS):
         return "no charge: the model runs on this machine"
-    if session["backend"] == "cloud":
+    if config.is_own_cloud(session["base_url"]):
         seconds = session["tally"].seconds()
         gpu = config.GPU_PRICE_PER_SECOND.get(config.get("GPU_TYPE"), config.GPU_PRICE_PER_SECOND["nvidia-l4"])
         if os.environ.get("KOPI_GPU_PER_SEC"):
@@ -274,6 +228,8 @@ def cost_line(session: dict) -> str:
         per_second = gpu + int(config.get("CPU")) * config.VCPU_PRICE_PER_SECOND + int(config.get("MEMORY")) * config.MEMORY_PRICE_PER_SECOND
         return (f"≈ ${seconds * per_second:.4f} ({config.get('GPU_TYPE')} service, {int(seconds)}s active; "
                 f"list price, excludes the idle keep-alive before scale-to-zero)")
+    if session["backend"] == "openai-compatible":
+        return f"billed by {session['base_url']} at its own prices"
 
     tokens = session["tally"].tokens
     tokens_in = tokens["input"] + tokens["cache_write"] + tokens["cache_read"]

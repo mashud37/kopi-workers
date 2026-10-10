@@ -1,6 +1,5 @@
-"""Run deterministic diagnosis, then send every eligible paragraph to the
-configured LLM backend (cloud, api, or local) for a plain-language edit. Word
-reduction only sets how hard it cuts.
+"""Run deterministic diagnosis, then send every eligible paragraph to the configured model, Claude or an
+OpenAI-compatible server, for a plain-language edit. Word reduction only sets how hard it cuts.
 """
 from cli import common, config, ui
 
@@ -51,7 +50,7 @@ def _load_document(file, reduction):
     return {"path": path, "text": text, "original": original, "target": target}
 
 
-def _topup_shortfall(llm, state, reduction):
+def _topup_shortfall(backend, state, reduction):
     """Re-edit the wordiest remaining paragraphs once if pass 1 fell short of
     the reduction target. The model cannot count, so we measure the realised
     cut and top up rather than trust a single pass; one extra pass, bounded cost."""
@@ -60,11 +59,11 @@ def _topup_shortfall(llm, state, reduction):
     extra = step_concision.topup_candidates(state)
     if extra:
         ui.info(f"target shortfall after first pass: re-editing {len(extra)} paragraph(s) once more")
-        state = model_calls.tighten(state, llm, extra)
+        state = model_calls.tighten(state, backend, extra)
     return state
 
 
-def _finalize_text(state, lang, llm):
+def _finalize_text(state, lang):
     """Run the deterministic grammar check, unguard quoted spans back into
     plain text, then apply the British-spelling safety net over the model's output."""
     from kopi import step_check
@@ -73,7 +72,7 @@ def _finalize_text(state, lang, llm):
     state = step_check.run({**state, "log": log})
     state = {**state, "final_text": unguard(state["text"], state["qmap"])}
 
-    if lang == "british" and llm != "skip":
+    if lang == "british":
         state = _normalize_british(state)
         state = {**state, "final_text": unguard(state["text"], state["qmap"])}
     return state
@@ -95,42 +94,35 @@ def _report_summary(state, original, written):
         ui.ok(f"diff:         {written['diff']}")
 
 
-def run(file, reduction=None, lang=None, llm=None, verbose=False):
+def run(file, reduction=None, lang=None, backend=None, verbose=False):
     from kopi.output import write_outputs
     from kopi.pipeline import prepare
 
     lang = lang or config.get("LANG")
-    llm = llm or config.get("LLM")
-    if llm == "api" and not config.get("ANTHROPIC_MODEL"):
-        raise SystemExit("no Anthropic model set: choose one with `python manage.py settings`.")
-    if llm in ("cloud", "local") and not config.get("MODEL"):
-        raise SystemExit("no model set: choose one with `python manage.py settings`.")
+    backend = backend or config.get("BACKEND")
+    if backend == "anthropic" and not config.get("ANTHROPIC_MODEL"):
+        raise SystemExit("no Claude model set: choose one on the console's Models page, or with `python manage.py settings`.")
+    if backend == "anthropic":
+        model_used = config.get("ANTHROPIC_MODEL")
+    else:
+        model_used = config.llm_connection()["model"]
 
     doc = _load_document(file, reduction)
     path, text, original, target = doc["path"], doc["text"], doc["original"], doc["target"]
 
     state = prepare(text, target, lang, reduction=reduction or 0)
-    if llm == "api":
-        model_used = config.get("ANTHROPIC_MODEL")
-    elif llm in ("cloud", "local"):
-        model_used = config.get("MODEL")
-    else:
-        model_used = None
-    state["run_info"] = {"backend": llm, "model": model_used}
+    state["run_info"] = {"backend": backend, "model": model_used}
 
     from kopi import intensity
     plan = intensity.plan(reduction or 0, original)
     ui.info(f"editing intensity: {intensity.describe(plan, reduction or 0)}")
 
     from backends import llm as model_calls
-    if llm == "skip":
-        ui.info("LLM editing skipped (llm=skip)")
-    else:
-        state = model_calls.tighten(state, llm)
-        if reduction:
-            state = _topup_shortfall(llm, state, reduction)
+    state = model_calls.tighten(state, backend)
+    if reduction:
+        state = _topup_shortfall(backend, state, reduction)
 
-    state = _finalize_text(state, lang, llm)
+    state = _finalize_text(state, lang)
 
     run_dir = common.run_folder(path, "edit")
 

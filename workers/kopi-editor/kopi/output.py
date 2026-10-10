@@ -18,9 +18,8 @@ _SECTION_KEYS = [
 ]
 
 _BACKEND_LABEL = {
-    "api": "Anthropic API",
-    "cloud": "self-hosted (Cloud Run)",
-    "local": "local Ollama",
+    "anthropic": "Anthropic API",
+    "openai-compatible": "an OpenAI-compatible server",
 }
 
 
