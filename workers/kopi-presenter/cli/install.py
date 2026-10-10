@@ -7,6 +7,7 @@ from slides import config as settings
 
 DEPENDENCIES = [
     ("anthropic", "anthropic"),
+    ("openai", "openai"),
     ("yaml", "pyyaml"),
     ("docx", "python-docx"),
     ("pptx", "python-pptx"),

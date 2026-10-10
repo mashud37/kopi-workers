@@ -112,7 +112,9 @@ def _build_plan(input_path: Path, options: dict, config: dict) -> dict:
         with open(options["plan"], encoding="utf-8") as f:
             slide_data = json.load(f)
     else:
-        ui.step(f"[2/5] Plan the slides with {config.get('llm', {}).get('model', 'the model')}")
+        llm = config.get("llm", {})
+        model = llm.get("server_model") if llm.get("backend") == "openai-compatible" else llm.get("model")
+        ui.step(f"[2/5] Plan the slides with {model or 'the model'}")
         slide_data = generate_slide_json(content, config, venue_override=options["venue"])
     return {"content": content, "slide_data": slide_data}
 

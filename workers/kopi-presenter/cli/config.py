@@ -1,4 +1,4 @@
-"""Print the presenter's effective configuration: model, key source, folders and defaults, never the key itself."""
+"""Print the presenter's effective configuration: backend, model, key source, folders and defaults, never the key itself."""
 
 import os
 
@@ -20,7 +20,10 @@ def show() -> None:
     defaults = config.get("defaults", {})
     ui.table(
         [
-            {"setting": "model", "value": llm.get("model", "")},
+            {"setting": "backend", "value": llm.get("backend", "anthropic")},
+            {"setting": "claude model", "value": llm.get("model", "")},
+            {"setting": "server address", "value": llm.get("base_url", "")},
+            {"setting": "server model", "value": llm.get("server_model", "")},
             {"setting": "max tokens", "value": llm.get("max_tokens", "")},
             {"setting": "anthropic key", "value": key_source},
             {"setting": "icons", "value": config.get("render", {}).get("icons", "")},

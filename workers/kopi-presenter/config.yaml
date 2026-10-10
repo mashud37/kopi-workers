@@ -25,6 +25,14 @@ llm:
   #   > 8 000 words / complex  → Sonnet strongly recommended
   model: "claude-haiku-4-5-20251001"
 
+  # Which model plans the slides: anthropic (Claude, the model above) or
+  # openai-compatible (any server that accepts OpenAI's chat format, such as
+  # DeepSeek, Kimi, Qwen, OpenRouter, or Ollama at http://localhost:11434/v1).
+  # A server's key goes in api.llm_key or the KOPI_LLM_API_KEY variable.
+  backend: "anthropic"
+  base_url: ""
+  server_model: ""
+
   # Max output tokens: full manuscript decks need ~5–6k plus the model's thinking
   max_tokens: 16000
 

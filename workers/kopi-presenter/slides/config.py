@@ -14,6 +14,14 @@ CONFIG_PATH = ROOT / "config.yaml"
 CONFIG_LOCAL_PATH = DATA_ROOT / "config.local.yaml"
 KEY_PLACEHOLDER = "YOUR_ANTHROPIC_API_KEY_HERE"
 
+# Environment variable -> llm setting it overrides, as the console's Models page sends them.
+ENV_LLM_SETTINGS = {
+    "KOPI_PRESENTER_BACKEND": "backend",
+    "KOPI_PRESENTER_MODEL": "model",
+    "KOPI_PRESENTER_LLM_BASE_URL": "base_url",
+    "KOPI_PRESENTER_LLM_MODEL": "server_model",
+}
+
 # Published Anthropic list prices, USD per 1M tokens (input, output), cached 2026-10.
 MODEL_PRICES = {
     "claude-haiku-4-5-20251001": (1.00, 5.00),
@@ -39,9 +47,11 @@ def load_config() -> dict:
     if env_key:
         config.setdefault("api", {})["anthropic_key"] = env_key
 
-    env_model = os.getenv("KOPI_PRESENTER_MODEL")
-    if env_model:
-        config.setdefault("llm", {})["model"] = env_model
+    for variable, setting in ENV_LLM_SETTINGS.items():
+        if os.getenv(variable):
+            config.setdefault("llm", {})[setting] = os.getenv(variable)
+    if os.getenv("KOPI_LLM_API_KEY"):
+        config.setdefault("api", {})["llm_key"] = os.getenv("KOPI_LLM_API_KEY")
 
     return config
 

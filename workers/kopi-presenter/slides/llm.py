@@ -1,4 +1,4 @@
-"""Turn a manuscript into structured slide JSON, or revise a plan from feedback, through the configured Claude model."""
+"""Turn a manuscript into structured slide JSON, or revise a plan from feedback, through the configured model."""
 
 import json
 
