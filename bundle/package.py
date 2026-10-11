@@ -115,7 +115,7 @@ def build_wheel(build_folder):
     built = subprocess.run(asked, cwd=str(build_folder))
     if built.returncode != 0:
         raise SystemExit("The wheel did not build.")
-    wheels = sorted(manifest.DIST_FOLDER.glob("*.whl"))
+    wheels = sorted(manifest.DIST_FOLDER.glob("*.whl"), key=lambda path: path.stat().st_mtime)
     if not wheels:
         raise SystemExit("The build wrote no wheel.")
     return wheels[-1]
