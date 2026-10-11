@@ -1,6 +1,7 @@
-"""Show any file an app reads or writes inside the console: markdown rendered, Word files as text, decks through their PDF.
+"""Show any file an app reads or writes in the console: markdown rendered, diffs coloured, Word as text, decks through their PDF.
 The viewer and the folder browser use it.
 """
+import difflib
 import json
 import math
 import os
@@ -18,7 +19,7 @@ MARKDOWN_EXTENSIONS = [
 KIND_BY_SUFFIX = {
     ".md": "markdown",
     ".txt": "text",
-    ".diff": "text",
+    ".diff": "diff",
     ".log": "text",
     ".yaml": "text",
     ".csv": "text",
@@ -29,6 +30,12 @@ KIND_BY_SUFFIX = {
     ".jpg": "image",
     ".docx": "docx",
     ".pptx": "slides",
+}
+
+DIFF_KIND_BY_MARK = {
+    "+": "added",
+    "-": "removed",
+    "@": "hunk",
 }
 
 TEXT_LIMIT = 2_000_000
@@ -55,6 +62,57 @@ def docx_text(path):
     return "\n\n".join(paragraph.text for paragraph in document.paragraphs)
 
 
+def mark_words(before, after):
+    """Two versions of a sentence split into pieces, each flagged when its words differ, so the viewer highlights only what changed."""
+    old_words = before.split(" ")
+    new_words = after.split(" ")
+    matcher = difflib.SequenceMatcher(None, old_words, new_words, autojunk=False)
+    old_pieces = []
+    new_pieces = []
+    for tag, old_start, old_end, new_start, new_end in matcher.get_opcodes():
+        changed = tag != "equal"
+        if old_end > old_start:
+            old_pieces.append({"text": " ".join(old_words[old_start:old_end]), "changed": changed})
+        if new_end > new_start:
+            new_pieces.append({"text": " ".join(new_words[new_start:new_end]), "changed": changed})
+    return {"before": old_pieces, "after": new_pieces}
+
+
+def run_length(rows, start, kind):
+    """How many rows in a row, from start onwards, are of the given kind."""
+    count = 0
+    while start + count < len(rows) and rows[start + count]["kind"] == kind:
+        count += 1
+    return count
+
+
+def diff_rows(text):
+    """The lines of a unified diff as rows for the viewer: added, removed, unchanged, or the break between two changes.
+
+    A run of removed sentences followed by as many added ones is paired line by line, and the
+    changed words in each pair are flagged.
+    """
+    rows = []
+    for line in text.splitlines():
+        if line.startswith(("+++", "---")):
+            continue
+        kind = DIFF_KIND_BY_MARK.get(line[:1], "same")
+        rows.append({"kind": kind, "text": line[1:], "pieces": [{"text": line[1:], "changed": False}]})
+    start = 0
+    while start < len(rows):
+        removed = run_length(rows, start, "removed")
+        added = run_length(rows, start + removed, "added")
+        if removed and removed == added:
+            for offset in range(removed):
+                before = rows[start + offset]
+                after = rows[start + removed + offset]
+                pieces = mark_words(before["text"], after["text"])
+                before["pieces"] = pieces["before"]
+                after["pieces"] = pieces["after"]
+        start += max(1, removed + added)
+    return rows
+
+
 def size_text(size):
     """A file size as people read it: bytes, KB or MB."""
     if size < 1024:
@@ -77,7 +135,7 @@ def document_view(path):
     """Everything the viewer shows for one file: its kind, and its content when it is shown as text.
 
     Returns:
-        dict with "kind", "name", "size", "modified", "html" or "text" for the kinds shown inline,
+        dict with "kind", "name", "size", "modified", "html", "text" or "rows" for the kinds shown inline,
         and "has_pdf" for a deck whose PDF sits beside it.
     """
     stat = path.stat()
@@ -89,13 +147,16 @@ def document_view(path):
         "modified": datetime.fromtimestamp(stat.st_mtime).strftime(TIME_FORMAT),
         "html": "",
         "text": "",
-        "cut": stat.st_size > TEXT_LIMIT and kind in ["markdown", "text", "json"],
+        "rows": [],
+        "cut": stat.st_size > TEXT_LIMIT and kind in ["markdown", "text", "json", "diff"],
         "has_pdf": kind == "slides" and path.with_suffix(".pdf").is_file(),
     }
     if kind == "markdown":
         view["html"] = render_markdown(path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT])
     elif kind == "text":
         view["text"] = path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT]
+    elif kind == "diff":
+        view["rows"] = diff_rows(path.read_text(encoding="utf-8-sig", errors="replace")[:TEXT_LIMIT])
     elif kind == "json":
         view["text"] = json_text(path)
     elif kind == "docx":

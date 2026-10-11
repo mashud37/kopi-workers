@@ -96,7 +96,6 @@ main:focus { outline: none; }
 .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--primary); color: var(--on-primary); font-size: 11px; line-height: 18px; text-align: center; }
 
 main { max-width: 1040px; margin: 0 auto; padding: 16px 24px 96px; }
-main.wide { max-width: 1600px; }
 .page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin: 16px 0 28px; }
 .heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .heading-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
@@ -439,6 +438,17 @@ th[aria-sort="ascending"] .sort-link, th[aria-sort="descending"] .sort-link { co
 .document { padding: 24px 32px; }
 .document img { max-width: 100%; }
 .plain { margin: 0; overflow-x: auto; font: 13px/20px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.document.diff { padding: 12px 0; font-size: 15px; line-height: 24px; }
+.diff-line { display: flex; gap: 12px; min-height: 24px; padding: 2px 24px 2px 12px; }
+.diff-sign { flex: 0 0 12px; color: var(--text-secondary); font-family: var(--mono); text-align: center; }
+.diff-text { flex: 1; overflow-wrap: anywhere; }
+.diff-added { background: var(--success-container); color: var(--on-success-container); }
+.diff-removed { background: var(--error-container); color: var(--on-error-container); }
+.diff-added .diff-sign, .diff-removed .diff-sign { color: inherit; }
+.diff mark, .diff-key mark { padding: 0 2px; border-radius: 4px; background: var(--warning-container); color: var(--on-warning-container); font-weight: 600; }
+.diff-break { height: 1px; margin: 12px 24px; background: var(--outline); }
+.diff-key { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.diff-swatch { padding: 0 8px; border-radius: 4px; }
 .document-frame { display: block; width: 100%; height: calc(100vh - 220px); min-height: 480px; border: 1px solid var(--outline); border-radius: 16px; background: #fff; }
 .prose { font-size: 15px; line-height: 24px; }
 .prose h1 { margin: 0 0 16px; font-size: 26px; line-height: 34px; }
